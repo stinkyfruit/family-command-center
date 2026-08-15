@@ -4,10 +4,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; location?: string | null; category?: string | null; allDay?: boolean };
+type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[] };
 type Todo = { id: string | number; title: string; due: string; done: boolean };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
-type Member = { id: string | number; name: string; role: "adult" | "child" };
+type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string };
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number };
 type SharedListItem = { id: string | number; title: string; done: boolean };
 type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
@@ -43,7 +43,7 @@ export default function Home() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventTime, setEventTime] = useState("09:00");
   const [eventAllDay, setEventAllDay] = useState(false);
-  const [eventPerson, setEventPerson] = useState("Family");
+  const [eventMemberIds, setEventMemberIds] = useState<string[]>([]);
   const [eventLocation, setEventLocation] = useState("");
   const [eventCategory, setEventCategory] = useState("General");
   const [calendarAnchor, setCalendarAnchor] = useState(new Date());
@@ -122,9 +122,9 @@ export default function Home() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     Promise.all([
-      supabase.from("events").select("id, title, starts_at, all_day, color, location, category").eq("household_id", householdId).order("starts_at"),
+      supabase.from("events").select("id, title, starts_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status").eq("household_id", householdId).neq("status", "archived").order("due_at"),
-      supabase.from("members").select("id, display_name, role").eq("household_id", householdId).order("created_at"),
+      supabase.from("members").select("id, display_name, role, color").eq("household_id", householdId).order("created_at"),
       supabase.from("chores").select("id, title, emoji, assignee_member_id").eq("household_id", householdId).eq("active", true).order("created_at"),
       supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
@@ -132,11 +132,11 @@ export default function Home() {
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
     ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult]) => {
       if (eventResult.data) setEvents(eventResult.data.map((event) => ({
-        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day,
+        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       })));
       if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
-      if (memberResult.data) setMembers(memberResult.data.map((member) => ({ id: member.id, name: member.display_name, role: member.role })));
+      if (memberResult.data) setMembers(memberResult.data.map((member) => ({ id: member.id, name: member.display_name, role: member.role, color: member.color })));
       if (choreResult.data) {
         const completionByChore = new Map((completionResult.data ?? []).map((completion) => [completion.chore_id, completion.id]));
         setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, completionId: completionByChore.get(chore.id) })));
@@ -177,15 +177,16 @@ export default function Home() {
     if (!title) return;
     const startsAt = new Date(`${eventDate}T${eventTime}:00`);
     if (supabase && user && householdId) {
-      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: eventAllDay, color: "#34d399", location: eventLocation.trim() || null, category: eventCategory }).select("id").single().then(({ data, error }) => {
-        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: eventPerson, color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay }]);
+      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: eventAllDay, color: "#34d399", location: eventLocation.trim() || null, category: eventCategory, member_ids: eventMemberIds }).select("id").single().then(({ data, error }) => {
+        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
       });
     } else {
-      setEvents((items) => [...items, { id: Date.now().toString(), title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: eventPerson, color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay }]);
+      setEvents((items) => [...items, { id: Date.now().toString(), title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
     }
     setNewItem("");
     setEventLocation("");
     setEventCategory("General");
+    setEventMemberIds([]);
     setCalendarAnchor(startsAt);
     setShowEventForm(false);
   }
@@ -216,9 +217,9 @@ export default function Home() {
 
   async function refreshCalendarEvents() {
     if (!supabase || !householdId) return;
-    const { data } = await supabase.from("events").select("id, title, starts_at, all_day, color, location, category").eq("household_id", householdId).order("starts_at");
+    const { data } = await supabase.from("events").select("id, title, starts_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at");
     if (data) setEvents(data.map((event) => ({
-      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day,
+      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
       time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     })));
   }
@@ -346,7 +347,7 @@ export default function Home() {
   async function saveEvent(event: Event) {
     setEvents((items) => items.map((item) => item.id === event.id ? event : item));
     setEditingEvent(null);
-    if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true }).eq("id", event.id).eq("household_id", householdId);
+    if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true, member_ids: event.memberIds ?? [] }).eq("id", event.id).eq("household_id", householdId);
   }
 
   async function deleteEvent(event: Event) {
@@ -411,14 +412,15 @@ export default function Home() {
             <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-600">FAMILY CALENDAR</p><h2 className="text-2xl font-bold">{calendarAnchor.toLocaleDateString([], { month: "long", year: "numeric" })}</h2></div><div className="flex flex-wrap items-center gap-2"><button onClick={() => googleConnected ? syncGoogleCalendar(true) : connectGoogleCalendar()} disabled={syncingGoogle} className="rounded-xl border border-violet-200 px-3 py-1.5 text-sm font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-400/30 dark:text-violet-200">{syncingGoogle ? "Syncing…" : googleConnected ? "Sync now" : "Connect Google"}</button><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">{(["Day", "Week", "Month"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === item ? "bg-white text-violet-700 shadow-sm dark:bg-violet-500 dark:text-white" : "text-slate-500 dark:text-slate-300"}`}>{item}</button>)}</div></div></div>
             {calendarMessage && <p className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 dark:bg-violet-400/10 dark:text-violet-100">{calendarMessage}</p>}
             <div className="mb-4 flex items-center justify-between"><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, -1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">← Previous</button><button onClick={() => setCalendarAnchor(new Date())} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Today</button><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, 1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Next →</button></div>
-            {view === "Day" ? <DayCalendar date={calendarAnchor} events={events} onEdit={setEditingEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={events} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} /> : <MonthGrid anchor={calendarAnchor} events={events} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
+            <FamilyColorKey members={members} />
+            {view === "Day" ? <DayCalendar date={calendarAnchor} events={events} members={members} onEdit={setEditingEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={events} members={members} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} /> : <MonthGrid anchor={calendarAnchor} events={events} members={members} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
             <div className="mt-6 border-t border-slate-100 pt-5 dark:border-white/10">
-              {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
+              {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>
         </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} /> : activeTab === "settings" ? <SettingsPage googleConnections={googleConnections} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteList={deleteSharedList} />}
       </div>
-      {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
+      {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
     </main>
   );
 }
@@ -470,27 +472,28 @@ function shiftCalendar(date: Date, view: "Day" | "Week" | "Month", direction: nu
   return result;
 }
 
-function EventChip({ event, compact = false }: { event: Event; compact?: boolean }) {
-  const style = categoryStyle(event.category);
-  return <div className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold ${style}`}><span className="block truncate"><span className="mr-1 inline-block text-sm leading-none align-[-1px]">{categoryIcon(event.category)}</span>{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
+function memberCalendarColor(member: Member, index: number) {
+  const name = member.name.toLowerCase();
+  if (name === "michael") return "#86efac";
+  if (name === "lucas") return "#fb923c";
+  if (member.color && member.color !== "#7c3aed") return member.color;
+  return ["#a5b4fc", "#f9a8d4", "#fde68a", "#67e8f9", "#c4b5fd"][index % 5];
 }
 
-function categoryStyle(category?: string | null) {
-  if (category === "School Test/Project Due") return "bg-rose-200 text-rose-950";
-  if (category === "Sports") return "bg-emerald-200 text-emerald-950";
-  if (category === "Birthday") return "bg-pink-200 text-pink-950";
-  if (category === "Vacation") return "bg-sky-200 text-sky-950";
-  if (category === "Holiday") return "bg-amber-200 text-amber-950";
-  return "bg-violet-100 text-violet-800 dark:bg-violet-400/20 dark:text-violet-100";
+function eventBlockBackground(event: Event, members: Member[]) {
+  const colors = (event.memberIds ?? []).map((id) => members.find((member) => String(member.id) === id)).filter((member): member is Member => Boolean(member)).map((member) => memberCalendarColor(member, members.indexOf(member)));
+  if (!colors.length) return "#e2e8f0";
+  if (colors.length === 1) return colors[0];
+  return `linear-gradient(135deg, ${colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ")})`;
 }
 
-function categoryIcon(category?: string | null) {
-  if (category === "School Test/Project Due") return "✎";
-  if (category === "Sports") return "⚽";
-  if (category === "Birthday") return "🎂";
-  if (category === "Vacation") return "✈";
-  if (category === "Holiday") return "✦";
-  return "•";
+function FamilyColorKey({ members }: { members: Member[] }) {
+  if (!members.length) return null;
+  return <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold text-slate-600 dark:text-slate-300"><span className="text-[10px] uppercase tracking-wide text-slate-400">Family colors</span>{members.map((member, index) => <span key={member.id} className="flex items-center gap-1.5"><i className="size-3 rounded-full" style={{ background: member.name.toLowerCase() === "lucas" ? "linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)" : memberCalendarColor(member, index) }}/>{member.name}</span>)}<span className="flex items-center gap-1.5"><i className="size-3 rounded-full bg-slate-200"/>Family</span></div>;
+}
+
+function EventChip({ event, members, compact = false }: { event: Event; members: Member[]; compact?: boolean }) {
+  return <div style={{ background: eventBlockBackground(event, members) }} className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold text-slate-900`}><span className="block truncate">{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
 }
 
 function dayCardDecoration(events: Event[]) {
@@ -499,12 +502,12 @@ function dayCardDecoration(events: Event[]) {
   return "";
 }
 
-function DayCalendar({ date, events, onEdit }: { date: Date; events: Event[]; onEdit: (event: Event) => void }) {
+function DayCalendar({ date, events, members, onEdit }: { date: Date; events: Event[]; members: Member[]; onEdit: (event: Event) => void }) {
   const dayEvents = events.filter((event) => eventOccursOn(event, date));
-  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="sticky top-0 z-10 flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div><div className="p-4">{dayEvents.length ? <div className="space-y-2">{dayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} className="flex w-full items-center gap-3 rounded-xl bg-violet-50 p-3 text-left hover:bg-violet-100 dark:bg-violet-400/10"><span className="size-2 rounded-full bg-violet-500"/><div><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.time}{event.location ? ` · ${event.location}` : ""}</p></div><span className="ml-auto text-sm font-bold text-violet-600">Edit</span></button>)}</div> : <p className="py-8 text-center text-sm text-slate-400">Nothing scheduled for this day.</p>}</div></div>;
+  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="sticky top-0 z-10 flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div><div className="p-4">{dayEvents.length ? <div className="space-y-2">{dayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} style={{ background: eventBlockBackground(event, members) }} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:brightness-95"><div><p className="font-bold">{event.title}</p><p className="text-sm text-slate-700/75">{event.time}{event.location ? ` · ${event.location}` : ""}</p></div><span className="ml-auto text-sm font-bold text-slate-700">Edit</span></button>)}</div> : <p className="py-8 text-center text-sm text-slate-400">Nothing scheduled for this day.</p>}</div></div>;
 }
 
-function EventEditor({ event, onClose, onSave, onDelete }: { event: Event; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
+function EventEditor({ event, members, onClose, onSave, onDelete }: { event: Event; members: Member[]; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
   const source = new Date(event.startsAt);
   const [title, setTitle] = useState(event.title);
   const [date, setDate] = useState(event.allDay ? `${source.getUTCFullYear()}-${String(source.getUTCMonth() + 1).padStart(2, "0")}-${String(source.getUTCDate()).padStart(2, "0")}` : source.toISOString().slice(0, 10));
@@ -512,23 +515,24 @@ function EventEditor({ event, onClose, onSave, onDelete }: { event: Event; onClo
   const [location, setLocation] = useState(event.location ?? "");
   const [category, setCategory] = useState(event.category ?? "General");
   const [allDay, setAllDay] = useState(event.allDay ?? event.time === "All day");
-  function submit(formEvent: FormEvent) { formEvent.preventDefault(); const startsAt = new Date(`${date}T${time}:00`); onSave({ ...event, title: title.trim(), startsAt: startsAt.toISOString(), time: allDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), location: location.trim() || null, category, allDay }); }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5"><form onSubmit={submit} className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">EDIT EVENT</p><h2 className="text-2xl font-bold">Make a change</h2></div><button type="button" onClick={onClose} className="text-2xl text-slate-400">×</button></div><label className="mt-5 block text-sm font-bold">Event title<input required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="text-sm font-bold">Time<input disabled={allDay} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label></div><label className="mt-4 block text-sm font-bold">Location<input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="mt-4 block text-sm font-bold">Category<select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="mt-4 flex gap-2 text-sm font-bold"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label><div className="mt-6 flex items-center justify-between gap-3"><button type="button" onClick={() => onDelete(event)} className="rounded-xl px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Delete event</button><div className="flex gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2 font-bold text-slate-500">Cancel</button><button className="rounded-xl bg-violet-600 px-5 py-2 font-bold text-white">Save event</button></div></div></form></div>;
+  const [memberIds, setMemberIds] = useState(event.memberIds ?? []);
+  function submit(formEvent: FormEvent) { formEvent.preventDefault(); const startsAt = new Date(`${date}T${time}:00`); onSave({ ...event, title: title.trim(), startsAt: startsAt.toISOString(), time: allDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), location: location.trim() || null, category, allDay, memberIds }); }
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5"><form onSubmit={submit} className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">EDIT EVENT</p><h2 className="text-2xl font-bold">Make a change</h2></div><button type="button" onClick={onClose} className="text-2xl text-slate-400">×</button></div><label className="mt-5 block text-sm font-bold">Event title<input required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="text-sm font-bold">Time<input disabled={allDay} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label></div><label className="mt-4 block text-sm font-bold">Location<input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="mt-4 block text-sm font-bold">Category<select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><fieldset className="mt-4"><legend className="text-sm font-bold">Who is this for?</legend><div className="mt-2 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = memberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><label className="mt-4 flex gap-2 text-sm font-bold"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label><div className="mt-6 flex items-center justify-between gap-3"><button type="button" onClick={() => onDelete(event)} className="rounded-xl px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Delete event</button><div className="flex gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2 font-bold text-slate-500">Cancel</button><button className="rounded-xl bg-violet-600 px-5 py-2 font-bold text-white">Save event</button></div></div></form></div>;
 }
 
-function WeekCalendar({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
+function WeekCalendar({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
   const first = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex aspect-square min-h-0 flex-col overflow-hidden rounded-xl p-2 text-left transition-colors ${isToday ? "bg-violet-600 text-white" : "bg-slate-50 hover:bg-violet-50 dark:bg-white/5 dark:hover:bg-white/10"} ${dayCardDecoration(dayEvents)}`}><div className="flex h-8 shrink-0 items-start gap-1.5"><span className={`pt-1 text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></div><div className="min-h-0 flex-1 space-y-1 overflow-hidden">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} />)}{dayEvents.length > 2 && <p className={`px-1 text-xs font-bold ${isToday ? "text-white" : "text-violet-600"}`}>+{dayEvents.length - 2} more</p>}</div></button>; })}</div>;
+  return <div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex aspect-square min-h-0 flex-col overflow-hidden rounded-xl p-2 text-left transition-colors ${isToday ? "bg-violet-600 text-white" : "bg-slate-50 hover:bg-violet-50 dark:bg-white/5 dark:hover:bg-white/10"} ${dayCardDecoration(dayEvents)}`}><div className="flex h-8 shrink-0 items-start gap-1.5"><span className={`pt-1 text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></div><div className="min-h-0 flex-1 space-y-1 overflow-hidden">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} />)}{dayEvents.length > 2 && <p className={`px-1 text-xs font-bold ${isToday ? "text-white" : "text-violet-600"}`}>+{dayEvents.length - 2} more</p>}</div></button>; })}</div>;
 }
 
-function MonthGrid({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
+function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const first = startOfWeek(firstOfMonth);
   const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
   const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
   const days = Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
+  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) => void }) {
