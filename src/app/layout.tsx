@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The Miller Home",
+  title: "The Vulpetti Home",
   description: "A family command center for the moments that matter.",
 };
 
