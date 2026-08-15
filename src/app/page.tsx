@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 
-type Event = { id: number; title: string; time: string; person: string; color: string };
-type Todo = { id: number; title: string; due: string; done: boolean };
+type Event = { id: string | number; title: string; time: string; person: string; color: string };
+type Todo = { id: string | number; title: string; due: string; done: boolean };
 
 const starterEvents: Event[] = [
   { id: 1, title: "School drop-off", time: "8:10 AM", person: "Everyone", color: "bg-sky-400" },
@@ -25,21 +27,87 @@ export default function Home() {
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      setAuthReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !user) return;
+    supabase.from("members").select("household_id").eq("user_id", user.id).limit(1).then(({ data }) => {
+      setHouseholdId(data?.[0]?.household_id ?? null);
+      setDataReady(true);
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!supabase || !householdId) return;
+    Promise.all([
+      supabase.from("events").select("id, title, starts_at, all_day, color").eq("household_id", householdId).order("starts_at"),
+      supabase.from("todos").select("id, title, due_at, status").eq("household_id", householdId).neq("status", "archived").order("due_at"),
+    ]).then(([eventResult, todoResult]) => {
+      if (eventResult.data) setEvents(eventResult.data.map((event) => ({
+        id: event.id, title: event.title, person: "Family", color: "bg-violet-400",
+        time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      })));
+      if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
+    });
+  }, [householdId]);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
 
   function addEvent(event: FormEvent) {
     event.preventDefault();
     const title = newItem.trim();
     if (!title) return;
-    setEvents((items) => [...items, { id: Date.now(), title, time: "All day", person: "Family", color: "bg-emerald-400" }]);
+    if (supabase && user && householdId) {
+      const startsAt = new Date();
+      startsAt.setHours(9, 0, 0, 0);
+      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: true, color: "#34d399" }).select("id").single().then(({ data, error }) => {
+        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: "All day", person: "Family", color: "bg-emerald-400" }]);
+      });
+    } else {
+      setEvents((items) => [...items, { id: Date.now().toString(), title, time: "All day", person: "Family", color: "bg-emerald-400" }]);
+    }
     setNewItem("");
   }
 
   function addTodo() {
     const title = window.prompt("What needs to get done?");
     if (!title?.trim()) return;
-    setTodos((items) => [...items, { id: Date.now(), title: title.trim(), due: "", done: false }]);
+    if (supabase && user && householdId) {
+      supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title: title.trim() }).select("id").single().then(({ data, error }) => {
+        if (!error && data) setTodos((items) => [...items, { id: data.id, title: title.trim(), due: "", done: false }]);
+      });
+    } else {
+      setTodos((items) => [...items, { id: Date.now().toString(), title: title.trim(), due: "", done: false }]);
+    }
   }
+
+  async function createHousehold() {
+    if (!supabase || !user) return;
+    const name = window.prompt("What should we call your household?", "The Miller Home");
+    if (!name?.trim()) return;
+    const { data, error } = await supabase.from("households").insert({ name: name.trim(), created_by: user.id }).select("id").single();
+    if (error) { window.alert(error.message); return; }
+    setHouseholdId(data.id);
+  }
+
+  if (!authReady) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] text-slate-500">Connecting your family home…</main>;
+  if (supabase && !user) return <AuthScreen onAuthenticated={setUser} />;
+  if (supabase && user && dataReady && !householdId) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><span className="text-5xl">🏠</span><h1 className="mt-5 text-2xl font-bold">Create your family home</h1><p className="mt-2 text-slate-500">This private space will hold your shared calendar, chores, and adult to-dos.</p><button onClick={createHousehold} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Create household</button></section></main>;
 
   if (screenSaver) return <Screensaver onExit={() => setScreenSaver(false)} />;
 
@@ -58,7 +126,7 @@ export default function Home() {
           <section className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-7">
             <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-600">TODAY&apos;S PLAN</p><h2 className="text-2xl font-bold">Wednesday, August 19</h2></div><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">{(["Day", "Week", "Month"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === item ? "bg-white text-violet-700 shadow-sm dark:bg-violet-500 dark:text-white" : "text-slate-500 dark:text-slate-300"}`}>{item}</button>)}</div></div>
             <form onSubmit={addEvent} className="my-6 flex gap-2 rounded-2xl bg-violet-50 p-2 dark:bg-violet-500/10"><input value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="Add an event — “Piano Friday at 4”" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-violet-400"/><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">+ Add</button></form>
-            {view === "Month" ? <MonthGrid /> : <div className="space-y-1">{events.map((event) => <div key={event.id} className="group flex items-center gap-4 rounded-2xl px-3 py-3 hover:bg-slate-50 dark:hover:bg-white/5"><p className="w-16 shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{event.time}</p><span className={`size-3 shrink-0 rounded-full ${event.color}`} /><div className="min-w-0 flex-1"><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.person}</p></div><button onClick={() => setEvents((items) => items.filter((item) => item.id !== event.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Remove ${event.title}`}>×</button></div>)}</div>}
+            {view === "Month" ? <MonthGrid /> : <div className="space-y-1">{events.map((event) => <div key={event.id} className="group flex items-center gap-4 rounded-2xl px-3 py-3 hover:bg-slate-50 dark:hover:bg-white/5"><p className="w-16 shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{event.time}</p><span className={`size-3 shrink-0 rounded-full ${event.color}`} /><div className="min-w-0 flex-1"><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.person}</p></div><button onClick={() => setEvents((items) => items.filter((item) => item.id !== event.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Remove ${event.title}`}>×</button></div>)}{events.length === 0 && <p className="px-3 py-7 text-center text-sm text-slate-400">No events yet—add your first one above.</p>}</div>}
             {view === "Week" && <div className="mt-7 grid grid-cols-7 gap-1 border-t border-slate-100 pt-5 dark:border-white/10">{weekdays.map((day, index) => <div key={day} className={`rounded-xl p-2 text-center text-xs font-semibold ${index === 2 ? "bg-violet-600 text-white" : "text-slate-500 dark:text-slate-400"}`}><p>{day}</p><p className="mt-1 text-base">{17 + index}</p></div>)}</div>}
           </section>
           <section className="space-y-5"><article className="rounded-[1.75rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-semibold text-rose-500">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-9 place-items-center rounded-xl bg-rose-100 text-xl font-bold text-rose-600 hover:bg-rose-200">+</button></div><div className="space-y-3">{openTodos.map((todo) => <label key={todo.id} className="flex cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => setTodos((items) => items.map((item) => item.id === todo.id ? { ...item, done: true } : item))} className="mt-1 size-4 accent-rose-500"/><span className="flex-1 text-sm font-medium">{todo.title}{todo.due && <small className="mt-1 block font-semibold text-slate-400">{todo.due}</small>}</span></label>)}</div><button className="mt-4 text-sm font-bold text-violet-600">View all tasks →</button></article><article className="rounded-[1.75rem] bg-amber-100 p-6 text-amber-950"><p className="text-sm font-bold text-amber-700">FAMILY NOTE</p><p className="mt-2 text-lg font-bold leading-snug">Don&apos;t forget: wear your team jersey for soccer tomorrow!</p><p className="mt-4 text-sm font-semibold text-amber-700">— Mom</p></article></section>
@@ -74,6 +142,26 @@ function Chore({ emoji, title, person, done = false }: { emoji: string; title: s
 
 function MonthGrid() {
   return <div className="grid grid-cols-7 gap-2 pt-6">{Array.from({ length: 35 }, (_, index) => <div key={index} className={`aspect-square rounded-xl p-2 text-sm ${index === 16 ? "bg-violet-600 font-bold text-white" : "bg-slate-50 text-slate-500 dark:bg-white/5 dark:text-slate-300"}`}>{index + 1 <= 31 ? index + 1 : ""}{index === 16 && <span className="mt-1 block size-1.5 rounded-full bg-amber-300"/>}</div>)}</div>;
+}
+
+function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isNew, setIsNew] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+    const result = isNew
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) { setMessage(result.error.message); return; }
+    if (result.data.user) onAuthenticated(result.data.user);
+    setMessage(isNew && !result.data.session ? "Check your email to confirm your account, then sign in." : "Welcome home!");
+  }
+
+  return <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#ddd6fe,transparent_35%),#f8f7ff] p-5 text-slate-900"><form onSubmit={submit} className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-xl shadow-violet-200/50"><div className="grid size-12 place-items-center rounded-2xl bg-violet-600 text-xl text-white">✦</div><h1 className="mt-6 text-3xl font-bold">Welcome home</h1><p className="mt-2 text-slate-500">Sign in to your private family command center.</p><label className="mt-6 block text-sm font-bold">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-violet-500" placeholder="you@example.com" /></label><label className="mt-4 block text-sm font-bold">Password<input required minLength={6} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-violet-500" placeholder="At least 6 characters" /></label>{message && <p className="mt-4 rounded-xl bg-violet-50 p-3 text-sm text-violet-700">{message}</p>}<button className="mt-6 w-full rounded-xl bg-violet-600 px-4 py-3 font-bold text-white hover:bg-violet-700">{isNew ? "Create account" : "Sign in"}</button><button type="button" onClick={() => { setIsNew((value) => !value); setMessage(""); }} className="mt-4 w-full text-sm font-bold text-violet-600">{isNew ? "Already have an account? Sign in" : "New here? Create an account"}</button></form></main>;
 }
 
 function Screensaver({ onExit }: { onExit: () => void }) {
