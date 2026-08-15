@@ -100,9 +100,20 @@ export default function Home() {
     if (!supabase || !user) return;
     const name = window.prompt("What should we call your household?", "The Miller Home");
     if (!name?.trim()) return;
-    const { data, error } = await supabase.from("households").insert({ name: name.trim(), created_by: user.id }).select("id").single();
+    const { error } = await supabase.from("households").insert({ name: name.trim(), created_by: user.id });
     if (error) { window.alert(error.message); return; }
-    setHouseholdId(data.id);
+    const { data: membership, error: membershipError } = await supabase
+      .from("members")
+      .select("household_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (membershipError || !membership) {
+      window.alert("Your household was created, but could not be loaded. Refresh the page once.");
+      return;
+    }
+    setHouseholdId(membership.household_id);
   }
 
   if (!authReady) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] text-slate-500">Connecting your family home…</main>;
