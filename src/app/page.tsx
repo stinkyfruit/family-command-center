@@ -235,17 +235,17 @@ function shiftCalendar(date: Date, view: "Day" | "Week" | "Month", direction: nu
   return result;
 }
 
-function EventChip({ event }: { event: Event }) {
+function EventChip({ event, compact = false }: { event: Event; compact?: boolean }) {
   const style = categoryStyle(event.category);
-  return <div className={`rounded-lg px-2 py-1 text-left text-xs font-semibold ${style}`}><span className="block truncate">{categoryIcon(event.category)} {event.title}</span>{event.location && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
+  return <div className={`rounded-lg px-2 ${compact ? "py-0.5" : "py-1"} text-left text-xs font-semibold ${style}`}><span className="block truncate">{categoryIcon(event.category)} {event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
 }
 
 function categoryStyle(category?: string | null) {
-  if (category === "School Test/Project Due") return "bg-rose-100 text-rose-800";
-  if (category === "Sports") return "bg-emerald-100 text-emerald-800";
-  if (category === "Birthday") return "bg-pink-100 text-pink-800";
-  if (category === "Vacation") return "bg-sky-100 text-sky-800";
-  if (category === "Holiday") return "bg-amber-100 text-amber-800";
+  if (category === "School Test/Project Due") return "bg-rose-200 text-rose-950";
+  if (category === "Sports") return "bg-emerald-200 text-emerald-950";
+  if (category === "Birthday") return "bg-pink-200 text-pink-950";
+  if (category === "Vacation") return "bg-sky-200 text-sky-950";
+  if (category === "Holiday") return "bg-amber-200 text-amber-950";
   return "bg-violet-100 text-violet-800 dark:bg-violet-400/20 dark:text-violet-100";
 }
 
@@ -278,8 +278,10 @@ function WeekCalendar({ anchor, events, onOpenDay }: { anchor: Date; events: Eve
 function MonthGrid({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const first = startOfWeek(firstOfMonth);
-  const days = Array.from({ length: 35 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => sameDate(new Date(event.startsAt), day)); const currentMonth = day.getMonth() === anchor.getMonth(); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}><span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
+  const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+  const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
+  const days = Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
+  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => sameDate(new Date(event.startsAt), day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) => void }) {
