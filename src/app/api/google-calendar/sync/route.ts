@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importGoogleEvents, requestUser, serverSupabase } from "@/lib/google-calendar";
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error && typeof error.message === "string") return error.message;
+  return fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requestUser(request.headers.get("authorization"));
@@ -12,7 +18,7 @@ export async function POST(request: NextRequest) {
     const staleConnections = force ? connections : connections.filter((connection) => !connection.last_synced_at || Date.now() - new Date(connection.last_synced_at).getTime() > 10 * 60_000);
     const count = await Promise.all(staleConnections.map(importGoogleEvents));
     return NextResponse.json({ imported: count.reduce((total, value) => total + value, 0), skipped: staleConnections.length === 0 });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not sync calendars." }, { status: 500 }); }
+  } catch (error) { return NextResponse.json({ error: errorMessage(error, "Could not sync calendars.") }, { status: 500 }); }
 }
 
 export async function GET(request: NextRequest) {
@@ -24,5 +30,5 @@ export async function GET(request: NextRequest) {
     const { data: connections } = await admin.from("google_calendar_connections").select("last_synced_at").eq("household_id", householdId).eq("connected_by", user.id);
     const lastSyncedAt = connections?.map((connection) => connection.last_synced_at).filter(Boolean).sort().at(-1) ?? null;
     return NextResponse.json({ connected: Boolean(connections?.length), lastSyncedAt });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not check calendar sync." }, { status: 500 }); }
+  } catch (error) { return NextResponse.json({ error: errorMessage(error, "Could not check calendar sync.") }, { status: 500 }); }
 }

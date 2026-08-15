@@ -49,7 +49,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"calendar" | "tasks" | "chores" | "lists" | "settings">("calendar");
   const [weather, setWeather] = useState<Weather | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
+  const [view, setView] = useState<"Day" | "Week" | "Month">("Month");
   const [dark, setDark] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
   const [user, setUser] = useState<User | null>(null);
