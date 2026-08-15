@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const { householdId, force = false } = await request.json();
     if (!user || !householdId) return NextResponse.json({ error: "Sign in before syncing." }, { status: 401 });
     const admin = serverSupabase();
-    const { data: connections } = await admin.from("google_calendar_connections").select("id, household_id, connected_by, google_calendar_id, last_synced_at").eq("household_id", householdId).eq("connected_by", user.id);
+    const { data: connections } = await admin.from("google_calendar_connections").select("id, household_id, connected_by, google_calendar_id, last_synced_at").eq("household_id", householdId).eq("connected_by", user.id).eq("enabled", true);
     if (!connections?.length) return NextResponse.json({ needsConnection: true, imported: 0 });
     const staleConnections = force ? connections : connections.filter((connection) => !connection.last_synced_at || Date.now() - new Date(connection.last_synced_at).getTime() > 10 * 60_000);
     const count = await Promise.all(staleConnections.map(importGoogleEvents));

@@ -11,15 +11,20 @@ export async function GET(request: NextRequest) {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID ?? "", client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "", redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI ?? "", grant_type: "authorization_code" }) });
     const tokens = await tokenResponse.json();
     if (!tokenResponse.ok || !tokens.refresh_token) throw new Error(tokens.error_description ?? "Google did not return a refresh token.");
-    const calendarResponse = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList/primary", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-    const calendar = await calendarResponse.json();
-    if (!calendarResponse.ok) throw new Error(calendar.error?.message ?? "Could not read your primary calendar.");
+    const calendarResponse = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    const calendarList = await calendarResponse.json();
+    if (!calendarResponse.ok) throw new Error(calendarList.error?.message ?? "Could not read your Google calendars.");
+    const calendars = (calendarList.items ?? []).filter((calendar: { id?: string; accessRole?: string }) => calendar.id && calendar.accessRole !== "none");
+    if (!calendars.length) throw new Error("No Google calendars were available to connect.");
     const admin = serverSupabase();
-    const { data: connection, error } = await admin.from("google_calendar_connections").upsert({ household_id: verified.householdId, connected_by: verified.userId, google_calendar_id: calendar.id, display_name: calendar.summaryOverride ?? calendar.summary ?? "Google Calendar", color: calendar.backgroundColor ?? null }, { onConflict: "household_id,google_calendar_id" }).select("id, household_id, connected_by, google_calendar_id").single();
-    if (error || !connection) throw error ?? new Error("Could not save the calendar connection.");
-    const { error: credentialsError } = await admin.rpc("store_google_calendar_credentials", { p_connection_id: connection.id, p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString() });
-    if (credentialsError) throw credentialsError;
-    await importGoogleEvents(connection);
+    const connections = await Promise.all(calendars.map(async (calendar: { id: string; summaryOverride?: string; summary?: string; backgroundColor?: string }) => {
+      const { data: connection, error } = await admin.from("google_calendar_connections").upsert({ household_id: verified.householdId, connected_by: verified.userId, google_calendar_id: calendar.id, display_name: calendar.summaryOverride ?? calendar.summary ?? "Google Calendar", color: calendar.backgroundColor ?? null, enabled: true }, { onConflict: "household_id,google_calendar_id" }).select("id, household_id, connected_by, google_calendar_id").single();
+      if (error || !connection) throw error ?? new Error("Could not save the calendar connection.");
+      const { error: credentialsError } = await admin.rpc("store_google_calendar_credentials", { p_connection_id: connection.id, p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString() });
+      if (credentialsError) throw credentialsError;
+      return connection;
+    }));
+    await Promise.all(connections.map(importGoogleEvents));
     redirect.searchParams.set("calendar", "google-connected");
   } catch { redirect.searchParams.set("calendar", "google-error"); }
   return NextResponse.redirect(redirect);

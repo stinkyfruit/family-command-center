@@ -11,6 +11,7 @@ type Member = { id: string | number; name: string; role: "adult" | "child" };
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number };
 type SharedListItem = { id: string | number; title: string; done: boolean };
 type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
+type GoogleConnection = { id: string; name: string; enabled: boolean };
 
 const starterEvents: Event[] = [
   { id: 1, title: "School drop-off", time: "8:10 AM", person: "Everyone", color: "bg-sky-400", startsAt: new Date().toISOString() },
@@ -63,6 +64,7 @@ export default function Home() {
   const [members, setMembers] = useState<Member[]>([]);
   const [chores, setChores] = useState<ChoreEntry[]>([]);
   const [sharedLists, setSharedLists] = useState<SharedList[]>([]);
+  const [googleConnections, setGoogleConnections] = useState<GoogleConnection[]>([]);
 
   useEffect(() => {
     if (!supabase) {
@@ -127,7 +129,8 @@ export default function Home() {
       supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
-    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult]) => {
+      supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
+    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult]) => {
       if (eventResult.data) setEvents(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
@@ -143,6 +146,7 @@ export default function Home() {
         (listItemResult.data ?? []).forEach((item) => itemsByList.set(item.list_id, [...(itemsByList.get(item.list_id) ?? []), { id: item.id, title: item.title, done: item.completed }]));
         setSharedLists(listResult.data.map((list) => ({ id: list.id, title: list.title, icon: list.icon, items: itemsByList.get(list.id) ?? [] })));
       }
+      if (connectionResult.data) setGoogleConnections(connectionResult.data.map((connection) => ({ id: connection.id, name: connection.display_name, enabled: connection.enabled })));
     });
   }, [householdId]);
 
@@ -239,6 +243,15 @@ export default function Home() {
     setGoogleConnected(true);
     await refreshCalendarEvents();
     setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
+  }
+
+  async function toggleGoogleCalendar(connection: GoogleConnection) {
+    const enabled = !connection.enabled;
+    setGoogleConnections((items) => items.map((item) => item.id === connection.id ? { ...item, enabled } : item));
+    if (supabase) {
+      const { error } = await supabase.from("google_calendar_connections").update({ enabled }).eq("id", connection.id);
+      if (error) { setGoogleConnections((items) => items.map((item) => item.id === connection.id ? connection : item)); window.alert(error.message); }
+    }
   }
 
   function toggleTodo(id: string | number) {
@@ -394,7 +407,7 @@ export default function Home() {
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} /> : activeTab === "settings" ? <SettingsPage googleConnected={googleConnected} onConnect={connectGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} /> : activeTab === "settings" ? <SettingsPage googleConnections={googleConnections} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteList={deleteSharedList} />}
       </div>
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
     </main>
@@ -545,8 +558,8 @@ function ChoresPage({ members, chores, onAddChild, onAddChore, onToggle }: { mem
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Today&apos;s routines</h2></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{children.map((child) => { const childChores = chores.filter((chore) => chore.assigneeMemberId === child.id); const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-2xl p-5 ${theme}`}><div className="flex items-center justify-between"><h3 className="text-lg font-bold">{child.name}</h3><button onClick={() => onAddChore(child.id)} className="grid size-8 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600">+</button></div><div className="mt-4 space-y-3">{childChores.map((chore) => <button key={chore.id} onClick={() => onToggle(chore)} className="flex w-full items-center gap-3 text-left"><span className="grid size-10 place-items-center rounded-xl bg-white/70 text-lg">{chore.emoji}</span><span className={`flex-1 text-sm font-bold ${chore.completionId ? "text-slate-400 line-through" : ""}`}>{chore.title}</span><span className={chore.completionId ? "text-emerald-500" : "text-slate-500"}>{chore.completionId ? "✓" : "○"}</span></button>)}{childChores.length === 0 && <p className="text-sm text-slate-600">No chores yet. Tap + to add one.</p>}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add Michael and Lucas (or anyone else) to create their chore boards.</div>}</div></section>;
 }
 
-function SettingsPage({ googleConnected, onConnect }: { googleConnected: boolean; onConnect: () => void }) {
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{googleConnected ? "Connected. Add another Gmail account here if needed." : "Connect your first Google account to import its calendar."}</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnected ? "+ Add Google account" : "Connect Google"}</button></article></div></section>;
+function SettingsPage({ googleConnections, onConnect, onToggleConnection }: { googleConnections: GoogleConnection[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose which Google calendars appear in your family calendar.</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnections.length ? "+ Add Google account" : "Connect Google"}</button></div>{googleConnections.length > 0 && <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">{googleConnections.map((connection) => <label key={connection.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold shadow-sm dark:bg-white/5"><input type="checkbox" checked={connection.enabled} onChange={() => onToggleConnection(connection)} className="size-4 accent-violet-600"/><span className="flex-1">{connection.name}</span><span className={connection.enabled ? "text-emerald-600" : "text-slate-400"}>{connection.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article></div></section>;
 }
 
 function ListsPage({ lists, onAddList, onAddItem, onToggleItem, onDeleteList }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
