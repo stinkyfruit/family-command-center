@@ -7,6 +7,10 @@ import { supabase } from "@/lib/supabase";
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; location?: string | null; category?: string | null; allDay?: boolean };
 type Todo = { id: string | number; title: string; due: string; done: boolean };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
+type Member = { id: string | number; name: string; role: "adult" | "child" };
+type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number };
+type SharedListItem = { id: string | number; title: string; done: boolean };
+type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
 
 const starterEvents: Event[] = [
   { id: 1, title: "School drop-off", time: "8:10 AM", person: "Everyone", color: "bg-sky-400", startsAt: new Date().toISOString() },
@@ -47,6 +51,9 @@ export default function Home() {
   const [calendarMessage, setCalendarMessage] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [chores, setChores] = useState<ChoreEntry[]>([]);
+  const [sharedLists, setSharedLists] = useState<SharedList[]>([]);
 
   useEffect(() => {
     if (!supabase) {
@@ -97,15 +104,32 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !householdId) return;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     Promise.all([
       supabase.from("events").select("id, title, starts_at, all_day, color, location, category").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status").eq("household_id", householdId).neq("status", "archived").order("due_at"),
-    ]).then(([eventResult, todoResult]) => {
+      supabase.from("members").select("id, display_name, role").eq("household_id", householdId).order("created_at"),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id").eq("household_id", householdId).eq("active", true).order("created_at"),
+      supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
+      supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
+      supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
+    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult]) => {
       if (eventResult.data) setEvents(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       })));
       if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
+      if (memberResult.data) setMembers(memberResult.data.map((member) => ({ id: member.id, name: member.display_name, role: member.role })));
+      if (choreResult.data) {
+        const completionByChore = new Map((completionResult.data ?? []).map((completion) => [completion.chore_id, completion.id]));
+        setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, completionId: completionByChore.get(chore.id) })));
+      }
+      if (listResult.data) {
+        const itemsByList = new Map<string, SharedListItem[]>();
+        (listItemResult.data ?? []).forEach((item) => itemsByList.set(item.list_id, [...(itemsByList.get(item.list_id) ?? []), { id: item.id, title: item.title, done: item.completed }]));
+        setSharedLists(listResult.data.map((list) => ({ id: list.id, title: list.title, icon: list.icon, items: itemsByList.get(list.id) ?? [] })));
+      }
     });
   }, [householdId]);
 
@@ -202,6 +226,69 @@ export default function Home() {
     if (supabase && householdId) supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId).then(() => undefined);
   }
 
+  async function addChild() {
+    const name = window.prompt("Child's name?");
+    if (!name?.trim() || !householdId) return;
+    if (supabase) {
+      const { data, error } = await supabase.from("members").insert({ household_id: householdId, display_name: name.trim(), role: "child" }).select("id, display_name, role").single();
+      if (error) { window.alert(error.message); return; }
+      if (data) setMembers((items) => [...items, { id: data.id, name: data.display_name, role: data.role }]);
+    } else setMembers((items) => [...items, { id: Date.now().toString(), name: name.trim(), role: "child" }]);
+  }
+
+  async function addChore(memberId: string | number) {
+    const title = window.prompt("What is the chore?");
+    if (!title?.trim() || !householdId) return;
+    const emoji = window.prompt("Pick an emoji for it", "✨")?.trim() || "✨";
+    if (supabase) {
+      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji }).select("id, title, emoji, assignee_member_id").single();
+      if (error) { window.alert(error.message); return; }
+      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id }]);
+    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId }]);
+  }
+
+  async function toggleChore(chore: ChoreEntry) {
+    if (chore.completionId) {
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item));
+      if (supabase) await supabase.from("chore_completions").delete().eq("id", chore.completionId);
+      return;
+    }
+    if (supabase) {
+      const { data, error } = await supabase.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id").single();
+      if (error) { window.alert(error.message); return; }
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
+    } else setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
+  }
+
+  async function addSharedList() {
+    const title = window.prompt("Name this list");
+    if (!title?.trim() || !householdId || !user) return;
+    const icon = window.prompt("Pick an emoji for it", "☰")?.trim() || "☰";
+    if (supabase) {
+      const { data, error } = await supabase.from("lists").insert({ household_id: householdId, created_by: user.id, title: title.trim(), icon }).select("id, title, icon").single();
+      if (error) { window.alert(error.message); return; }
+      if (data) setSharedLists((items) => [...items, { ...data, items: [] }]);
+    } else setSharedLists((items) => [...items, { id: Date.now().toString(), title: title.trim(), icon, items: [] }]);
+  }
+
+  async function addListItem(listId: string | number) {
+    const title = window.prompt("Add an item");
+    if (!title?.trim()) return;
+    if (supabase) {
+      const { data, error } = await supabase.from("list_items").insert({ list_id: listId, title: title.trim() }).select("id, title, completed").single();
+      if (error) { window.alert(error.message); return; }
+      if (data) setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: data.id, title: data.title, done: data.completed }] } : list));
+    } else setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: Date.now().toString(), title: title.trim(), done: false }] } : list));
+  }
+
+  async function toggleListItem(listId: string | number, itemId: string | number) {
+    const item = sharedLists.find((list) => list.id === listId)?.items.find((entry) => entry.id === itemId);
+    if (!item) return;
+    const done = !item.done;
+    setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.map((entry) => entry.id === itemId ? { ...entry, done } : entry) } : list));
+    if (supabase) await supabase.from("list_items").update({ completed: done }).eq("id", itemId);
+  }
+
   async function saveEvent(event: Event) {
     setEvents((items) => items.map((item) => item.id === event.id ? event : item));
     setEditingEvent(null);
@@ -275,7 +362,7 @@ export default function Home() {
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage /> : activeTab === "settings" ? <SettingsPage googleConnected={googleConnected} onConnect={connectGoogleCalendar} /> : <ListsPage />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} /> : activeTab === "settings" ? <SettingsPage googleConnected={googleConnected} onConnect={connectGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} />}
       </div>
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
     </main>
@@ -421,18 +508,19 @@ function TasksPage({ todos, onAdd, onToggle }: { todos: Todo[]; onAdd: () => voi
   return <section className="mx-auto max-w-[1600px] px-5 pb-8 md:px-9"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-rose-500">FAMILY TASKS</p><h2 className="text-3xl font-bold">Today&apos;s to-dos</h2></div><button onClick={onAdd} className="rounded-xl bg-rose-500 px-4 py-3 font-bold text-white">+ Add task</button></div><div className="mt-7 grid gap-4 md:grid-cols-2">{open.map((todo) => <button key={todo.id} onClick={() => onToggle(todo.id)} className="flex items-start gap-4 rounded-2xl bg-rose-50 p-5 text-left hover:bg-rose-100 dark:bg-rose-400/10"><span className="grid size-6 shrink-0 place-items-center rounded-full border-2 border-rose-400 text-rose-500">✓</span><span><b className="block">{todo.title}</b><small className="mt-1 block text-slate-500">{todo.due || "No deadline"}</small></span></button>)}{open.length === 0 && <p className="text-slate-400">You&apos;re all caught up.</p>}</div>{completed.length > 0 && <div className="mt-8 border-t border-slate-100 pt-5 dark:border-white/10"><h3 className="font-bold text-emerald-600">Completed today</h3><div className="mt-3 grid gap-3 md:grid-cols-2">{completed.map((todo) => <button key={todo.id} onClick={() => onToggle(todo.id)} className="flex items-center gap-3 rounded-xl bg-emerald-50 p-3 text-left text-sm text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200"><span>✓</span><span className="line-through">{todo.title}</span><span className="ml-auto text-xs">Restore</span></button>)}</div></div>}</div></section>;
 }
 
-function ChoresPage() {
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Today&apos;s routines</h2><div className="mt-5 grid gap-5 md:grid-cols-2"><div className="rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><h3 className="text-lg font-bold text-sky-900 dark:text-sky-100">Michael</h3><div className="mt-4 space-y-3"><Chore emoji="🐕" title="Walk Charlie" person="After school" /><Chore emoji="♻️" title="Recycling" person="Before dinner" /></div></div><div className="rounded-2xl bg-amber-50 p-5 dark:bg-amber-400/10"><h3 className="text-lg font-bold text-amber-900 dark:text-amber-100">Lucas</h3><div className="mt-4 space-y-3"><Chore emoji="🧺" title="Put away laundry" person="After school" /><Chore emoji="🧽" title="Wipe table" person="After dinner" /></div></div></div></div></section>;
+function ChoresPage({ members, chores, onAddChild, onAddChore, onToggle }: { members: Member[]; chores: ChoreEntry[]; onAddChild: () => void; onAddChore: (memberId: string | number) => void; onToggle: (chore: ChoreEntry) => void }) {
+  const children = members.filter((member) => member.role === "child");
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Today&apos;s routines</h2></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{children.map((child) => { const childChores = chores.filter((chore) => chore.assigneeMemberId === child.id); return <div key={child.id} className="rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><div className="flex items-center justify-between"><h3 className="text-lg font-bold">{child.name}</h3><button onClick={() => onAddChore(child.id)} className="grid size-8 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600">+</button></div><div className="mt-4 space-y-3">{childChores.map((chore) => <button key={chore.id} onClick={() => onToggle(chore)} className="flex w-full items-center gap-3 text-left"><span className="grid size-10 place-items-center rounded-xl bg-white/70 text-lg">{chore.emoji}</span><span className={`flex-1 text-sm font-bold ${chore.completionId ? "text-slate-400 line-through" : ""}`}>{chore.title}</span><span className={chore.completionId ? "text-emerald-500" : "text-slate-300"}>{chore.completionId ? "✓" : "○"}</span></button>)}{childChores.length === 0 && <p className="text-sm text-slate-500">No chores yet. Tap + to add one.</p>}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add Michael and Lucas (or anyone else) to create their chore boards.</div>}</div></section>;
 }
 
 function SettingsPage({ googleConnected, onConnect }: { googleConnected: boolean; onConnect: () => void }) {
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{googleConnected ? "Connected. Add another Gmail account here if needed." : "Connect your first Google account to import its calendar."}</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnected ? "+ Add Google account" : "Connect Google"}</button></article></div></section>;
 }
 
-function ListsPage() {
-  return <section className="mx-auto max-w-[1600px] px-5 pb-8 md:px-9"><div className="grid gap-5 md:grid-cols-3"><ListCard icon="🛒" title="Groceries" items={["Milk", "Fruit", "Lunchbox snacks"]} /><ListCard icon="🍽️" title="Dinner ideas" items={["Taco night", "Pasta bake", "Breakfast for dinner"]} /><ListCard icon="✦" title="Family notes" items={["Picture day Friday", "Bring library books"]} /></div></section>;
+function ListsPage({ lists, onAddList, onAddItem, onToggleItem }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list) => <ListCard key={list.id} list={list} onAddItem={onAddItem} onToggleItem={onToggleItem} />)}</div> : <div className="rounded-[2rem] bg-white p-10 text-center shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-4xl">🛒</p><h3 className="mt-3 text-xl font-bold">Start your first shared list</h3><p className="mt-1 text-slate-500">Groceries, packing, dinner ideas—anything your family needs.</p><button onClick={onAddList} className="mt-5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>}</section>;
 }
 
-function ListCard({ icon, title, items }: { icon: string; title: string; items: string[] }) {
-  return <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-3xl">{icon}</p><h2 className="mt-3 text-xl font-bold">{title}</h2><div className="mt-5 space-y-3">{items.map((item) => <p key={item} className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:bg-white/5 dark:text-slate-200">{item}</p>)}</div></article>;
+function ListCard({ list, onAddItem, onToggleItem }: { list: SharedList; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void }) {
+  return <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-3xl">{list.icon}</p><h2 className="mt-3 text-xl font-bold">{list.title}</h2></div><button onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-violet-100 text-lg font-bold text-violet-700 hover:bg-violet-200">+</button></div><div className="mt-5 space-y-2">{list.items.map((item) => <button key={item.id} onClick={() => onToggleItem(list.id, item.id)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-violet-50 dark:bg-white/5 dark:text-slate-200"><span className={item.done ? "text-emerald-500" : "text-slate-300"}>{item.done ? "✓" : "○"}</span><span className={item.done ? "line-through text-slate-400" : ""}>{item.title}</span></button>)}{list.items.length === 0 && <p className="text-sm text-slate-400">Tap + to add an item.</p>}</div></article>;
 }
