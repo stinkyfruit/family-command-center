@@ -454,7 +454,7 @@ function shiftCalendar(date: Date, view: "Day" | "Week" | "Month", direction: nu
 
 function EventChip({ event, compact = false }: { event: Event; compact?: boolean }) {
   const style = categoryStyle(event.category);
-  return <div className={`rounded-lg px-2 ${compact ? "py-0.5" : "py-1"} text-left text-xs font-semibold ${style}`}><span className="block truncate">{categoryIcon(event.category)} {event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
+  return <div className={`rounded-md px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold ${style}`}><span className="block truncate">{categoryIcon(event.category)} {event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
 }
 
 function categoryStyle(category?: string | null) {
