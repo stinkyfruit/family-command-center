@@ -24,6 +24,11 @@ export default function Home() {
     { id: 3, title: "Sign school form", due: "", done: false },
   ]);
   const [newItem, setNewItem] = useState("");
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventTime, setEventTime] = useState("09:00");
+  const [eventAllDay, setEventAllDay] = useState(false);
+  const [eventPerson, setEventPerson] = useState("Family");
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
@@ -78,16 +83,16 @@ export default function Home() {
     event.preventDefault();
     const title = newItem.trim();
     if (!title) return;
+    const startsAt = new Date(`${eventDate}T${eventTime}:00`);
     if (supabase && user && householdId) {
-      const startsAt = new Date();
-      startsAt.setHours(9, 0, 0, 0);
-      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: true, color: "#34d399" }).select("id").single().then(({ data, error }) => {
-        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: "All day", person: "Family", color: "bg-emerald-400" }]);
+      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: eventAllDay, color: "#34d399" }).select("id").single().then(({ data, error }) => {
+        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: eventPerson, color: "bg-emerald-400" }]);
       });
     } else {
-      setEvents((items) => [...items, { id: Date.now().toString(), title, time: "All day", person: "Family", color: "bg-emerald-400" }]);
+      setEvents((items) => [...items, { id: Date.now().toString(), title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: eventPerson, color: "bg-emerald-400" }]);
     }
     setNewItem("");
+    setShowEventForm(false);
   }
 
   function addTodo() {
@@ -143,7 +148,7 @@ export default function Home() {
           </section>
           <section className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-7">
             <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-600">TODAY&apos;S PLAN</p><h2 className="text-2xl font-bold">Wednesday, August 19</h2></div><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">{(["Day", "Week", "Month"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === item ? "bg-white text-violet-700 shadow-sm dark:bg-violet-500 dark:text-white" : "text-slate-500 dark:text-slate-300"}`}>{item}</button>)}</div></div>
-            <form onSubmit={addEvent} className="my-6 flex gap-2 rounded-2xl bg-violet-50 p-2 dark:bg-violet-500/10"><input value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="Add an event — “Piano Friday at 4”" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-violet-400"/><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">+ Add</button></form>
+            <form onSubmit={addEvent} className="my-6 rounded-2xl bg-violet-50 p-2 dark:bg-violet-500/10"><div className="flex gap-2"><input required value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-violet-400"/><button type="button" onClick={() => setShowEventForm((value) => !value)} className="rounded-xl px-3 text-sm font-bold text-violet-700 hover:bg-violet-100 dark:text-violet-200">Details</button><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">+ Add</button></div>{showEventForm && <div className="mt-3 grid gap-3 border-t border-violet-100 px-2 pt-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">For<select value={eventPerson} onChange={(event) => setEventPerson(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>Family</option><option>Adult</option><option>Child</option></select></label><label className="flex items-end gap-2 pb-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label></div>}</form>
             {view === "Month" ? <MonthGrid /> : <div className="space-y-1">{events.map((event) => <div key={event.id} className="group flex items-center gap-4 rounded-2xl px-3 py-3 hover:bg-slate-50 dark:hover:bg-white/5"><p className="w-16 shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{event.time}</p><span className={`size-3 shrink-0 rounded-full ${event.color}`} /><div className="min-w-0 flex-1"><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.person}</p></div><button onClick={() => setEvents((items) => items.filter((item) => item.id !== event.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Remove ${event.title}`}>×</button></div>)}{events.length === 0 && <p className="px-3 py-7 text-center text-sm text-slate-400">No events yet—add your first one above.</p>}</div>}
             {view === "Week" && <div className="mt-7 grid grid-cols-7 gap-1 border-t border-slate-100 pt-5 dark:border-white/10">{weekdays.map((day, index) => <div key={day} className={`rounded-xl p-2 text-center text-xs font-semibold ${index === 2 ? "bg-violet-600 text-white" : "text-slate-500 dark:text-slate-400"}`}><p>{day}</p><p className="mt-1 text-base">{17 + index}</p></div>)}</div>}
           </section>
