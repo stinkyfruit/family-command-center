@@ -29,6 +29,7 @@ export default function Home() {
   const [screenSaver, setScreenSaver] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [householdName, setHouseholdName] = useState("Your Family Home");
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
 
@@ -47,8 +48,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !user) return;
-    supabase.from("members").select("household_id").eq("user_id", user.id).limit(1).then(({ data }) => {
-      setHouseholdId(data?.[0]?.household_id ?? null);
+    supabase.from("members").select("household_id").eq("user_id", user.id).limit(1).then(async ({ data }) => {
+      const id = data?.[0]?.household_id ?? null;
+      setHouseholdId(id);
+      if (id) {
+        const { data: household } = await supabase!.from("households").select("name").eq("id", id).single();
+        if (household) setHouseholdName(household.name);
+      }
       setDataReady(true);
     });
   }, [user]);
@@ -98,7 +104,7 @@ export default function Home() {
 
   async function createHousehold() {
     if (!supabase || !user) return;
-    const name = window.prompt("What should we call your household?", "The Miller Home");
+    const name = window.prompt("What should we call your household?", "The Vulpetti Family");
     if (!name?.trim()) return;
     const { error } = await supabase.from("households").insert({ name: name.trim(), created_by: user.id });
     if (error) { window.alert(error.message); return; }
@@ -114,6 +120,7 @@ export default function Home() {
       return;
     }
     setHouseholdId(membership.household_id);
+    setHouseholdName(name.trim());
   }
 
   if (!authReady) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] text-slate-500">Connecting your family home…</main>;
@@ -126,7 +133,7 @@ export default function Home() {
     <main className={dark ? "dark min-h-screen" : "min-h-screen"}>
       <div className="min-h-screen bg-[#f8f7ff] text-slate-900 transition-colors dark:bg-[#151522] dark:text-slate-100">
         <header className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-5 md:px-9">
-          <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-2xl bg-violet-600 text-xl shadow-lg shadow-violet-300/50">✦</div><div><h1 className="text-xl font-bold tracking-tight">The Miller Home</h1><p className="text-sm text-slate-500 dark:text-slate-400">Wednesday, August 19</p></div></div>
+          <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-2xl bg-violet-600 text-xl shadow-lg shadow-violet-300/50">✦</div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className="text-sm text-slate-500 dark:text-slate-400">Wednesday, August 19</p></div></div>
           <div className="flex items-center gap-2"><button onClick={() => setScreenSaver(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/10">Photos</button><button onClick={() => setDark((value) => !value)} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/10 dark:ring-white/10">{dark ? "☀ Light" : "☾ Dark"}</button></div>
         </header>
         <div className="mx-auto grid max-w-[1600px] gap-5 px-5 pb-8 md:px-9 xl:grid-cols-[1.2fr_2.2fr_1.2fr]">
