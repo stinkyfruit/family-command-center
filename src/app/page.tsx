@@ -151,6 +151,19 @@ export default function Home() {
     if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General" }).eq("id", event.id).eq("household_id", householdId);
   }
 
+  async function deleteEvent(event: Event) {
+    if (!window.confirm(`Delete “${event.title}”? This can’t be undone.`)) return;
+    setEvents((items) => items.filter((item) => item.id !== event.id));
+    setEditingEvent(null);
+    if (supabase && householdId) {
+      const { error } = await supabase.from("events").delete().eq("id", event.id).eq("household_id", householdId);
+      if (error) {
+        setEvents((items) => [...items, event].sort((first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime()));
+        window.alert(`Could not delete this event: ${error.message}`);
+      }
+    }
+  }
+
   async function createHousehold() {
     if (!supabase || !user) return;
     const name = window.prompt("What should we call your household?", "The Vulpetti Family");
@@ -205,7 +218,7 @@ export default function Home() {
           </section>
         </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage /> : <ListsPage />}
       </div>
-      {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} />}
+      {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
     </main>
   );
 }
@@ -282,7 +295,7 @@ function DayCalendar({ date, events, onEdit }: { date: Date; events: Event[]; on
   return <div className="rounded-2xl border border-slate-100 p-4 dark:border-white/10"><p className="mb-3 text-sm font-bold text-slate-500">{date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>{dayEvents.length ? <div className="space-y-2">{dayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} className="flex w-full items-center gap-3 rounded-xl bg-violet-50 p-3 text-left hover:bg-violet-100 dark:bg-violet-400/10"><span className="size-2 rounded-full bg-violet-500"/><div><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.time}{event.location ? ` · ${event.location}` : ""}</p></div><span className="ml-auto text-sm font-bold text-violet-600">Edit</span></button>)}</div> : <p className="py-8 text-center text-sm text-slate-400">Nothing scheduled for this day.</p>}</div>;
 }
 
-function EventEditor({ event, onClose, onSave }: { event: Event; onClose: () => void; onSave: (event: Event) => void }) {
+function EventEditor({ event, onClose, onSave, onDelete }: { event: Event; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
   const source = new Date(event.startsAt);
   const [title, setTitle] = useState(event.title);
   const [date, setDate] = useState(source.toISOString().slice(0, 10));
@@ -291,7 +304,7 @@ function EventEditor({ event, onClose, onSave }: { event: Event; onClose: () => 
   const [category, setCategory] = useState(event.category ?? "General");
   const [allDay, setAllDay] = useState(event.allDay ?? event.time === "All day");
   function submit(formEvent: FormEvent) { formEvent.preventDefault(); const startsAt = new Date(`${date}T${time}:00`); onSave({ ...event, title: title.trim(), startsAt: startsAt.toISOString(), time: allDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), location: location.trim() || null, category, allDay }); }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5"><form onSubmit={submit} className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">EDIT EVENT</p><h2 className="text-2xl font-bold">Make a change</h2></div><button type="button" onClick={onClose} className="text-2xl text-slate-400">×</button></div><label className="mt-5 block text-sm font-bold">Event title<input required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="text-sm font-bold">Time<input disabled={allDay} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label></div><label className="mt-4 block text-sm font-bold">Location<input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="mt-4 block text-sm font-bold">Category<select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="mt-4 flex gap-2 text-sm font-bold"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2 font-bold text-slate-500">Cancel</button><button className="rounded-xl bg-violet-600 px-5 py-2 font-bold text-white">Save event</button></div></form></div>;
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5"><form onSubmit={submit} className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">EDIT EVENT</p><h2 className="text-2xl font-bold">Make a change</h2></div><button type="button" onClick={onClose} className="text-2xl text-slate-400">×</button></div><label className="mt-5 block text-sm font-bold">Event title<input required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="text-sm font-bold">Time<input disabled={allDay} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label></div><label className="mt-4 block text-sm font-bold">Location<input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="mt-4 block text-sm font-bold">Category<select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="mt-4 flex gap-2 text-sm font-bold"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label><div className="mt-6 flex items-center justify-between gap-3"><button type="button" onClick={() => onDelete(event)} className="rounded-xl px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Delete event</button><div className="flex gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2 font-bold text-slate-500">Cancel</button><button className="rounded-xl bg-violet-600 px-5 py-2 font-bold text-white">Save event</button></div></div></form></div>;
 }
 
 function WeekCalendar({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
