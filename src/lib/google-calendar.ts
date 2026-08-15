@@ -44,7 +44,8 @@ export function verifyGoogleState(value: string): OAuthState | null {
 
 export async function importGoogleEvents(connection: { id: string; household_id: string; connected_by: string; google_calendar_id: string }) {
   const admin = serverSupabase();
-  const { data: credentials, error } = await admin.schema("private").from("google_calendar_credentials").select("access_token, refresh_token, expires_at").eq("connection_id", connection.id).single();
+  const { data: credentialRows, error } = await admin.rpc("get_google_calendar_credentials", { p_connection_id: connection.id });
+  const credentials = credentialRows?.[0];
   if (error || !credentials) throw new Error("Google Calendar credentials were not found.");
   let accessToken = credentials.access_token;
   if (!credentials.expires_at || new Date(credentials.expires_at).getTime() < Date.now() + 60_000) {
@@ -52,7 +53,8 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     const refreshed = await tokenResponse.json();
     if (!tokenResponse.ok) throw new Error(refreshed.error_description ?? "Google token refresh failed.");
     accessToken = refreshed.access_token;
-    await admin.schema("private").from("google_calendar_credentials").update({ access_token: accessToken, expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }).eq("connection_id", connection.id);
+    const { error: storeError } = await admin.rpc("store_google_calendar_credentials", { p_connection_id: connection.id, p_access_token: accessToken, p_refresh_token: credentials.refresh_token, p_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString() });
+    if (storeError) throw storeError;
   }
   const start = new Date();
   const end = new Date(); end.setFullYear(end.getFullYear() + 1);

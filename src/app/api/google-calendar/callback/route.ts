@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
     const admin = serverSupabase();
     const { data: connection, error } = await admin.from("google_calendar_connections").upsert({ household_id: verified.householdId, connected_by: verified.userId, google_calendar_id: calendar.id, display_name: calendar.summaryOverride ?? calendar.summary ?? "Google Calendar", color: calendar.backgroundColor ?? null }, { onConflict: "household_id,google_calendar_id" }).select("id, household_id, connected_by, google_calendar_id").single();
     if (error || !connection) throw error ?? new Error("Could not save the calendar connection.");
-    await admin.schema("private").from("google_calendar_credentials").upsert({ connection_id: connection.id, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() });
+    const { error: credentialsError } = await admin.rpc("store_google_calendar_credentials", { p_connection_id: connection.id, p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString() });
+    if (credentialsError) throw credentialsError;
     await importGoogleEvents(connection);
     redirect.searchParams.set("calendar", "google-connected");
   } catch { redirect.searchParams.set("calendar", "google-error"); }
