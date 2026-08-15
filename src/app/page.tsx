@@ -205,7 +205,7 @@ export default function Home() {
   async function saveEvent(event: Event) {
     setEvents((items) => items.map((item) => item.id === event.id ? event : item));
     setEditingEvent(null);
-    if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General" }).eq("id", event.id).eq("household_id", householdId);
+    if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true }).eq("id", event.id).eq("household_id", householdId);
   }
 
   async function deleteEvent(event: Event) {

@@ -3,6 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 
 type OAuthState = { householdId: string; userId: string; expiresAt: number };
 
+function googleEventCategory(title: string) {
+  const text = title.toLowerCase();
+  if (/\b(birthday|bday|birth day)\b/.test(text)) return "Birthday";
+  if (/\b(soccer|football|baseball|softball|basketball|volleyball|tennis|swim|swimming|gymnastics|dance|practice|game|match|tournament)\b/.test(text)) return "Sports";
+  if (/\b(test|exam|quiz|project|assignment|homework|school due|due date)\b/.test(text)) return "School Test/Project Due";
+  if (/\b(vacation|vacay|trip|travel|flight|hotel|cruise)\b/.test(text)) return "Vacation";
+  if (/\b(christmas|thanksgiving|easter|halloween|new year|memorial day|labor day|fourth of july|july 4)\b/.test(text)) return "Holiday";
+  return "General";
+}
+
 export function serverSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -61,10 +71,20 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
-  const events = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled").map((item: { id: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) => ({
+  const googleItems = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled") as { id: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
+  const externalIds = googleItems.map((item) => item.id);
+  const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
+  const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
+  const events = googleItems.map((item) => {
+    const existing = existingByExternalId.get(item.id);
+    const title = item.summary || "Untitled event";
+    return {
     household_id: connection.household_id, created_by: connection.connected_by, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
-    starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null), all_day: Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id, category: "General",
-  }));
+    starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null), all_day: Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
+    category: existing?.category_override ? existing.category : googleEventCategory(title),
+    category_override: existing?.category_override ?? false,
+  };
+  });
   if (events.length) {
     const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });
     if (upsertError) throw upsertError;

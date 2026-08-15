@@ -7,7 +7,7 @@
 
 ## Google Calendar sync
 
-1. Run `supabase/migrations/20260815_add_google_calendar_credentials.sql`, then `supabase/migrations/20260815_fix_google_calendar_credentials_access.sql`, in the Supabase SQL Editor.
+1. Run `supabase/migrations/20260815_add_google_calendar_credentials.sql`, `supabase/migrations/20260815_fix_google_calendar_credentials_access.sql`, then `supabase/migrations/20260815_preserve_imported_event_categories.sql`, in the Supabase SQL Editor.
 2. In Google Cloud Console, create a project, enable **Google Calendar API**, then create an OAuth **Web application** client.
 3. Add `http://localhost:3000/api/google-calendar/callback` as an authorized redirect URI for local development. Add the matching production URL before deploying.
 4. Add the five server-only Google/Supabase variables shown in `.env.example` to `.env.local`. Never prefix these variables with `NEXT_PUBLIC_` and never commit `.env.local`.
