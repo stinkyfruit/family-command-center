@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; location?: string | null };
 type Todo = { id: string | number; title: string; due: string; done: boolean };
+type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 
 const starterEvents: Event[] = [
   { id: 1, title: "School drop-off", time: "8:10 AM", person: "Everyone", color: "bg-sky-400", startsAt: new Date().toISOString() },
@@ -32,6 +33,7 @@ export default function Home() {
   const [eventLocation, setEventLocation] = useState("");
   const [calendarAnchor, setCalendarAnchor] = useState(new Date());
   const [activeTab, setActiveTab] = useState<"calendar" | "tasks" | "lists">("calendar");
+  const [weather, setWeather] = useState<Weather | null>(null);
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
@@ -80,6 +82,21 @@ export default function Home() {
       if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
     });
   }, [householdId]);
+
+  useEffect(() => {
+    async function loadWeather(latitude: number, longitude: number) {
+      try {
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`);
+        const data = await response.json();
+        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: "Your location" });
+      } catch { setWeather(null); }
+    }
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      (position) => loadWeather(position.coords.latitude, position.coords.longitude),
+      () => setWeather(null),
+      { maximumAge: 900000, timeout: 8000 },
+    );
+  }, []);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
 
   function addEvent(event: FormEvent) {
@@ -157,7 +174,7 @@ export default function Home() {
         </header>
         {activeTab === "calendar" ? <div className="mx-auto grid max-w-[1600px] gap-5 px-5 pb-8 md:px-9 xl:grid-cols-[1fr_2.6fr_1fr]">
           <section className="space-y-5">
-            <article className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-sky-400 to-cyan-500 p-6 text-white shadow-lg shadow-sky-200/50"><div className="flex justify-between"><span className="font-semibold">Good morning</span><span className="text-3xl">☀️</span></div><div className="mt-7 flex items-end justify-between"><div><p className="text-6xl font-bold">76°</p><p className="mt-1 text-sky-50">Clear · Austin, TX</p></div><p className="rounded-full bg-white/20 px-3 py-1 text-sm">H: 86° · L: 68°</p></div></article>
+            <article className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-sky-400 to-cyan-500 p-6 text-white shadow-lg shadow-sky-200/50"><div className="flex justify-between"><span className="font-semibold">Good morning</span><span className="text-3xl">{weather?.summary === "Rain" ? "🌧️" : "☀️"}</span></div><div className="mt-7 flex items-end justify-between"><div><p className="text-6xl font-bold">{weather ? `${weather.temperature}°` : "—"}</p><p className="mt-1 text-sky-50">{weather ? `${weather.summary} · ${weather.location}` : "Allow location to show weather"}</p></div>{weather && <p className="rounded-full bg-white/20 px-3 py-1 text-sm">H: {weather.high}° · L: {weather.low}°</p>}</div></article>
             <article className="rounded-[1.75rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="mb-5 flex items-center justify-between"><h2 className="text-lg font-bold">Chore corner</h2><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Today</span></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1"><div className="rounded-2xl bg-sky-50 p-4 dark:bg-sky-400/10"><p className="mb-3 font-bold text-sky-800 dark:text-sky-200">Michael</p><div className="space-y-3"><Chore emoji="🐕" title="Walk Charlie" person="After school" /><Chore emoji="♻️" title="Recycling" person="Before dinner" /></div></div><div className="rounded-2xl bg-amber-50 p-4 dark:bg-amber-400/10"><p className="mb-3 font-bold text-amber-800 dark:text-amber-200">Lucas</p><div className="space-y-3"><Chore emoji="🧺" title="Laundry" person="Put away" /><Chore emoji="🧽" title="Wipe table" person="After dinner" /></div></div></div></article>
           </section>
           <section className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-7">
@@ -178,6 +195,14 @@ function Chore({ emoji, title, person, done = false }: { emoji: string; title: s
 }
 
 function weatherLabel(code: number) {
+  if (code <= 1) return "Clear";
+  if (code <= 3) return "Cloudy";
+  if (code <= 67) return "Rain";
+  if (code <= 77) return "Snow";
+  return "Showers";
+}
+
+function weatherSummary(code: number) {
   if (code <= 1) return "Clear";
   if (code <= 3) return "Cloudy";
   if (code <= 67) return "Rain";
