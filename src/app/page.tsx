@@ -447,6 +447,15 @@ function sameDate(first: Date, second: Date) {
   return first.getFullYear() === second.getFullYear() && first.getMonth() === second.getMonth() && first.getDate() === second.getDate();
 }
 
+// Google represents all-day dates as midnight UTC. Compare those with the
+// visible local calendar date using UTC fields so they never slide a day when
+// the dashboard is used outside UTC.
+function eventOccursOn(event: Event, day: Date) {
+  const startsAt = new Date(event.startsAt);
+  if (event.allDay) return startsAt.getUTCFullYear() === day.getFullYear() && startsAt.getUTCMonth() === day.getMonth() && startsAt.getUTCDate() === day.getDate();
+  return sameDate(startsAt, day);
+}
+
 function startOfWeek(date: Date) {
   const result = new Date(date);
   result.setDate(date.getDate() - date.getDay());
@@ -491,14 +500,14 @@ function dayCardDecoration(events: Event[]) {
 }
 
 function DayCalendar({ date, events, onEdit }: { date: Date; events: Event[]; onEdit: (event: Event) => void }) {
-  const dayEvents = events.filter((event) => sameDate(new Date(event.startsAt), date));
+  const dayEvents = events.filter((event) => eventOccursOn(event, date));
   return <div className="rounded-2xl border border-slate-100 p-4 dark:border-white/10"><p className="mb-3 text-sm font-bold text-slate-500">{date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p>{dayEvents.length ? <div className="space-y-2">{dayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} className="flex w-full items-center gap-3 rounded-xl bg-violet-50 p-3 text-left hover:bg-violet-100 dark:bg-violet-400/10"><span className="size-2 rounded-full bg-violet-500"/><div><p className="font-bold">{event.title}</p><p className="text-sm text-slate-500 dark:text-slate-400">{event.time}{event.location ? ` · ${event.location}` : ""}</p></div><span className="ml-auto text-sm font-bold text-violet-600">Edit</span></button>)}</div> : <p className="py-8 text-center text-sm text-slate-400">Nothing scheduled for this day.</p>}</div>;
 }
 
 function EventEditor({ event, onClose, onSave, onDelete }: { event: Event; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
   const source = new Date(event.startsAt);
   const [title, setTitle] = useState(event.title);
-  const [date, setDate] = useState(source.toISOString().slice(0, 10));
+  const [date, setDate] = useState(event.allDay ? `${source.getUTCFullYear()}-${String(source.getUTCMonth() + 1).padStart(2, "0")}-${String(source.getUTCDate()).padStart(2, "0")}` : source.toISOString().slice(0, 10));
   const [time, setTime] = useState(source.toTimeString().slice(0, 5));
   const [location, setLocation] = useState(event.location ?? "");
   const [category, setCategory] = useState(event.category ?? "General");
@@ -510,7 +519,7 @@ function EventEditor({ event, onClose, onSave, onDelete }: { event: Event; onClo
 function WeekCalendar({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
   const first = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => sameDate(new Date(event.startsAt), day)); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`aspect-square min-h-0 overflow-hidden rounded-xl p-2 text-left transition-colors ${isToday ? "bg-violet-600 text-white" : "bg-slate-50 hover:bg-violet-50 dark:bg-white/5 dark:hover:bg-white/10"} ${dayCardDecoration(dayEvents)}`}><div className="h-11"><p className={`text-xs font-bold ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</p><p className="text-lg font-bold">{day.getDate()}</p></div><div className="space-y-1">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} />)}{dayEvents.length > 2 && <p className={`px-1 text-xs font-bold ${isToday ? "text-white" : "text-violet-600"}`}>+{dayEvents.length - 2} more</p>}</div></button>; })}</div>;
+  return <div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`aspect-square min-h-0 overflow-hidden rounded-xl p-2 text-left transition-colors ${isToday ? "bg-violet-600 text-white" : "bg-slate-50 hover:bg-violet-50 dark:bg-white/5 dark:hover:bg-white/10"} ${dayCardDecoration(dayEvents)}`}><div className="h-11"><p className={`text-xs font-bold ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</p><p className="text-lg font-bold">{day.getDate()}</p></div><div className="space-y-1">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} />)}{dayEvents.length > 2 && <p className={`px-1 text-xs font-bold ${isToday ? "text-white" : "text-violet-600"}`}>+{dayEvents.length - 2} more</p>}</div></button>; })}</div>;
 }
 
 function MonthGrid({ anchor, events, onOpenDay }: { anchor: Date; events: Event[]; onOpenDay: (date: Date) => void }) {
@@ -519,7 +528,7 @@ function MonthGrid({ anchor, events, onOpenDay }: { anchor: Date; events: Event[
   const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
   const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
   const days = Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => sameDate(new Date(event.startsAt), day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
+  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) => void }) {
