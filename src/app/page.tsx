@@ -86,9 +86,14 @@ export default function Home() {
   useEffect(() => {
     async function loadWeather(latitude: number, longitude: number) {
       try {
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`);
-        const data = await response.json();
-        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: "Your location" });
+        const [weatherResponse, placeResponse] = await Promise.all([
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`),
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`),
+        ]);
+        const [data, place] = await Promise.all([weatherResponse.json(), placeResponse.json()]);
+        const address = place.address ?? {};
+        const city = address.city ?? address.town ?? address.village ?? address.county ?? "Your location";
+        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: city });
       } catch { setWeather(null); }
     }
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
