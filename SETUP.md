@@ -12,3 +12,5 @@
 3. Add `http://localhost:3000/api/google-calendar/callback` as an authorized redirect URI for local development. Add the matching production URL before deploying.
 4. Add the five server-only Google/Supabase variables shown in `.env.example` to `.env.local`. Never prefix these variables with `NEXT_PUBLIC_` and never commit `.env.local`.
 5. Restart `npm run dev`, then use **Connect Google Calendar** on the dashboard. The first version imports the signed-in adult's primary Google Calendar as read-only events.
+
+Once connected, the dashboard refreshes Google Calendar when it opens if the most recent sync is over 10 minutes old. **Sync now** always requests an immediate refresh. A 15-minute server schedule should be enabled only after deployment to an always-on host; for example, Vercel Hobby permits only daily cron jobs, while its paid plans permit more frequent schedules.
