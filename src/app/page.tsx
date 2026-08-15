@@ -501,7 +501,7 @@ function eventBlockBackground(event: Event, members: Member[]) {
 
 function FamilyColorKey({ members }: { members: Member[] }) {
   if (!members.length) return null;
-  return <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold text-slate-600 dark:text-slate-300"><span className="text-[10px] uppercase tracking-wide text-slate-400">Family colors</span>{members.map((member, index) => <span key={member.id} className="flex items-center gap-1.5"><i className="size-3 rounded-full" style={{ background: member.name.toLowerCase() === "lucas" ? "linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)" : memberCalendarColor(member, index) }}/>{member.name}</span>)}<span className="flex items-center gap-1.5"><i className="size-3 rounded-full bg-slate-200"/>Family</span></div>;
+  return <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold text-slate-600 dark:text-slate-300"><span className="text-[10px] uppercase tracking-wide text-slate-400">Family colors</span>{members.map((member, index) => <span key={member.id} className="flex items-center gap-1.5"><i className="size-3 rounded-full" style={{ background: memberCalendarColor(member, index) }}/>{member.name}</span>)}<span className="flex items-center gap-1.5"><i className="size-3 rounded-full bg-slate-200"/>Family</span></div>;
 }
 
 function EventChip({ event, members, compact = false }: { event: Event; members: Member[]; compact?: boolean }) {
