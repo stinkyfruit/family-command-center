@@ -182,7 +182,13 @@ export default function Home() {
     const response = await fetch("/api/google-calendar/sync", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, force }) });
     const result = await response.json();
     setSyncingGoogle(false);
-    if (!response.ok) { setCalendarMessage(result.error ?? "Could not sync Google Calendar."); return; }
+    if (!response.ok) {
+      if (result.error === "Google Calendar credentials were not found.") {
+        setGoogleConnected(false);
+        setCalendarMessage("Google Calendar needs to be reconnected. Tap Connect Google to finish setup.");
+      } else setCalendarMessage(result.error ?? "Could not sync Google Calendar.");
+      return;
+    }
     if (result.needsConnection) { setGoogleConnected(false); setCalendarMessage("Connect Google Calendar first."); return; }
     setGoogleConnected(true);
     setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
