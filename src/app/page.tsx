@@ -210,6 +210,15 @@ export default function Home() {
     window.location.assign(result.url);
   }
 
+  async function refreshCalendarEvents() {
+    if (!supabase || !householdId) return;
+    const { data } = await supabase.from("events").select("id, title, starts_at, all_day, color, location, category").eq("household_id", householdId).order("starts_at");
+    if (data) setEvents(data.map((event) => ({
+      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day,
+      time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    })));
+  }
+
   async function syncGoogleCalendar(force = true) {
     if (!supabase || !householdId || syncingGoogle) return;
     const { data } = await supabase.auth.getSession();
@@ -228,6 +237,7 @@ export default function Home() {
     }
     if (result.needsConnection) { setGoogleConnected(false); setCalendarMessage("Connect Google Calendar first."); return; }
     setGoogleConnected(true);
+    await refreshCalendarEvents();
     setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
   }
 
