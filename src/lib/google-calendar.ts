@@ -1,0 +1,72 @@
+import { createHmac, timingSafeEqual } from "crypto";
+import { createClient } from "@supabase/supabase-js";
+
+type OAuthState = { householdId: string; userId: string; expiresAt: number };
+
+export function serverSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Missing Supabase server configuration.");
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+export async function requestUser(authorization: string | null) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key || !authorization?.startsWith("Bearer ")) return null;
+  const client = createClient(url, key, { global: { headers: { Authorization: authorization } }, auth: { autoRefreshToken: false, persistSession: false } });
+  const { data } = await client.auth.getUser();
+  return data.user;
+}
+
+function stateSecret() {
+  const secret = process.env.GOOGLE_CALENDAR_STATE_SECRET;
+  if (!secret) throw new Error("Missing GOOGLE_CALENDAR_STATE_SECRET.");
+  return secret;
+}
+
+export function createGoogleState(payload: OAuthState) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", stateSecret()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+export function verifyGoogleState(value: string): OAuthState | null {
+  const [encoded, signature] = value.split(".");
+  if (!encoded || !signature) return null;
+  const expected = createHmac("sha256", stateSecret()).update(encoded).digest("base64url");
+  if (expected.length !== signature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as OAuthState;
+    return payload.expiresAt > Date.now() ? payload : null;
+  } catch { return null; }
+}
+
+export async function importGoogleEvents(connection: { id: string; household_id: string; connected_by: string; google_calendar_id: string }) {
+  const admin = serverSupabase();
+  const { data: credentials, error } = await admin.schema("private").from("google_calendar_credentials").select("access_token, refresh_token, expires_at").eq("connection_id", connection.id).single();
+  if (error || !credentials) throw new Error("Google Calendar credentials were not found.");
+  let accessToken = credentials.access_token;
+  if (!credentials.expires_at || new Date(credentials.expires_at).getTime() < Date.now() + 60_000) {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID ?? "", client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "", refresh_token: credentials.refresh_token, grant_type: "refresh_token" }) });
+    const refreshed = await tokenResponse.json();
+    if (!tokenResponse.ok) throw new Error(refreshed.error_description ?? "Google token refresh failed.");
+    accessToken = refreshed.access_token;
+    await admin.schema("private").from("google_calendar_credentials").update({ access_token: accessToken, expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }).eq("connection_id", connection.id);
+  }
+  const start = new Date();
+  const end = new Date(); end.setFullYear(end.getFullYear() + 1);
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
+  const events = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled").map((item: { id: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) => ({
+    household_id: connection.household_id, created_by: connection.connected_by, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
+    starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null), all_day: Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id, category: "General",
+  }));
+  if (events.length) {
+    const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });
+    if (upsertError) throw upsertError;
+  }
+  await admin.from("google_calendar_connections").update({ last_synced_at: new Date().toISOString() }).eq("id", connection.id);
+  return events.length;
+}

@@ -5,6 +5,10 @@
 3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql`.
 4. Restart `npm run dev`. The current screen remains a local demo until the next implementation slice connects authentication and data queries.
 
-## Google Calendar later
+## Google Calendar sync
 
-Create a Google OAuth web client with a redirect URI served by a Supabase Edge Function. The function should encrypt/store each refresh token in a server-only secret store, perform initial plus incremental event syncs, and write imported events to `public.events` with `source = 'google'`. The browser app must never receive a Google refresh token.
+1. Run `supabase/migrations/20260815_add_google_calendar_credentials.sql` in the Supabase SQL Editor.
+2. In Google Cloud Console, create a project, enable **Google Calendar API**, then create an OAuth **Web application** client.
+3. Add `http://localhost:3000/api/google-calendar/callback` as an authorized redirect URI for local development. Add the matching production URL before deploying.
+4. Add the five server-only Google/Supabase variables shown in `.env.example` to `.env.local`. Never prefix these variables with `NEXT_PUBLIC_` and never commit `.env.local`.
+5. Restart `npm run dev`, then use **Connect Google Calendar** on the dashboard. The first version imports the signed-in adult's primary Google Calendar as read-only events.

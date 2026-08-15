@@ -44,6 +44,7 @@ export default function Home() {
   const [householdName, setHouseholdName] = useState("Your Family Home");
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState("");
 
   useEffect(() => {
     if (!supabase) {
@@ -56,6 +57,12 @@ export default function Home() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("calendar");
+    if (result === "google-connected") setCalendarMessage("Google Calendar connected and synced.");
+    if (result === "google-error") setCalendarMessage("Google Calendar could not be connected. Check your setup and try again.");
   }, []);
 
   useEffect(() => {
@@ -137,6 +144,18 @@ export default function Home() {
     }
   }
 
+  async function connectGoogleCalendar() {
+    if (!supabase || !householdId) { setCalendarMessage("Sign in and create your household before connecting a calendar."); return; }
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (!accessToken) { setCalendarMessage("Your session has expired. Please sign in again."); return; }
+    setCalendarMessage("Opening Google…");
+    const response = await fetch("/api/google-calendar/connect", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId }) });
+    const result = await response.json();
+    if (!response.ok || !result.url) { setCalendarMessage(result.error ?? "Could not start Google Calendar connection."); return; }
+    window.location.assign(result.url);
+  }
+
   function toggleTodo(id: string | number) {
     const target = todos.find((todo) => todo.id === id);
     if (!target) return;
@@ -209,7 +228,8 @@ export default function Home() {
             <article className="rounded-[1.75rem] bg-amber-100 p-5 text-amber-950"><p className="text-xs font-bold text-amber-700">FAMILY NOTE</p><p className="mt-2 text-base font-bold leading-snug">Don&apos;t forget: wear your team jersey for soccer tomorrow!</p><p className="mt-3 text-xs font-semibold text-amber-700">— Mom</p></article>
           </section>
           <section className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-7">
-            <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-600">FAMILY CALENDAR</p><h2 className="text-2xl font-bold">{calendarAnchor.toLocaleDateString([], { month: "long", year: "numeric" })}</h2></div><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">{(["Day", "Week", "Month"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === item ? "bg-white text-violet-700 shadow-sm dark:bg-violet-500 dark:text-white" : "text-slate-500 dark:text-slate-300"}`}>{item}</button>)}</div></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-600">FAMILY CALENDAR</p><h2 className="text-2xl font-bold">{calendarAnchor.toLocaleDateString([], { month: "long", year: "numeric" })}</h2></div><div className="flex flex-wrap items-center gap-2"><button onClick={connectGoogleCalendar} className="rounded-xl border border-violet-200 px-3 py-1.5 text-sm font-bold text-violet-700 hover:bg-violet-50 dark:border-violet-400/30 dark:text-violet-200">Google sync</button><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">{(["Day", "Week", "Month"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === item ? "bg-white text-violet-700 shadow-sm dark:bg-violet-500 dark:text-white" : "text-slate-500 dark:text-slate-300"}`}>{item}</button>)}</div></div></div>
+            {calendarMessage && <p className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 dark:bg-violet-400/10 dark:text-violet-100">{calendarMessage}</p>}
             <div className="mb-4 flex items-center justify-between"><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, -1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">← Previous</button><button onClick={() => setCalendarAnchor(new Date())} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Today</button><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, 1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Next →</button></div>
             {view === "Day" ? <DayCalendar date={calendarAnchor} events={events} onEdit={setEditingEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={events} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} /> : <MonthGrid anchor={calendarAnchor} events={events} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
             <div className="mt-6 border-t border-slate-100 pt-5 dark:border-white/10">
