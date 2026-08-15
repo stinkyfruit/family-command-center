@@ -124,19 +124,31 @@ export default function Home() {
     Promise.all([
       supabase.from("events").select("id, title, starts_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status").eq("household_id", householdId).neq("status", "archived").order("due_at"),
-      supabase.from("members").select("id, display_name, role, color").eq("household_id", householdId).order("created_at"),
+      supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
       supabase.from("chores").select("id, title, emoji, assignee_member_id").eq("household_id", householdId).eq("active", true).order("created_at"),
       supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
-    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult]) => {
+    ]).then(async ([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult]) => {
       if (eventResult.data) setEvents(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       })));
       if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
-      if (memberResult.data) setMembers(memberResult.data.map((member) => ({ id: member.id, name: member.display_name, role: member.role, color: member.color })));
+      if (memberResult.data) {
+        const loadedMembers = memberResult.data.map((member) => ({ id: member.id, userId: member.user_id, name: member.display_name, role: member.role, color: member.color }));
+        const currentMember = loadedMembers.find((member) => member.userId === user?.id);
+        if (currentMember && currentMember.name.includes("@")) {
+          currentMember.name = "Kristen";
+          void supabase!.from("members").update({ display_name: "Kristen" }).eq("id", currentMember.id);
+        }
+        if (!loadedMembers.some((member) => member.name.toLowerCase() === "matt")) {
+          const { data } = await supabase!.from("members").insert({ household_id: householdId, display_name: "Matt", role: "adult", color: "#93c5fd" }).select("id, user_id, display_name, role, color").single();
+          if (data) loadedMembers.push({ id: data.id, userId: data.user_id, name: data.display_name, role: data.role, color: data.color });
+        }
+        setMembers(loadedMembers.map(({ id, name, role, color }) => ({ id, name, role, color })));
+      }
       if (choreResult.data) {
         const completionByChore = new Map((completionResult.data ?? []).map((completion) => [completion.chore_id, completion.id]));
         setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, completionId: completionByChore.get(chore.id) })));
