@@ -21,6 +21,15 @@ const starterEvents: Event[] = [
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+function listIcon(title: string) {
+  const text = title.toLowerCase();
+  if (/groc|shop|market/.test(text)) return "🛒";
+  if (/dinner|meal|recipe|food/.test(text)) return "🍽️";
+  if (/pack|trip|travel|vacation/.test(text)) return "🧳";
+  if (/note|idea/.test(text)) return "✦";
+  return "☰";
+}
+
 export default function Home() {
   const [events, setEvents] = useState(starterEvents);
   const [todos, setTodos] = useState<Todo[]>([
@@ -267,7 +276,7 @@ export default function Home() {
   async function addSharedList() {
     const title = window.prompt("Name this list");
     if (!title?.trim() || !householdId || !user) return;
-    const icon = window.prompt("Pick an emoji for it", "☰")?.trim() || "☰";
+    const icon = listIcon(title);
     if (supabase) {
       const { data, error } = await supabase.from("lists").insert({ household_id: householdId, created_by: user.id, title: title.trim(), icon }).select("id, title, icon").single();
       if (error) { window.alert(error.message); return; }
@@ -291,6 +300,15 @@ export default function Home() {
     const done = !item.done;
     setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.map((entry) => entry.id === itemId ? { ...entry, done } : entry) } : list));
     if (supabase) await supabase.from("list_items").update({ completed: done }).eq("id", itemId);
+  }
+
+  async function deleteSharedList(list: SharedList) {
+    if (!window.confirm(`Delete “${list.title}” and all of its items?`)) return;
+    setSharedLists((items) => items.filter((item) => item.id !== list.id));
+    if (supabase) {
+      const { error } = await supabase.from("lists").delete().eq("id", list.id);
+      if (error) { setSharedLists((items) => [...items, list]); window.alert(`Could not delete this list: ${error.message}`); }
+    }
   }
 
   async function saveEvent(event: Event) {
@@ -366,7 +384,7 @@ export default function Home() {
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Time<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} /> : activeTab === "settings" ? <SettingsPage googleConnected={googleConnected} onConnect={connectGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} onAdd={addTodo} onToggle={toggleTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} /> : activeTab === "settings" ? <SettingsPage googleConnected={googleConnected} onConnect={connectGoogleCalendar} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteList={deleteSharedList} />}
       </div>
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
     </main>
@@ -521,10 +539,10 @@ function SettingsPage({ googleConnected, onConnect }: { googleConnected: boolean
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{googleConnected ? "Connected. Add another Gmail account here if needed." : "Connect your first Google account to import its calendar."}</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnected ? "+ Add Google account" : "Connect Google"}</button></article></div></section>;
 }
 
-function ListsPage({ lists, onAddList, onAddItem, onToggleItem }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void }) {
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list) => <ListCard key={list.id} list={list} onAddItem={onAddItem} onToggleItem={onToggleItem} />)}</div> : <div className="rounded-[2rem] bg-white p-10 text-center shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-4xl">🛒</p><h3 className="mt-3 text-xl font-bold">Start your first shared list</h3><p className="mt-1 text-slate-500">Groceries, packing, dinner ideas—anything your family needs.</p><button onClick={onAddList} className="mt-5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>}</section>;
+function ListsPage({ lists, onAddList, onAddItem, onToggleItem, onDeleteList }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list) => <ListCard key={list.id} list={list} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteList={onDeleteList} />)}</div> : <div className="rounded-[2rem] bg-white p-10 text-center shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-4xl">🛒</p><h3 className="mt-3 text-xl font-bold">Start your first shared list</h3><p className="mt-1 text-slate-500">Groceries, packing, dinner ideas—anything your family needs.</p><button onClick={onAddList} className="mt-5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>}</section>;
 }
 
-function ListCard({ list, onAddItem, onToggleItem }: { list: SharedList; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void }) {
-  return <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-3xl">{list.icon}</p><h2 className="mt-3 text-xl font-bold">{list.title}</h2></div><button onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-violet-100 text-lg font-bold text-violet-700 hover:bg-violet-200">+</button></div><div className="mt-5 space-y-2">{list.items.map((item) => <button key={item.id} onClick={() => onToggleItem(list.id, item.id)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-violet-50 dark:bg-white/5 dark:text-slate-200"><span className={item.done ? "text-emerald-500" : "text-slate-300"}>{item.done ? "✓" : "○"}</span><span className={item.done ? "line-through text-slate-400" : ""}>{item.title}</span></button>)}{list.items.length === 0 && <p className="text-sm text-slate-400">Tap + to add an item.</p>}</div></article>;
+function ListCard({ list, onAddItem, onToggleItem, onDeleteList }: { list: SharedList; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
+  return <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-3xl">{list.icon}</p><h2 className="mt-3 text-xl font-bold">{list.title}</h2></div><div className="flex gap-2"><button onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-violet-100 text-lg font-bold text-violet-700 hover:bg-violet-200">+</button><button onClick={() => onDeleteList(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl text-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600">⌫</button></div></div><div className="mt-5 space-y-2">{list.items.map((item) => <button key={item.id} onClick={() => onToggleItem(list.id, item.id)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-violet-50 dark:bg-white/5 dark:text-slate-200"><span className={item.done ? "text-emerald-500" : "text-slate-300"}>{item.done ? "✓" : "○"}</span><span className={item.done ? "line-through text-slate-400" : ""}>{item.title}</span></button>)}{list.items.length === 0 && <p className="text-sm text-slate-400">Tap + to add an item.</p>}</div></article>;
 }
