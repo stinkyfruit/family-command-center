@@ -2,6 +2,7 @@
 
 import { FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
@@ -38,23 +39,23 @@ function displayEventsOnce(events: Event[]) {
 type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "sun" | "moon";
 
 function AppIcon({ name, className = "size-5" }: { name: IconName; className?: string }) {
-  const props = { className, fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 2, viewBox: "0 0 24 24", "aria-hidden": true };
-  return <svg {...props}>
-    {name === "home" && <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>}
-    {name === "calendar" && <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>}
-    {name === "tasks" && <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 9 1.5 1.5L12 7.5M14 9h3M8 15l1.5 1.5L12 13.5M14 15h3"/></>}
-    {name === "chores" && <><path d="M6 3h12M8 3v5m8-5v5M5 8h14v13H5z"/><path d="m9 14 2 2 4-4"/></>}
-    {name === "lists" && <><path d="M9 6h10M9 12h10M9 18h10"/><path d="M5 6h.01M5 12h.01M5 18h.01"/></>}
-    {name === "settings" && <><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></>}
-    {name === "plus" && <path d="M12 5v14M5 12h14"/>}
-    {name === "close" && <path d="m6 6 12 12M18 6 6 18"/>}
-    {name === "trash" && <><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3M6 7l1 14h10l1-14"/></>}
-    {name === "edit" && <><path d="m4 20 4.2-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m13.8 7.2 3 3"/></>}
-    {name === "chevronLeft" && <path d="m15 18-6-6 6-6"/>}
-    {name === "chevronRight" && <path d="m9 18 6-6-6-6"/>}
-    {name === "sun" && <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></>}
-    {name === "moon" && <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/>}
-  </svg>;
+  const Icon = {
+    home: HouseIcon,
+    calendar: CalendarBlankIcon,
+    tasks: CheckSquareIcon,
+    chores: ClipboardTextIcon,
+    lists: ListBulletsIcon,
+    settings: SlidersHorizontalIcon,
+    plus: PlusIcon,
+    close: XIcon,
+    trash: TrashIcon,
+    edit: PencilSimpleIcon,
+    chevronLeft: CaretLeftIcon,
+    chevronRight: CaretRightIcon,
+    sun: SunIcon,
+    moon: MoonIcon,
+  }[name];
+  return <Icon className={className} weight="bold" aria-hidden="true" />;
 }
 
 const starterEvents: Event[] = [
