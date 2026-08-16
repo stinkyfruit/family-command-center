@@ -72,8 +72,12 @@ function listIcon(title: string) {
   if (/groc|shop|market/.test(text)) return "🛒";
   if (/dinner|meal|recipe|food/.test(text)) return "🍽️";
   if (/pack|trip|travel|vacation/.test(text)) return "🧳";
-  if (/note|idea/.test(text)) return "✦";
-  return "☰";
+  if (/note|idea/.test(text)) return "📝";
+  return "📝";
+}
+
+function listVisualIcon(icon: string) {
+  return icon === "☰" || icon === "✦" ? "📝" : icon;
 }
 
 function choreIcon(title: string) {
@@ -91,7 +95,7 @@ function choreIcon(title: string) {
 }
 
 const notoIconCodes = new Set([
-  "2728", "1f373", "1f382", "1f383", "1f384", "1f386", "1f389", "1f392", "1f3c3", "1f371", "1f37d", "1f423", "1f43e", "1f455", "1f497", "1f4a7", "1f4d6", "1f4da", "1f5d1", "1f6c1", "1f6cf", "1f968", "1f983", "1f9f8", "1f9fa", "1faa5", "1fae7",
+  "2728", "1f373", "1f382", "1f383", "1f384", "1f386", "1f389", "1f392", "1f3c3", "1f371", "1f37d", "1f423", "1f43e", "1f455", "1f497", "1f4a7", "1f4d6", "1f4da", "1f4dd", "1f5d1", "1f6c1", "1f6cf", "1f6d2", "1f968", "1f983", "1f9f3", "1f9f8", "1f9fa", "1faa5", "1fae7",
 ]);
 
 function notoIconPath(emoji: string) {
@@ -1275,7 +1279,7 @@ function ListCard({ list, colorIndex, onAddItem, onToggleItem, onDeleteList }: {
     <article className={`rounded-[2rem] p-6 shadow-sm ring-1 ring-white/70 dark:ring-white/10 ${colors[colorIndex % colors.length]}`}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-3xl">{list.icon}</p>
+          <p className="flex size-9 items-center justify-center"><NotoEmoji emoji={listVisualIcon(list.icon)} className="size-9" alt="" /></p>
           <h2 className="mt-3 text-xl font-bold">{list.title}</h2>
         </div>
         <div className="flex gap-2">
