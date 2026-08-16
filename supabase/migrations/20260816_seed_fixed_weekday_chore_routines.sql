@@ -16,11 +16,12 @@ with routine_templates (routine, title, emoji, sort_order, lucas_only) as (
     ('Before school', 'Pack snacks', '🥨', 4, false),
     ('Before school', 'Pack water', '💧', 5, false),
     ('Before school', 'Pack lunch', '🍱', 6, true),
-    ('After school', 'Homework', '📚', 1, false),
-    ('After school', 'Dinner', '🍽️', 2, false),
-    ('After school', 'Take a bath/shower', '🫧', 3, false),
-    ('After school', 'Brush teeth', '🪥', 4, false),
-    ('After school', 'Read a book', '📖', 5, false)
+    ('After school', 'Do Homework', '📚', 1, false),
+    ('After school', 'Eat Dinner', '🍽️', 2, false),
+    ('After school', 'Bring plate to sink', '🍽️', 3, false),
+    ('After school', 'Take a bath/shower', '🫧', 4, false),
+    ('After school', 'Brush teeth', '🪥', 5, false),
+    ('After school', 'Read a book', '📖', 6, false)
 )
 insert into public.chores (household_id, assignee_member_id, title, emoji, routine, sort_order, is_daily, is_fixed)
 select members.household_id, members.id, templates.title, templates.emoji, templates.routine, templates.sort_order, true, true
