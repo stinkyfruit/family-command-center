@@ -106,14 +106,37 @@ form button[type="button"].text-rose-600 {
 
 button[title^="Delete"]::after,
 form button[type="button"].text-rose-600::after {
-  content: "🗑";
-  font-size: 1.05rem;
-  line-height: 1;
+  content: "";
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='black' d='M216 56h-40V40a16 16 0 0 0-16-16H96a16 16 0 0 0-16 16v16H40a8 8 0 0 0 0 16h8v144a16 16 0 0 0 16 16h128a16 16 0 0 0 16-16V72h8a8 8 0 0 0 0-16ZM96 40h64v16H96Zm96 176H64V72h128Zm-72-112v80a8 8 0 0 1-16 0v-80a8 8 0 0 1 16 0Zm32 0v80a8 8 0 0 1-16 0v-80a8 8 0 0 1 16 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='black' d='M216 56h-40V40a16 16 0 0 0-16-16H96a16 16 0 0 0-16 16v16H40a8 8 0 0 0 0 16h8v144a16 16 0 0 0 16 16h128a16 16 0 0 0 16-16V72h8a8 8 0 0 0 0-16ZM96 40h64v16H96Zm96 176H64V72h128Zm-72-112v80a8 8 0 0 1-16 0v-80a8 8 0 0 1 16 0Zm32 0v80a8 8 0 0 1-16 0v-80a8 8 0 0 1 16 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 /* Icon-only delete buttons already provide their own trash graphic. */
 button[title^="Delete"]:has(svg)::after {
   content: none;
+}
+
+/* Event dialogs stay legible in dark mode, including native date/time inputs. */
+.dark .fixed.inset-0.z-50 > section,
+.dark .fixed.inset-0.z-50 > form {
+  color: #f8fafc;
+}
+
+.dark .fixed.inset-0.z-50 > form input,
+.dark .fixed.inset-0.z-50 > form select {
+  border-color: rgb(255 255 255 / .18);
+  background: rgb(255 255 255 / .09);
+  color: #f8fafc;
+  color-scheme: dark;
+}
+
+.dark .fixed.inset-0.z-50 > form label,
+.dark .fixed.inset-0.z-50 > form legend {
+  color: #f1f5f9;
 }
 
 /* Chore deletion lives beside the card, not on top of the child-facing UI. */
