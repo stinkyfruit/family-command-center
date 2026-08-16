@@ -158,6 +158,7 @@ export default function Home() {
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [completingTodoId, setCompletingTodoId] = useState<string | number | null>(null);
+  const [celebratingTaskId, setCelebratingTaskId] = useState<string | number | null>(null);
   const [todoTitle, setTodoTitle] = useState("");
   const [todoAssigneeMemberId, setTodoAssigneeMemberId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -538,12 +539,14 @@ export default function Home() {
       if (supabase && householdId) supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId).then(() => undefined);
       checkbox?.classList.remove("task-checking");
       setCompletingTodoId(null);
+      setCelebratingTaskId(null);
     };
     if (done) {
       if (completingTodoId === id) return;
       setCompletingTodoId(id);
+      setCelebratingTaskId(id);
       checkbox?.classList.add("task-checking");
-      window.setTimeout(finish, 520);
+      window.setTimeout(finish, 1400);
       return;
     }
     finish();
@@ -744,6 +747,7 @@ export default function Home() {
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
       {showTodoForm && <TaskEditor title={todoTitle} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
+      {celebratingTaskId !== null && <ChoreCelebration />}
     </main>
   );
 }
@@ -974,7 +978,7 @@ function TaskEditor({ title, assigneeMemberId, members, editing, onTitleChange, 
 }
 
 function ChoreCelebration() {
-  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/10"><div className="animate-[bounce_700ms_ease-in-out_2] rounded-[2rem] bg-white/90 px-8 py-5 text-center shadow-2xl backdrop-blur"><p className="text-6xl">🎉</p><p className="mt-1 text-2xl font-black text-violet-700">Amazing job!</p></div><span className="absolute left-[8%] top-[10%] animate-[ping_900ms_ease-out_2] text-6xl">🎆</span><span className="absolute right-[8%] top-[12%] animate-[ping_1s_ease-out_2] text-6xl">🎇</span><span className="absolute left-[18%] top-[30%] animate-bounce text-5xl">✨</span><span className="absolute right-[15%] top-[28%] animate-[bounce_700ms_ease-in-out_2] text-5xl">🌈</span><span className="absolute bottom-[14%] left-[12%] animate-[ping_900ms_ease-out_2] text-5xl">⭐</span><span className="absolute bottom-[12%] right-[15%] animate-[bounce_800ms_ease-in-out_2] text-5xl">💫</span><span className="absolute bottom-[30%] left-[35%] animate-bounce text-4xl">🎊</span><span className="absolute bottom-[26%] right-[35%] animate-[bounce_900ms_ease-in-out_2] text-4xl">🪄</span></div>;
+  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm"><div className="relative grid place-items-center"><img src="/celebration-comet.png" alt="" className="max-h-[70vh] max-w-[92vw] animate-[bounce_900ms_ease-in-out_2] object-contain mix-blend-screen drop-shadow-2xl"/><div className="absolute bottom-[9%] rounded-full bg-white/90 px-6 py-2 text-center text-xl font-black text-violet-700 shadow-xl">You did it! ✨</div></div></div>;
 }
 
 function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
