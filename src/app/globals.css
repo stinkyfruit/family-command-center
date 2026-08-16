@@ -6,4 +6,36 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
 button, input { font: inherit; }
-button { cursor: pointer; }
+button { cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease; }
+button:not(:disabled):active { transform: scale(.98); }
+button:disabled { cursor: not-allowed; }
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgb(124 58 237 / .45);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"] {
+  accent-color: #7c3aed;
+  border-radius: .35rem;
+  cursor: pointer;
+}
+
+.dark .fixed > form {
+  background: #242435;
+  color: #f8fafc;
+}
+
+.dark .fixed > form input:not([type="checkbox"]):not([type="radio"]),
+.dark .fixed > form select,
+.dark .fixed > form textarea {
+  background: #fff;
+  color: #172033;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
