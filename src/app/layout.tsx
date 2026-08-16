@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -19,6 +19,18 @@ export const metadata: Metadata = {
     icon: "/icon.svg?v=2",
     apple: "/apple-icon?v=2",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Vulpetti Home",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#7c3aed",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

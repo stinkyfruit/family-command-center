@@ -2,7 +2,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root { --background: #f8f7ff; --foreground: #172033; }
+:root { --background: #f8f7ff; --foreground: #172033; -webkit-text-size-adjust: 100%; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
 button, input { font: inherit; }
@@ -22,6 +22,11 @@ input[type="checkbox"] {
   accent-color: #7c3aed;
   border-radius: .35rem;
   cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  button { touch-action: manipulation; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
 }
 
 .dark .fixed > form {

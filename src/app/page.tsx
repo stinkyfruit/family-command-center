@@ -147,6 +147,24 @@ export default function Home() {
   const [celebratingChoreId, setCelebratingChoreId] = useState<string | number | null>(null);
 
   useEffect(() => {
+    if (screenSaver) return;
+    let timeout = window.setTimeout(() => setScreenSaver(true), 10 * 60_000);
+    const resetIdleTimer = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => setScreenSaver(true), 10 * 60_000);
+    };
+    window.addEventListener("pointerdown", resetIdleTimer, { passive: true });
+    window.addEventListener("keydown", resetIdleTimer);
+    window.addEventListener("scroll", resetIdleTimer, { passive: true });
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("pointerdown", resetIdleTimer);
+      window.removeEventListener("keydown", resetIdleTimer);
+      window.removeEventListener("scroll", resetIdleTimer);
+    };
+  }, [screenSaver]);
+
+  useEffect(() => {
     if (!supabase) {
       setAuthReady(true);
       return;
@@ -820,7 +838,12 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) 
 }
 
 function Screensaver({ onExit }: { onExit: () => void }) {
-  return <main className="min-h-screen cursor-pointer bg-[radial-gradient(circle_at_30%_20%,#fbcfe8,transparent_24%),radial-gradient(circle_at_70%_70%,#bfdbfe,transparent_28%),linear-gradient(120deg,#312e81,#0f766e)] p-8 text-white" onClick={onExit}><div className="flex h-[calc(100vh-4rem)] flex-col justify-between rounded-[2rem] border border-white/25 bg-black/10 p-8 backdrop-blur-sm"><div className="flex items-center justify-between text-lg font-medium text-white/80"><span>Good evening, family</span><span>Tap anywhere to return</span></div><div><p className="text-7xl font-semibold tracking-tight md:text-9xl">7:42</p><p className="mt-3 text-2xl text-white/80">Wednesday, August 19</p></div><div className="flex flex-wrap items-center gap-4 text-lg"><span className="rounded-full bg-white/20 px-4 py-2">☀️ 76° · Clear skies</span><span className="rounded-full bg-white/20 px-4 py-2">Next: Dance · 4:30 PM</span></div></div></main>;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  return <main className="min-h-screen cursor-pointer bg-[radial-gradient(circle_at_30%_20%,#fbcfe8,transparent_24%),radial-gradient(circle_at_70%_70%,#bfdbfe,transparent_28%),linear-gradient(120deg,#312e81,#0f766e)] p-5 text-white md:p-8" onPointerDown={onExit}><div className="flex h-[calc(100vh-2.5rem)] flex-col justify-between rounded-[2rem] border border-white/25 bg-black/10 p-7 backdrop-blur-sm md:h-[calc(100vh-4rem)] md:p-8"><div className="flex items-center justify-between text-sm font-medium text-white/80 md:text-lg"><span>{timeGreeting().replace("GOOD ", "Good ")}, family</span><span>Tap anywhere to return</span></div><div><p className="text-7xl font-semibold tracking-tight sm:text-8xl md:text-9xl">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p><p className="mt-3 text-xl text-white/80 md:text-2xl">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div><div className="flex flex-wrap items-center gap-3 text-sm md:text-lg"><span className="rounded-full bg-white/20 px-4 py-2">✦ Family time</span><span className="rounded-full bg-white/20 px-4 py-2">Photo memories coming soon</span></div></div></main>;
 }
 
 function TasksPage({ todos, members, onAdd, onToggle }: { todos: Todo[]; members: Member[]; onAdd: () => void; onToggle: (id: string | number) => void }) {
