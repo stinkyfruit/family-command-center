@@ -629,6 +629,9 @@ export default function Home() {
       if (supabase) await supabase.from("chore_completions").delete().eq("id", chore.completionId);
       return;
     }
+    const completesRoutine = chores
+      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine)
+      .every((item) => item.id === chore.id || Boolean(item.completionId));
     if (!chore.isDaily) {
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: `done-${Date.now()}` } : item));
       const client = supabase;
@@ -636,11 +639,11 @@ export default function Home() {
         const { error } = await client.from("chores").update({ active: false }).eq("id", chore.id);
         if (error) { setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item)); window.alert(error.message); return; }
       }
-      setCelebratingChoreId(chore.id);
+      if (completesRoutine) setCelebratingChoreId(chore.id);
       window.setTimeout(() => {
         setCelebratingChoreId((id) => id === chore.id ? null : id);
         setChores((items) => items.filter((item) => item.id !== chore.id));
-      }, 3000);
+      }, completesRoutine ? 3000 : 450);
       return;
     }
     if (supabase) {
@@ -648,8 +651,10 @@ export default function Home() {
       if (error) { window.alert(error.message); return; }
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
     } else setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
-    setCelebratingChoreId(chore.id);
-    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
+    if (completesRoutine) {
+      setCelebratingChoreId(chore.id);
+      window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
+    }
   }
 
   async function deleteChore(chore: ChoreEntry) {
