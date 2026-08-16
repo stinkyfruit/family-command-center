@@ -6,7 +6,7 @@ import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, Clip
 import { supabase } from "@/lib/supabase";
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
-type Todo = { id: string | number; title: string; due: string; done: boolean; assigneeMemberId?: string | number | null };
+type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean };
@@ -188,6 +188,7 @@ export default function Home() {
   const [completingTodoId, setCompletingTodoId] = useState<string | number | null>(null);
   const [celebratingTaskId, setCelebratingTaskId] = useState<string | number | null>(null);
   const [todoTitle, setTodoTitle] = useState("");
+  const [todoDueDate, setTodoDueDate] = useState("");
   const [todoAssigneeMemberId, setTodoAssigneeMemberId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [syncingGoogle, setSyncingGoogle] = useState(false);
@@ -328,7 +329,7 @@ export default function Home() {
         const expiredCompleted = todoResult.data.filter((todo) => todo.status === "completed" && todo.completed_at && new Date(todo.completed_at).getTime() < archiveBefore);
         if (expiredCompleted.length) void supabase!.from("todos").update({ status: "archived" }).in("id", expiredCompleted.map((todo) => todo.id));
         const visibleTodos = todoResult.data.filter((todo) => !expiredCompleted.some((expired) => expired.id === todo.id));
-        setTodos(visibleTodos.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed", assigneeMemberId: todo.assignee_member_id })));
+        setTodos(visibleTodos.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: todo.due_at, done: todo.status === "completed", assigneeMemberId: todo.assignee_member_id })));
       }
       if (memberResult.data) {
         const loadedMembers = memberResult.data.map((member) => ({ id: member.id, userId: member.user_id, name: member.display_name, role: member.role, color: member.color }));
@@ -442,6 +443,7 @@ export default function Home() {
   function addTodo() {
     setEditingTodo(null);
     setTodoTitle("");
+    setTodoDueDate("");
     setTodoAssigneeMemberId("");
     setShowTodoForm(true);
   }
@@ -449,6 +451,7 @@ export default function Home() {
   function editTodo(todo: Todo) {
     setEditingTodo(todo);
     setTodoTitle(todo.title);
+    setTodoDueDate(todo.dueAt ? todo.dueAt.slice(0, 10) : "");
     setTodoAssigneeMemberId(String(todo.assigneeMemberId ?? ""));
     setShowTodoForm(true);
   }
@@ -458,18 +461,19 @@ export default function Home() {
     const title = todoTitle.trim();
     if (!title) return;
     const assigneeMemberId = todoAssigneeMemberId || null;
+    const dueAt = todoDueDate ? `${todoDueDate}T12:00:00.000Z` : null;
     if (editingTodo && supabase && householdId) {
-      const { error } = await supabase.from("todos").update({ title, assignee_member_id: assigneeMemberId }).eq("id", editingTodo.id).eq("household_id", householdId);
+      const { error } = await supabase.from("todos").update({ title, assignee_member_id: assigneeMemberId, due_at: dueAt }).eq("id", editingTodo.id).eq("household_id", householdId);
       if (error) { window.alert(`Could not update this task: ${error.message}`); return; }
-      setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, assigneeMemberId } : todo));
+      setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (editingTodo) {
-      setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, assigneeMemberId } : todo));
+      setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (supabase && user && householdId) {
-      const { data, error } = await supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title, assignee_member_id: assigneeMemberId }).select("id, assignee_member_id").single();
+      const { data, error } = await supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title, due_at: dueAt, assignee_member_id: assigneeMemberId }).select("id, assignee_member_id, due_at").single();
       if (error) { window.alert(`Could not add this task: ${error.message}`); return; }
-      if (data) setTodos((items) => [...items, { id: data.id, title, due: "", done: false, assigneeMemberId: data.assignee_member_id }]);
+      if (data) setTodos((items) => [...items, { id: data.id, title, due: data.due_at ? new Date(data.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: data.due_at, done: false, assigneeMemberId: data.assignee_member_id }]);
     } else {
-      setTodos((items) => [...items, { id: Date.now().toString(), title, due: "", done: false, assigneeMemberId }]);
+      setTodos((items) => [...items, { id: Date.now().toString(), title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, done: false, assigneeMemberId }]);
     }
     setEditingTodo(null);
     setShowTodoForm(false);
@@ -869,7 +873,7 @@ export default function Home() {
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
-      {showTodoForm && <TaskEditor title={todoTitle} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
+      {showTodoForm && <TaskEditor title={todoTitle} dueDate={todoDueDate} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onDueDateChange={setTodoDueDate} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
       {celebratingTaskId !== null && <ChoreCelebration />}
     </main>
   );
@@ -1106,7 +1110,23 @@ function Screensaver({ onExit }: { onExit: () => void }) {
 }
 
 function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[]; members: Member[]; onAdd: () => void; onToggle: (id: string | number) => void; onEdit: (todo: Todo) => void }) {
-  const open = todos.filter((todo) => !todo.done);
+  const urgency = (todo: Todo) => {
+    if (!todo.dueAt) return 4;
+    const due = new Date(todo.dueAt);
+    due.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysAway = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+    return daysAway < 0 ? 0 : daysAway === 0 ? 1 : daysAway === 1 ? 2 : 3;
+  };
+  const dueCopy = (todo: Todo) => {
+    const level = urgency(todo);
+    if (level === 0) return "Overdue";
+    if (level === 1) return "Due today";
+    if (level === 2) return "Due tomorrow";
+    return todo.dueAt ? `Due ${new Date(todo.dueAt).toLocaleDateString([], { month: "short", day: "numeric" })}` : "No deadline";
+  };
+  const open = todos.filter((todo) => !todo.done).sort((first, second) => urgency(first) - urgency(second) || (first.dueAt ? new Date(first.dueAt).getTime() : Number.MAX_SAFE_INTEGER) - (second.dueAt ? new Date(second.dueAt).getTime() : Number.MAX_SAFE_INTEGER) || first.title.localeCompare(second.title));
   const completed = todos.filter((todo) => todo.done);
   const assignee = (todo: Todo) => members.find((member) => member.id === todo.assigneeMemberId);
   const deleteTodo = (id: string | number) => window.dispatchEvent(new CustomEvent("family-delete-todo", { detail: id }));
@@ -1125,11 +1145,14 @@ function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[];
         <div className="mt-7 grid gap-4 md:grid-cols-2">
           {open.map((todo) => {
             const person = assignee(todo);
+            const level = urgency(todo);
+            const cardColor = level === 0 ? "border-rose-400 bg-rose-100 shadow-rose-200/60 dark:bg-rose-500/20" : level === 1 ? "border-orange-400 bg-orange-50 shadow-orange-200/60 dark:bg-orange-500/20" : level === 2 ? "border-amber-300 bg-amber-50 dark:bg-amber-400/15" : "border-transparent bg-rose-50 dark:bg-rose-400/10";
+            const dueColor = level === 0 ? "bg-rose-600 text-white" : level === 1 ? "bg-orange-500 text-white" : level === 2 ? "bg-amber-300 text-amber-950" : "bg-white/80 text-slate-500 dark:bg-white/10 dark:text-slate-300";
             return (
-              <article key={todo.id} className="flex min-h-20 items-center gap-3 rounded-2xl bg-rose-50 p-4 shadow-sm transition hover:-translate-y-0.5 dark:bg-rose-400/10">
+              <article key={todo.id} className={`flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm transition hover:-translate-y-0.5 ${cardColor}`}>
                 <button onClick={() => onEdit(todo)} className="min-w-0 flex-1 text-left">
                   <b className="block text-base">{todo.title}</b>
-                  <small className="mt-1 block text-sm text-slate-500">{todo.due || "No deadline"}</small>
+                  <small className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${dueColor}`}>{dueCopy(todo)}</small>
                   {person && <span className="mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold" style={{ backgroundColor: `${person.color ?? "#fda4af"}33`, color: person.color ?? "#be123c" }}>For {person.name}</span>}
                 </button>
                 <button onClick={() => onToggle(todo.id)} aria-label={`Complete ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-lg border-2 border-rose-400 bg-white text-xl font-black text-transparent transition hover:bg-rose-100">✓</button>
@@ -1160,8 +1183,8 @@ function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[];
   );
 }
 
-function TaskEditor({ title, assigneeMemberId, members, editing, onTitleChange, onAssigneeChange, onClose, onSave }: { title: string; assigneeMemberId: string; members: Member[]; editing: boolean; onTitleChange: (value: string) => void; onAssigneeChange: (value: string) => void; onClose: () => void; onSave: (event: FormEvent) => void }) {
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={onSave} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-rose-500">FAMILY TASK</p><h2 className="text-2xl font-bold">Add a to-do</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">What needs to get done?<input required autoFocus value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="e.g. Pick up groceries" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-rose-500" /></label><fieldset className="mt-5"><legend className="text-sm font-bold">Assign to <span className="font-normal text-slate-400">(optional)</span></legend><div className="mt-2 flex flex-wrap gap-2"><label className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${!assigneeMemberId ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-200"}`}><input className="sr-only" type="radio" name="task-assignee" checked={!assigneeMemberId} onChange={() => onAssigneeChange("")} />Anyone</label>{members.map((member) => <label key={member.id} className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${assigneeMemberId === String(member.id) ? "text-white" : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"}`} style={assigneeMemberId === String(member.id) ? { backgroundColor: member.color ?? "#f43f5e" } : undefined}><input className="sr-only" type="radio" name="task-assignee" checked={assigneeMemberId === String(member.id)} onChange={() => onAssigneeChange(String(member.id))} />{member.name}</label>)}</div></fieldset><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-600">Add task</button></div></form></div>;
+function TaskEditor({ title, dueDate, assigneeMemberId, members, editing, onTitleChange, onDueDateChange, onAssigneeChange, onClose, onSave }: { title: string; dueDate: string; assigneeMemberId: string; members: Member[]; editing: boolean; onTitleChange: (value: string) => void; onDueDateChange: (value: string) => void; onAssigneeChange: (value: string) => void; onClose: () => void; onSave: (event: FormEvent) => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={onSave} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-rose-500">FAMILY TASK</p><h2 className="text-2xl font-bold">{editing ? "Edit task" : "Add a to-do"}</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">What needs to get done?<input required autoFocus value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="e.g. Pick up groceries" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-rose-500" /></label><label className="mt-5 block text-sm font-bold">Deadline <span className="font-normal text-slate-400">(optional)</span><input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-rose-500" /></label><fieldset className="mt-5"><legend className="text-sm font-bold">Assign to <span className="font-normal text-slate-400">(optional)</span></legend><div className="mt-2 flex flex-wrap gap-2"><label className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${!assigneeMemberId ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-200"}`}><input className="sr-only" type="radio" name="task-assignee" checked={!assigneeMemberId} onChange={() => onAssigneeChange("")} />Anyone</label>{members.map((member) => <label key={member.id} className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${assigneeMemberId === String(member.id) ? "text-white" : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"}`} style={assigneeMemberId === String(member.id) ? { backgroundColor: member.color ?? "#f43f5e" } : undefined}><input className="sr-only" type="radio" name="task-assignee" checked={assigneeMemberId === String(member.id)} onChange={() => onAssigneeChange(String(member.id))} />{member.name}</label>)}</div></fieldset><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-600">{editing ? "Save task" : "Add task"}</button></div></form></div>;
 }
 
 function ChoreCelebration() {
