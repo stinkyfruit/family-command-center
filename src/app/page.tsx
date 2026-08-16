@@ -32,6 +32,13 @@ function listIcon(title: string) {
   return "☰";
 }
 
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "GOOD MORNING";
+  if (hour < 18) return "GOOD AFTERNOON";
+  return "GOOD EVENING";
+}
+
 export default function Home() {
   const [events, setEvents] = useState(starterEvents);
   const [todos, setTodos] = useState<Todo[]>([
@@ -461,7 +468,7 @@ export default function Home() {
         </header>
         {activeTab === "calendar" ? <div className="mx-auto max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">
           <section className="grid gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
-            <article className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50"><span className="absolute -right-5 -top-9 size-28 rounded-full bg-yellow-200/70"/><div className="relative flex h-full items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-wide">GOOD MORNING · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold text-white/90">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="text-5xl drop-shadow-sm">{weather?.summary === "Rain" ? "🌦️" : weather?.summary === "Snow" ? "❄️" : weather?.summary === "Cloudy" ? "☁️" : "☀️"}</span></div></article>
+            <article className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50"><span className="absolute -right-5 -top-9 size-28 rounded-full bg-yellow-200/70"/><div className="relative flex h-full items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-wide">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold text-white/90">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="text-5xl drop-shadow-sm">{weather?.summary === "Rain" ? "🌦️" : weather?.summary === "Snow" ? "❄️" : weather?.summary === "Cloudy" ? "☁️" : "☀️"}</span></div></article>
             <article className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-rose-500">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-8 place-items-center rounded-xl bg-rose-100 text-lg font-bold text-rose-600 hover:bg-rose-200">+</button></div><div className="mt-3 space-y-1">{openTodos.slice(0, 2).map((todo) => <label key={todo.id} className="flex cursor-pointer items-center gap-2 rounded-lg p-1 text-sm hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => toggleTodo(todo.id)} className="size-4 accent-rose-500"/><span className="truncate font-medium">{todo.title}</span></label>)}{openTodos.length === 0 && <p className="text-sm text-slate-400">You&apos;re all caught up.</p>}</div><button onClick={() => setActiveTab("tasks")} className="mt-2 text-xs font-bold text-violet-600">View all tasks →</button></article>
             <article className="rounded-[1.75rem] bg-amber-100 p-5 text-amber-950"><p className="text-xs font-bold text-amber-700">FAMILY NOTE</p><p className="mt-2 text-base font-bold leading-snug">Don&apos;t forget: wear your team jersey for soccer tomorrow!</p><p className="mt-3 text-xs font-semibold text-amber-700">— Mom</p></article>
           </section>
