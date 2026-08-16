@@ -37,6 +37,12 @@ form button[type="button"].text-rose-600::after {
   line-height: 1;
 }
 
+/* Chore cards reserve the upper area for the chore itself. */
+.relative > button[title^="Delete"] {
+  top: auto;
+  bottom: .5rem;
+}
+
 @media (max-width: 767px) {
   button { touch-action: manipulation; }
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
