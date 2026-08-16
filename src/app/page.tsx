@@ -146,9 +146,21 @@ export default function Home() {
 
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("calendar");
-    if (result === "google-connected") setCalendarMessage("Google Calendar connected and synced.");
+    if (result === "google-connected") {
+      setCalendarMessage("Google Calendar connected and synced.");
+      const params = new URLSearchParams(window.location.search);
+      params.delete("calendar");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
     if (result === "google-error") setCalendarMessage("Google Calendar could not be connected. Check your setup and try again.");
   }, []);
+
+  useEffect(() => {
+    if (!/(connected and synced|calendar synced|already up to date)/i.test(calendarMessage)) return;
+    const timeout = window.setTimeout(() => setCalendarMessage(""), 10 * 60_000);
+    return () => window.clearTimeout(timeout);
+  }, [calendarMessage]);
 
   useEffect(() => {
     document.title = householdName;
