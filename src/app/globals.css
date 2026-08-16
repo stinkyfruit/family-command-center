@@ -24,6 +24,19 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
+/* One visual language for destructive actions across lists, chores, and events. */
+button[title^="Delete"],
+form button[type="button"].text-rose-600 {
+  font-size: 0;
+}
+
+button[title^="Delete"]::after,
+form button[type="button"].text-rose-600::after {
+  content: "🗑";
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
 @media (max-width: 767px) {
   button { touch-action: manipulation; }
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
