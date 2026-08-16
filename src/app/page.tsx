@@ -632,13 +632,20 @@ export default function Home() {
     const completesRoutine = chores
       .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine)
       .every((item) => item.id === chore.id || Boolean(item.completionId));
+    const choreCard = document.querySelector<HTMLElement>(`[data-chore-id="${String(chore.id)}"]`);
+    choreCard?.setAttribute("data-completing", "true");
+    const finishCheckboxAnimation = () => new Promise<void>((resolve) => window.setTimeout(() => {
+      choreCard?.removeAttribute("data-completing");
+      resolve();
+    }, 700));
     if (!chore.isDaily) {
-      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: `done-${Date.now()}` } : item));
       const client = supabase;
       if (client) {
         const { error } = await client.from("chores").update({ active: false }).eq("id", chore.id);
-        if (error) { setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item)); window.alert(error.message); return; }
+        if (error) { choreCard?.removeAttribute("data-completing"); window.alert(error.message); return; }
       }
+      await finishCheckboxAnimation();
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: `done-${Date.now()}` } : item));
       if (completesRoutine) setCelebratingChoreId(chore.id);
       window.setTimeout(() => {
         setCelebratingChoreId((id) => id === chore.id ? null : id);
@@ -648,9 +655,13 @@ export default function Home() {
     }
     if (supabase) {
       const { data, error } = await supabase.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id").single();
-      if (error) { window.alert(error.message); return; }
+      if (error) { choreCard?.removeAttribute("data-completing"); window.alert(error.message); return; }
+      await finishCheckboxAnimation();
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
-    } else setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
+    } else {
+      await finishCheckboxAnimation();
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
+    }
     if (completesRoutine) {
       setCelebratingChoreId(chore.id);
       window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);

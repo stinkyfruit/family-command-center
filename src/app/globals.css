@@ -134,6 +134,38 @@ button[title^="Delete"]:has(svg)::after {
   right: auto;
   bottom: auto;
   flex: 0 0 auto;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid rgb(253 164 175);
+  border-radius: .75rem;
+  background: rgb(255 241 242);
+  color: rgb(225 29 72);
+  opacity: 1;
+}
+
+.relative:has(> button[title^="Delete"]) > button[title^="Delete"] svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+[data-completing="true"] {
+  pointer-events: none;
+}
+
+[data-completing="true"] > button > span:last-child {
+  border-color: rgb(16 185 129) !important;
+  background: rgb(16 185 129) !important;
+  color: white !important;
+  animation: chore-checkbox-pop .7s cubic-bezier(.2,.9,.25,1) both;
+}
+
+@keyframes chore-checkbox-pop {
+  0% { transform: scale(.55) rotate(-12deg); }
+  45% { transform: scale(1.2) rotate(4deg); }
+  70% { transform: scale(.92) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); }
 }
 
 @media (max-width: 767px) {
