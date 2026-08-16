@@ -37,10 +37,24 @@ form button[type="button"].text-rose-600::after {
   line-height: 1;
 }
 
-/* Chore cards reserve the upper area for the chore itself. */
-.relative > button[title^="Delete"] {
+/* Chore deletion lives beside the card, not on top of the child-facing UI. */
+.relative:has(> button[title^="Delete"]) {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.relative:has(> button[title^="Delete"]) > button:first-child {
+  flex: 1;
+  width: auto;
+}
+
+.relative:has(> button[title^="Delete"]) > button[title^="Delete"] {
+  position: static;
   top: auto;
-  bottom: .5rem;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 767px) {
