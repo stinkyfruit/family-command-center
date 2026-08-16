@@ -624,6 +624,10 @@ export default function Home() {
   }
 
   async function toggleChore(chore: ChoreEntry) {
+    if (chore.isFixed && (new Date().getDay() === 0 || new Date().getDay() === 6)) {
+      window.alert("This is a weekday routine. It will be ready to check off on Monday.");
+      return;
+    }
     if (chore.completionId) {
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item));
       if (supabase) await supabase.from("chore_completions").delete().eq("id", chore.completionId);
@@ -1093,7 +1097,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const [draggedChoreId, setDraggedChoreId] = useState<string | number | null>(null);
   const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
   const children = members.filter((member) => member.role === "child");
-  const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
+  const routines = choreRoutines;
   const sortedChores = [...chores].sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
   function finishTouchDrag(event: PointerEvent<HTMLSpanElement>, childId: string | number, routine: string) {
     if (event.pointerType === "mouse" || draggedChoreId === null) return;
