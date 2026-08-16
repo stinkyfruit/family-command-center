@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "The Vulpetti Home",
   description: "A family command center for the moments that matter.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
