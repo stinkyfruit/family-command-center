@@ -111,6 +111,11 @@ form button[type="button"].text-rose-600::after {
   line-height: 1;
 }
 
+/* Icon-only delete buttons already provide their own trash graphic. */
+button[title^="Delete"]:has(svg)::after {
+  content: none;
+}
+
 /* Chore deletion lives beside the card, not on top of the child-facing UI. */
 .relative:has(> button[title^="Delete"]) {
   display: flex;
