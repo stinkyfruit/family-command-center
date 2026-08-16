@@ -24,6 +24,58 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
+/* Square completion controls everywhere: tasks, lists, and chore cards. */
+button[aria-label^="Complete"] {
+  border-radius: .45rem !important;
+  color: transparent !important;
+}
+
+button[aria-label^="Complete"]::after {
+  content: "✓";
+  opacity: 0;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+button[aria-label^="Complete"].task-checking {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: white !important;
+  animation: task-check-pop 520ms ease-out;
+}
+
+button[aria-label^="Complete"].task-checking::after { opacity: 1; }
+
+span.rounded-full.border-4 { border-radius: .85rem; }
+
+article .space-y-2 > button > span:first-child {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  place-items: center;
+  border: 2px solid currentColor;
+  border-radius: .25rem;
+  font-size: 0;
+}
+
+article .space-y-2 > button > span:first-child.text-emerald-500 {
+  background: currentColor;
+  color: white;
+}
+
+article .space-y-2 > button > span:first-child.text-emerald-500::after {
+  content: "✓";
+  font-size: .7rem;
+  font-weight: 900;
+}
+
+@keyframes task-check-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.45) rotate(-8deg); }
+  100% { transform: scale(1); }
+}
+
 /* One visual language for destructive actions across lists, chores, and events. */
 button[title^="Delete"],
 form button[type="button"].text-rose-600 {

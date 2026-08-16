@@ -157,6 +157,7 @@ export default function Home() {
   const [calendarMessage, setCalendarMessage] = useState("");
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [completingTodoId, setCompletingTodoId] = useState<string | number | null>(null);
   const [todoTitle, setTodoTitle] = useState("");
   const [todoAssigneeMemberId, setTodoAssigneeMemberId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -530,8 +531,22 @@ export default function Home() {
     const target = todos.find((todo) => todo.id === id);
     if (!target) return;
     const done = !target.done;
-    setTodos((items) => items.map((todo) => todo.id === id ? { ...todo, done } : todo));
-    if (supabase && householdId) supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId).then(() => undefined);
+    const checkbox = Array.from(document.querySelectorAll<HTMLButtonElement>("button[aria-label^='Complete ']"))
+      .find((button) => button.getAttribute("aria-label") === `Complete ${target.title}`);
+    const finish = () => {
+      setTodos((items) => items.map((todo) => todo.id === id ? { ...todo, done } : todo));
+      if (supabase && householdId) supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId).then(() => undefined);
+      checkbox?.classList.remove("task-checking");
+      setCompletingTodoId(null);
+    };
+    if (done) {
+      if (completingTodoId === id) return;
+      setCompletingTodoId(id);
+      checkbox?.classList.add("task-checking");
+      window.setTimeout(finish, 520);
+      return;
+    }
+    finish();
   }
 
   async function addChild() {
