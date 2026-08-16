@@ -14,6 +14,21 @@ function appleFeedUrl(value: string) {
   return url.toString();
 }
 
+function appleOccurrences(event: ReturnType<typeof parseIcal>[number]) {
+  if (!event.recurrenceRule?.includes("FREQ=YEARLY")) return [{ ...event, occurrenceId: event.uid }];
+  const start = new Date(event.startsAt);
+  const end = event.endsAt ? new Date(event.endsAt) : null;
+  const duration = end ? end.getTime() - start.getTime() : null;
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: 4 }, (_, index) => {
+    const year = currentYear - 1 + index;
+    const occurrenceStart = new Date(start);
+    occurrenceStart.setUTCFullYear(year);
+    const occurrenceEnd = duration === null ? null : new Date(occurrenceStart.getTime() + duration);
+    return { ...event, uid: `${event.uid}:${year}`, startsAt: occurrenceStart.toISOString(), endsAt: occurrenceEnd?.toISOString() ?? null, occurrenceId: `${event.uid}:${year}` };
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requestUser(request.headers.get("authorization"));
@@ -27,7 +42,7 @@ export async function POST(request: NextRequest) {
     for (const feed of feeds ?? []) {
       const response = await fetch(appleFeedUrl(feed.feed_url), { cache: "no-store" });
       if (!response.ok) throw new Error(`Could not read ${feed.display_name}.`);
-      const parsedEvents = parseIcal(await response.text());
+      const parsedEvents = parseIcal(await response.text()).flatMap(appleOccurrences);
       const externalIds = parsedEvents.map((event) => `${feed.id}:${event.uid}`);
       const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
       const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
