@@ -20,7 +20,7 @@ with routine_templates (routine, title, emoji, sort_order, lucas_only) as (
     ('After school', 'Dinner', '🍽️', 2, false),
     ('After school', 'Take a bath/shower', '🫧', 3, false),
     ('After school', 'Brush teeth', '🪥', 4, false),
-    ('After school', 'Read', '📖', 5, false)
+    ('After school', 'Read a book', '📖', 5, false)
 )
 insert into public.chores (household_id, assignee_member_id, title, emoji, routine, sort_order, is_daily, is_fixed)
 select members.household_id, members.id, templates.title, templates.emoji, templates.routine, templates.sort_order, true, true
