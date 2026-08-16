@@ -90,6 +90,18 @@ function choreIcon(title: string) {
   return "✨";
 }
 
+const notoChoreIconCodes = new Set([
+  "2728", "1f373", "1f392", "1f3c3", "1f371", "1f37d", "1f392", "1f43e", "1f455", "1f4a7", "1f4d6", "1f4da", "1f5d1", "1f6c1", "1f6cf", "1f968", "1f9f8", "1f9fa", "1faa5", "1fae7",
+]);
+
+function notoChoreIconPath(emoji: string) {
+  const code = Array.from(emoji)
+    .filter((character) => character !== "\uFE0F" && character !== "\u200D")
+    .map((character) => character.codePointAt(0)?.toString(16))
+    .join("_");
+  return notoChoreIconCodes.has(code) ? `/chore-icons/${code}.svg` : null;
+}
+
 function timeGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "GOOD MORNING";
@@ -1176,6 +1188,30 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const children = members.filter((member) => member.role === "child");
   const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
   const sortedChores = [...chores].sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
+
+  useEffect(() => {
+    const choreById = new Map(chores.map((chore) => [String(chore.id), chore]));
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelectorAll<HTMLElement>("[data-chore-id]").forEach((card) => {
+        const chore = choreById.get(card.dataset.choreId ?? "");
+        if (!chore) return;
+        const emoji = !chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji;
+        const source = notoChoreIconPath(emoji);
+        const pictureSlot = card.querySelector<HTMLElement>("button > span:nth-of-type(2)");
+        if (!source || !pictureSlot) return;
+        const image = document.createElement("img");
+        image.src = source;
+        image.alt = "";
+        image.className = "size-9 object-contain";
+        image.dataset.notoChorePicture = "true";
+        image.onerror = () => { pictureSlot.textContent = emoji; };
+        pictureSlot.replaceChildren(image);
+        pictureSlot.setAttribute("aria-hidden", "true");
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [chores, isWeekday]);
+
   function finishTouchDrag(event: PointerEvent<HTMLSpanElement>, childId: string | number, routine: string) {
     if (event.pointerType === "mouse" || draggedChoreId === null) return;
     event.preventDefault();
