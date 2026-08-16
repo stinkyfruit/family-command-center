@@ -1111,7 +1111,7 @@ function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[];
                   {person && <span className="mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold" style={{ backgroundColor: `${person.color ?? "#fda4af"}33`, color: person.color ?? "#be123c" }}>For {person.name}</span>}
                 </button>
                 <button onClick={() => onToggle(todo.id)} aria-label={`Complete ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-lg border-2 border-rose-400 bg-white text-xl font-black text-transparent transition hover:bg-rose-100">✓</button>
-                <button onClick={() => onEdit(todo)} aria-label={`Edit ${todo.title}`} className="grid size-9 shrink-0 place-items-center rounded-xl text-rose-500 hover:bg-rose-100"><AppIcon name="edit" className="size-4"/></button>
+                <button onClick={() => onEdit(todo)} aria-label={`Edit ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-xl text-rose-500 hover:bg-rose-100"><AppIcon name="edit" className="size-5"/></button>
               </article>
             );
           })}
