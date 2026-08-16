@@ -8,7 +8,7 @@ type Event = { id: string | number; title: string; time: string; person: string;
 type Todo = { id: string | number; title: string; due: string; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
-type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string };
+type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean };
 const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
   { id: "After school", label: "After school & nighttime", icon: "🎒" },
@@ -147,6 +147,7 @@ export default function Home() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [sunTimes, setSunTimes] = useState<{ sunrise: number; sunset: number } | null>(null);
   const [screenSaver, setScreenSaver] = useState(false);
+  const [todayKey, setTodayKey] = useState(() => new Date().toDateString());
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [householdName, setHouseholdName] = useState("Your Family Home");
@@ -289,7 +290,7 @@ export default function Home() {
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, source").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
-      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine").eq("household_id", householdId).eq("active", true).order("sort_order").order("created_at"),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily").eq("household_id", householdId).eq("active", true).order("sort_order").order("created_at"),
       supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
@@ -322,7 +323,7 @@ export default function Home() {
       }
       if (choreResult.data) {
         const completionByChore = new Map((completionResult.data ?? []).map((completion) => [completion.chore_id, completion.id]));
-        setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", completionId: completionByChore.get(chore.id) })));
+        setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily: chore.is_daily ?? chore.routine !== "To-do", completionId: completionByChore.get(chore.id) })));
       }
       if (listResult.data) {
         const itemsByList = new Map<string, SharedListItem[]>();
@@ -332,7 +333,15 @@ export default function Home() {
       if (connectionResult.data) setGoogleConnections(connectionResult.data.map((connection) => ({ id: connection.id, name: connection.display_name, enabled: connection.enabled })));
       if (appleFeedResult.data) setAppleFeeds(appleFeedResult.data.map((feed) => ({ id: feed.id, name: feed.display_name, enabled: feed.enabled })));
     });
-  }, [householdId]);
+  }, [householdId, todayKey]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setTodayKey((current) => {
+      const next = new Date().toDateString();
+      return current === next ? current : next;
+    }), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function loadWeather(latitude: number, longitude: number) {
@@ -586,12 +595,13 @@ export default function Home() {
     const title = window.prompt("What is the chore?");
     if (!title?.trim() || !householdId) return;
     const emoji = choreIcon(title);
+    const isDaily = routine !== "To-do";
     const sortOrder = Math.max(0, ...chores.filter((chore) => String(chore.assigneeMemberId) === String(memberId) && chore.routine === routine).map((chore) => chore.sortOrder)) + 1;
     if (supabase) {
-      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine }).select("id, title, emoji, assignee_member_id, sort_order, routine").single();
+      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily").single();
       if (error) { window.alert(error.message); return; }
-      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine }]);
-    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine }]);
+      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily }]);
+    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily }]);
   }
 
   async function reorderChores(memberId: string | number, routine: string, movedId: string | number, targetId: string | number) {
@@ -617,6 +627,20 @@ export default function Home() {
     if (chore.completionId) {
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item));
       if (supabase) await supabase.from("chore_completions").delete().eq("id", chore.completionId);
+      return;
+    }
+    if (!chore.isDaily) {
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: `done-${Date.now()}` } : item));
+      const client = supabase;
+      if (client) {
+        const { error } = await client.from("chores").update({ active: false }).eq("id", chore.id);
+        if (error) { setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item)); window.alert(error.message); return; }
+      }
+      setCelebratingChoreId(chore.id);
+      window.setTimeout(() => {
+        setCelebratingChoreId((id) => id === chore.id ? null : id);
+        setChores((items) => items.filter((item) => item.id !== chore.id));
+      }, 3000);
       return;
     }
     if (supabase) {
