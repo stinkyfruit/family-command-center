@@ -313,8 +313,8 @@ export default function Home() {
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, source").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
-      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed").eq("household_id", householdId).eq("active", true).order("sort_order").order("created_at"),
-      supabase.from("chore_completions").select("id, chore_id").gte("completed_at", todayStart.toISOString()),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, active").eq("household_id", householdId).order("sort_order").order("created_at"),
+      supabase.from("chore_completions").select("id, chore_id, completed_at").order("completed_at", { ascending: false }),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
@@ -345,8 +345,18 @@ export default function Home() {
         setMembers(loadedMembers.map(({ id, userId, name, role, color }) => ({ id, userId, name, role, color })));
       }
       if (choreResult.data) {
-        const completionByChore = new Map((completionResult.data ?? []).map((completion) => [completion.chore_id, completion.id]));
-        setChores(choreResult.data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily: chore.is_daily ?? chore.routine !== "To-do", isFixed: chore.is_fixed ?? false, completionId: completionByChore.get(chore.id) })));
+        const choreById = new Map(choreResult.data.map((chore) => [chore.id, chore]));
+        const completionByChore = new Map<string, string>();
+        for (const completion of completionResult.data ?? []) {
+          const chore = choreById.get(completion.chore_id);
+          const isDaily = chore?.is_daily ?? chore?.routine !== "To-do";
+          if (isDaily && new Date(completion.completed_at) < todayStart) continue;
+          if (!completionByChore.has(completion.chore_id)) completionByChore.set(completion.chore_id, completion.id);
+        }
+        setChores(choreResult.data.map((chore) => {
+          const isDaily = chore.is_daily ?? chore.routine !== "To-do";
+          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, completionId: completionByChore.get(chore.id) ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined) };
+        }));
       }
       if (listResult.data) {
         const itemsByList = new Map<string, SharedListItem[]>();
@@ -673,7 +683,10 @@ export default function Home() {
   async function toggleChore(chore: ChoreEntry) {
     if (chore.completionId) {
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item));
-      if (supabase) await supabase.from("chore_completions").delete().eq("id", chore.completionId);
+      if (supabase) {
+        if (String(chore.completionId).startsWith("legacy-completed-")) await supabase.from("chores").update({ active: true }).eq("id", chore.id);
+        else await supabase.from("chore_completions").delete().eq("id", chore.completionId);
+      }
       return;
     }
     const completesRoutine = chores
@@ -688,16 +701,16 @@ export default function Home() {
     if (!chore.isDaily) {
       const client = supabase;
       if (client) {
-        const { error } = await client.from("chores").update({ active: false }).eq("id", chore.id);
+        const { data, error } = await client.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id").single();
         if (error) { choreCard?.removeAttribute("data-completing"); window.alert(error.message); return; }
+        await finishCheckboxAnimation();
+        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
+      } else {
+        await finishCheckboxAnimation();
+        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
       }
-      await finishCheckboxAnimation();
-      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: `done-${Date.now()}` } : item));
       if (completesRoutine) setCelebratingChoreId(chore.id);
-      window.setTimeout(() => {
-        setCelebratingChoreId((id) => id === chore.id ? null : id);
-        setChores((items) => items.filter((item) => item.id !== chore.id));
-      }, completesRoutine ? 3000 : 450);
+      if (completesRoutine) window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
       return;
     }
     if (supabase) {
