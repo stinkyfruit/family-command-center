@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseIcal } from "@/lib/ical";
-import { requestUser, serverSupabase } from "@/lib/google-calendar";
+import { calendarEventCategory, requestUser, serverSupabase } from "@/lib/google-calendar";
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       const events = parsedEvents.map((event) => {
         const externalId = `${feed.id}:${event.uid}`;
         const existing = existingByExternalId.get(externalId);
-        return { household_id: feed.household_id, created_by: feed.created_by, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : "General", category_override: existing?.category_override ?? false };
+        return { household_id: feed.household_id, created_by: feed.created_by, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false };
       });
       if (events.length) {
         const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });

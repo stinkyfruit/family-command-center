@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 type OAuthState = { householdId: string; userId: string; expiresAt: number };
 
-function googleEventCategory(title: string) {
+export function calendarEventCategory(title: string) {
   const text = title.toLowerCase();
   if (/\b(birthday|bday|birth day)\b/.test(text)) return "Birthday";
   if (/\b(soccer|football|baseball|softball|basketball|volleyball|tennis|swim|swimming|gymnastics|dance|practice|game|match|tournament)\b/.test(text)) return "Sports";
@@ -81,7 +81,7 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     return {
     household_id: connection.household_id, created_by: connection.connected_by, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null), all_day: Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
-    category: existing?.category_override ? existing.category : googleEventCategory(title),
+    category: existing?.category_override ? existing.category : calendarEventCategory(title),
     category_override: existing?.category_override ?? false,
   };
   });

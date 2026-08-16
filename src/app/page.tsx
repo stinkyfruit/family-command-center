@@ -720,6 +720,13 @@ function eventBlockBackground(event: Event, members: Member[]) {
   return `linear-gradient(135deg, ${colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ")})`;
 }
 
+// Older imports may predate categories. Recognize common birthday wording in
+// the UI too, so those cards stay festive immediately rather than waiting for
+// a future sync to update their saved category.
+function isBirthdayEvent(event: Event) {
+  return event.category === "Birthday" || /\b(birthday|bday|birth day)\b/i.test(event.title);
+}
+
 function holidayEmoji(title: string) {
   if (/Halloween/.test(title)) return "🎃";
   if (/Christmas/.test(title)) return "🎄";
@@ -754,7 +761,7 @@ function EventDetails({ event, members, onClose, onEdit }: { event: Event; membe
 }
 
 function dayCardDecoration(events: Event[]) {
-  if (events.some((event) => event.category === "Birthday")) return "ring-2 ring-pink-300 bg-gradient-to-br from-pink-100 via-rose-50 to-violet-100";
+  if (events.some(isBirthdayEvent)) return "ring-2 ring-pink-300 bg-gradient-to-br from-pink-100 via-rose-50 to-violet-100";
   if (events.some((event) => event.category === "Holiday")) return "ring-2 ring-amber-300 bg-gradient-to-br from-amber-100 via-orange-50 to-rose-100";
   return "";
 }
@@ -816,7 +823,7 @@ function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; event
   const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
   const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
   const days = Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some((event) => event.category === "Birthday"); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
+  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const birthday = dayEvents.some(isBirthdayEvent); const holiday = dayEvents.some((event) => event.category === "Holiday"); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${dayCardDecoration(dayEvents)}`}>{birthday && <span className="absolute right-1 top-1 text-sm">🎈</span>}{holiday && <span className="absolute right-1 top-1 text-sm">✨</span>}<span className="flex h-7 shrink-0 items-start justify-start text-left text-sm font-bold leading-none">{day.getDate()}</span><span className="block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User | null) => void }) {
