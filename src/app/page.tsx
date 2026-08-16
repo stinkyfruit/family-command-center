@@ -546,7 +546,7 @@ export default function Home() {
       setCompletingTodoId(id);
       setCelebratingTaskId(id);
       checkbox?.classList.add("task-checking");
-      window.setTimeout(finish, 1400);
+      window.setTimeout(finish, 3000);
       return;
     }
     finish();
@@ -585,7 +585,7 @@ export default function Home() {
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
     } else setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
     setCelebratingChoreId(chore.id);
-    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 2200);
+    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
   }
 
   async function deleteChore(chore: ChoreEntry) {
@@ -978,7 +978,7 @@ function TaskEditor({ title, assigneeMemberId, members, editing, onTitleChange, 
 }
 
 function ChoreCelebration() {
-  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm"><div className="relative grid place-items-center"><img src="/celebration-comet.png" alt="" className="max-h-[70vh] max-w-[92vw] animate-[bounce_900ms_ease-in-out_2] object-contain mix-blend-screen drop-shadow-2xl"/><div className="absolute bottom-[9%] rounded-full bg-white/90 px-6 py-2 text-center text-xl font-black text-violet-700 shadow-xl">You did it! ✨</div></div></div>;
+  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm"><div className="relative grid place-items-center"><span className="celebration-firework celebration-firework-one"/><span className="celebration-firework celebration-firework-two"/><span className="celebration-firework celebration-firework-three"/><img src="/celebration-comet.png" alt="" className="max-h-[70vh] max-w-[92vw] animate-[bounce_900ms_ease-in-out_3] object-contain mix-blend-screen drop-shadow-2xl"/></div></div>;
 }
 
 function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
