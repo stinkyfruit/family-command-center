@@ -446,6 +446,20 @@ export default function Home() {
   }
 
   async function toggleGoogleCalendar(connection: GoogleConnection) {
+    if (connection.enabled) {
+      if (!window.confirm(`Remove “${connection.name}” and all of its imported events from this family calendar? This will not change anything in Google.`)) return;
+      if (!supabase || !householdId) return;
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) { window.alert("Your session has expired. Please sign in again."); return; }
+      setGoogleConnections((items) => items.filter((item) => item.id !== connection.id));
+      const response = await fetch("/api/google-calendar/remove", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, connectionId: connection.id }) });
+      const result = await response.json();
+      if (!response.ok) { setGoogleConnections((items) => [...items, connection]); window.alert(result.error ?? "Could not remove Google Calendar."); return; }
+      await refreshCalendarEvents();
+      setCalendarMessage(`${connection.name} and its imported events were removed.`);
+      return;
+    }
     const enabled = !connection.enabled;
     setGoogleConnections((items) => items.map((item) => item.id === connection.id ? { ...item, enabled } : item));
     if (supabase) {
