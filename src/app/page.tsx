@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[] };
+type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean };
 type Todo = { id: string | number; title: string; due: string; done: boolean };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string };
@@ -52,6 +52,30 @@ function timeGreeting() {
   if (hour < 18) return "GOOD AFTERNOON";
   if (hour < 21) return "GOOD EVENING";
   return "GOOD NIGHT";
+}
+
+function nthWeekday(year: number, month: number, weekday: number, occurrence: number) {
+  const date = new Date(year, month, 1);
+  date.setDate(1 + ((weekday - date.getDay() + 7) % 7) + (occurrence - 1) * 7);
+  return date;
+}
+
+function lastWeekday(year: number, month: number, weekday: number) {
+  const date = new Date(year, month + 1, 0);
+  date.setDate(date.getDate() - ((date.getDay() - weekday + 7) % 7));
+  return date;
+}
+
+function easterSunday(year: number) {
+  const a = year % 19; const b = Math.floor(year / 100); const c = year % 100; const d = Math.floor(b / 4); const e = b % 4; const f = Math.floor((b + 8) / 25); const g = Math.floor((b - f + 1) / 3); const h = (19 * a + b - d - g + 15) % 30; const i = Math.floor(c / 4); const k = c % 4; const l = (32 + 2 * e + 2 * i - h - k) % 7; const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  return new Date(year, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+}
+
+function familyHolidaysForYear(year: number): Event[] {
+  const entries: [string, Date, string][] = [
+    ["New Year’s Day", new Date(year, 0, 1), "🎉 A fresh family year"], ["Valentine’s Day", new Date(year, 1, 14), "💌 Share the love"], ["Martin Luther King Jr. Day", nthWeekday(year, 0, 1, 3), "A day of service"], ["Presidents’ Day", nthWeekday(year, 1, 1, 3), "Family holiday"], ["St. Patrick’s Day", new Date(year, 2, 17), "🍀 Wear green"], ["Easter", easterSunday(year), "🐣 Family celebration"], ["Mother’s Day", nthWeekday(year, 4, 0, 2), "💐 Celebrate Mom"], ["Memorial Day", lastWeekday(year, 4, 1), "Family holiday"], ["Father’s Day", nthWeekday(year, 5, 0, 3), "🧡 Celebrate Dad"], ["Juneteenth", new Date(year, 5, 19), "Family holiday"], ["Independence Day", new Date(year, 6, 4), "🎆 Fireworks!"], ["Labor Day", nthWeekday(year, 8, 1, 1), "Family holiday"], ["Halloween", new Date(year, 9, 31), "🎃 Costume day"], ["Veterans Day", new Date(year, 10, 11), "Family holiday"], ["Thanksgiving", nthWeekday(year, 10, 4, 4), "🦃 Give thanks"], ["Christmas Eve", new Date(year, 11, 24), "🎄 Family time"], ["Christmas Day", new Date(year, 11, 25), "🎁 Merry Christmas"], ["New Year’s Eve", new Date(year, 11, 31), "✨ Countdown!"],
+  ];
+  return entries.map(([title, date, notes]) => ({ id: `holiday-${year}-${title}`, title, notes, time: "All day", person: "Family", color: "bg-amber-300", startsAt: new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())).toISOString(), allDay: true, category: "Holiday", generatedHoliday: true }));
 }
 
 export default function Home() {
@@ -210,6 +234,7 @@ export default function Home() {
     );
   }, []);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
+  const calendarEvents = useMemo(() => [...events, ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap(familyHolidaysForYear)], [events, calendarAnchor]);
 
   function addEvent(event: FormEvent) {
     event.preventDefault();
@@ -495,7 +520,7 @@ export default function Home() {
             {calendarMessage && <p className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 dark:bg-violet-400/10 dark:text-violet-100">{calendarMessage}</p>}
             <div className="mb-4 flex items-center justify-between"><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, -1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">← Previous</button><button onClick={() => setCalendarAnchor(new Date())} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Today</button><button onClick={() => setCalendarAnchor(shiftCalendar(calendarAnchor, view, 1))} className="rounded-lg px-3 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50">Next →</button></div>
             <FamilyColorKey members={members} />
-            {view === "Day" ? <DayCalendar date={calendarAnchor} events={events} members={members} onEdit={setEditingEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={events} members={members} onEdit={setEditingEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} /> : <MonthGrid anchor={calendarAnchor} events={events} members={members} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
+            {view === "Day" ? <DayCalendar date={calendarAnchor} events={calendarEvents} members={members} onEdit={setEditingEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={calendarEvents} members={members} onEdit={setEditingEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} /> : <MonthGrid anchor={calendarAnchor} events={calendarEvents} members={members} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
             <div className="mt-6 border-t border-slate-100 pt-5 dark:border-white/10">
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
@@ -563,10 +588,22 @@ function memberCalendarColor(member: Member, index: number) {
 }
 
 function eventBlockBackground(event: Event, members: Member[]) {
+  if (event.generatedHoliday) return "linear-gradient(135deg,#fde68a,#fda4af,#c4b5fd)";
   const colors = eventMembers(event, members).map((member) => memberCalendarColor(member, members.indexOf(member)));
   if (!colors.length) return "#e2e8f0";
   if (colors.length === 1) return colors[0];
   return `linear-gradient(135deg, ${colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ")})`;
+}
+
+function holidayEmoji(title: string) {
+  if (/Halloween/.test(title)) return "🎃";
+  if (/Christmas/.test(title)) return "🎄";
+  if (/Thanksgiving/.test(title)) return "🦃";
+  if (/Independence/.test(title)) return "🎆";
+  if (/Easter/.test(title)) return "🐣";
+  if (/Valentine/.test(title)) return "💗";
+  if (/New Year/.test(title)) return "🎉";
+  return "✨";
 }
 
 function eventMembers(event: Event, members: Member[]) {
@@ -579,7 +616,7 @@ function FamilyColorKey({ members }: { members: Member[] }) {
 }
 
 function EventChip({ event, members, compact = false }: { event: Event; members: Member[]; compact?: boolean }) {
-  return <div style={{ background: eventBlockBackground(event, members) }} className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold text-slate-900`}><span className="block truncate">{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
+  return <div style={{ background: eventBlockBackground(event, members) }} className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold text-slate-900`}><span className="block truncate">{event.generatedHoliday ? `${holidayEmoji(event.title)} ` : ""}{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
 }
 
 function dayCardDecoration(events: Event[]) {
@@ -603,7 +640,7 @@ function timedEventPosition(event: Event) {
 function TimelineEvent({ event, members, onClick, compact = false }: { event: Event; members: Member[]; onClick?: () => void; compact?: boolean }) {
   const position = timedEventPosition(event);
   const assignedMembers = eventMembers(event, members);
-  return <button onClick={onClick} style={{ top: position.top, height: position.height, background: eventBlockBackground(event, members) }} className={`absolute inset-x-1 z-10 overflow-hidden rounded-md p-2 text-left text-slate-900 shadow-sm hover:brightness-95 ${compact ? "text-[10px]" : "min-h-[92px] pb-7 text-xs"}`}><span className="absolute bottom-1.5 right-1.5 flex -space-x-1.5">{assignedMembers.slice(0, 4).map((member, index) => <i key={member.id} style={{ background: memberCalendarColor(member, members.indexOf(member)), zIndex: assignedMembers.length - index }} className="grid size-4 place-items-center rounded-full border border-white/80 text-[8px] not-italic font-black text-slate-800 shadow-sm">{member.name.slice(0, 1).toUpperCase()}</i>)}</span><p className={`${compact ? "truncate" : "truncate text-[17px] leading-tight"} font-black`}>{event.title}</p>{!compact && event.notes && <p className="mt-0.5 truncate text-[14px] font-semibold leading-tight opacity-80">{event.notes}</p>}{!compact && event.location && <p className="mt-0.5 line-clamp-2 text-[11px] font-bold leading-tight opacity-60">⌖ {event.location}</p>}</button>;
+  return <button onClick={event.generatedHoliday ? undefined : onClick} style={{ top: position.top, height: position.height, background: eventBlockBackground(event, members) }} className={`absolute inset-x-1 z-10 overflow-hidden rounded-md p-2 text-left text-slate-900 shadow-sm hover:brightness-95 ${compact ? "text-[10px]" : "min-h-[92px] pb-7 text-xs"}`}><span className="absolute bottom-1.5 right-1.5 flex -space-x-1.5">{assignedMembers.slice(0, 4).map((member, index) => <i key={member.id} style={{ background: memberCalendarColor(member, members.indexOf(member)), zIndex: assignedMembers.length - index }} className="grid size-4 place-items-center rounded-full border border-white/80 text-[8px] not-italic font-black text-slate-800 shadow-sm">{member.name.slice(0, 1).toUpperCase()}</i>)}</span><p className={`${compact ? "truncate" : "truncate text-[17px] leading-tight"} font-black`}>{event.generatedHoliday ? `${holidayEmoji(event.title)} ` : ""}{event.title}</p>{!compact && event.notes && <p className="mt-0.5 truncate text-[14px] font-semibold leading-tight opacity-80">{event.notes}</p>}{!compact && event.location && <p className="mt-0.5 line-clamp-2 text-[11px] font-bold leading-tight opacity-60">⌖ {event.location}</p>}</button>;
 }
 
 function TimelineColumn({ date, events, members, onEdit, compact = false }: { date: Date; events: Event[]; members: Member[]; onEdit?: (event: Event) => void; compact?: boolean }) {
@@ -615,7 +652,7 @@ function TimelineColumn({ date, events, members, onEdit, compact = false }: { da
 function DayCalendar({ date, events, members, onEdit }: { date: Date; events: Event[]; members: Member[]; onEdit: (event: Event) => void }) {
   const dayEvents = events.filter((event) => eventOccursOn(event, date));
   const allDayEvents = dayEvents.filter((event) => event.allDay);
-  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div>{allDayEvents.length > 0 && <div className="border-b border-slate-100 p-3 dark:border-white/10"><p className="mb-2 text-xs font-bold text-slate-400">ALL DAY</p><div className="flex flex-wrap gap-2">{allDayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} style={{ background: eventBlockBackground(event, members) }} className="rounded-md px-3 py-2 text-sm font-bold text-slate-900">{event.title}</button>)}</div></div>}<div className="grid grid-cols-[4rem_1fr] overflow-auto"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div><TimelineColumn date={date} events={events} members={members} onEdit={onEdit}/></div></div>;
+  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div>{allDayEvents.length > 0 && <div className="border-b border-slate-100 p-3 dark:border-white/10"><p className="mb-2 text-xs font-bold text-slate-400">ALL DAY</p><div className="flex flex-wrap gap-2">{allDayEvents.map((event) => <button key={event.id} disabled={event.generatedHoliday} onClick={() => onEdit(event)} style={{ background: eventBlockBackground(event, members) }} className="rounded-md px-3 py-2 text-sm font-bold text-slate-900 disabled:cursor-default">{event.generatedHoliday ? `${holidayEmoji(event.title)} ` : ""}{event.title}</button>)}</div></div>}<div className="grid grid-cols-[4rem_1fr] overflow-auto"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div><TimelineColumn date={date} events={events} members={members} onEdit={onEdit}/></div></div>;
 }
 
 function EventEditor({ event, members, onClose, onSave, onDelete }: { event: Event; members: Member[]; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
@@ -636,7 +673,7 @@ function EventEditor({ event, members, onClose, onSave, onDelete }: { event: Eve
 function WeekCalendar({ anchor, events, members, onEdit, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onEdit: (event: Event) => void; onOpenDay: (date: Date) => void }) {
   const first = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div className="overflow-x-auto"><div className="min-w-[920px] overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><div/>{days.map((day) => { const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex items-baseline justify-center gap-1 border-l border-slate-100 px-2 py-3 dark:border-white/10 ${isToday ? "bg-violet-600 text-white" : "hover:bg-violet-50 dark:hover:bg-white/5"}`}><span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></button>; })}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><span className="px-2 py-2 text-[10px] font-bold uppercase text-slate-400">All day</span>{days.map((day) => <div key={day.toISOString()} className="min-h-10 space-y-1 border-l border-slate-100 p-1 dark:border-white/10">{events.filter((event) => event.allDay && eventOccursOn(event, day)).slice(0, 2).map((event) => <button key={event.id} onClick={() => onEdit(event)} className="w-full"><EventChip event={event} members={members} compact /></button>)}</div>)}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>{days.map((day) => <TimelineColumn key={day.toISOString()} date={day} events={events} members={members} onEdit={onEdit} />)}</div></div></div>;
+  return <div className="overflow-x-auto"><div className="min-w-[920px] overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><div/>{days.map((day) => { const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex items-baseline justify-center gap-1 border-l border-slate-100 px-2 py-3 dark:border-white/10 ${isToday ? "bg-violet-600 text-white" : "hover:bg-violet-50 dark:hover:bg-white/5"}`}><span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></button>; })}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><span className="px-2 py-2 text-[10px] font-bold uppercase text-slate-400">All day</span>{days.map((day) => <div key={day.toISOString()} className="min-h-10 space-y-1 border-l border-slate-100 p-1 dark:border-white/10">{events.filter((event) => event.allDay && eventOccursOn(event, day)).slice(0, 2).map((event) => <button key={event.id} disabled={event.generatedHoliday} onClick={() => onEdit(event)} className="w-full disabled:cursor-default"><EventChip event={event} members={members} compact /></button>)}</div>)}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>{days.map((day) => <TimelineColumn key={day.toISOString()} date={day} events={events} members={members} onEdit={onEdit} />)}</div></div></div>;
 }
 
 function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
