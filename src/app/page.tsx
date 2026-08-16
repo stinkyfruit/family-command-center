@@ -581,6 +581,27 @@ export default function Home() {
     finish();
   }
 
+  async function deleteTodo(id: string | number) {
+    const target = todos.find((todo) => todo.id === id);
+    if (!target || !window.confirm(`Permanently delete “${target.title}”?`)) return;
+    setTodos((items) => items.filter((todo) => todo.id !== id));
+    if (supabase && householdId) {
+      const { error } = await supabase.from("todos").delete().eq("id", id).eq("household_id", householdId);
+      if (error) {
+        setTodos((items) => [...items, target]);
+        window.alert(`Could not delete this task: ${error.message}`);
+      }
+    }
+  }
+
+  useEffect(() => {
+    const handleTaskDeletion: EventListener = (event) => {
+      void deleteTodo((event as unknown as CustomEvent<string | number>).detail);
+    };
+    window.addEventListener("family-delete-todo", handleTaskDeletion);
+    return () => window.removeEventListener("family-delete-todo", handleTaskDeletion);
+  }, [todos, householdId]);
+
   async function addChild() {
     const name = window.prompt("Child's name?");
     if (!name?.trim() || !householdId) return;
@@ -1066,7 +1087,55 @@ function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[];
   const open = todos.filter((todo) => !todo.done);
   const completed = todos.filter((todo) => todo.done);
   const assignee = (todo: Todo) => members.find((member) => member.id === todo.assigneeMemberId);
-  return <section className="mx-auto max-w-[1600px] px-5 pb-8 md:px-9"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-rose-500">FAMILY TASKS</p><h2 className="text-3xl font-bold">Today&apos;s to-dos</h2></div><button onClick={onAdd} className="rounded-xl bg-rose-500 px-4 py-3 font-bold text-white">+ Add task</button></div><div className="mt-7 grid gap-4 md:grid-cols-2">{open.map((todo) => { const person = assignee(todo); return <div key={todo.id} className="flex items-start gap-3 rounded-2xl bg-rose-50 p-5 dark:bg-rose-400/10"><button onClick={() => onToggle(todo.id)} aria-label={`Complete ${todo.title}`} className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 border-rose-400 text-rose-500 hover:bg-rose-100">✓</button><button onClick={() => onEdit(todo)} className="min-w-0 flex-1 text-left"><b className="block">{todo.title}</b><small className="mt-1 block text-slate-500">{todo.due || "No deadline"}</small>{person && <span className="mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold" style={{ backgroundColor: `${person.color ?? "#fda4af"}33`, color: person.color ?? "#be123c" }}>For {person.name}</span>}</button><button onClick={() => onEdit(todo)} aria-label={`Edit ${todo.title}`} className="grid size-9 shrink-0 place-items-center rounded-xl text-rose-500 hover:bg-rose-100"><AppIcon name="edit" className="size-4"/></button></div>; })}{open.length === 0 && <p className="text-slate-400">You&apos;re all caught up.</p>}</div>{completed.length > 0 && <div className="mt-8 border-t border-slate-100 pt-5 dark:border-white/10"><h3 className="font-bold text-emerald-600">Completed recently</h3><p className="mt-1 text-sm text-slate-500">Completed tasks stay here for 7 days, then move out of sight.</p><div className="mt-3 grid gap-3 md:grid-cols-2">{completed.map((todo) => <button key={todo.id} onClick={() => onToggle(todo.id)} className="flex items-center gap-3 rounded-xl bg-emerald-50 p-3 text-left text-sm text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:bg-emerald-400/20"><span>✓</span><span className="line-through">{todo.title}</span><span className="ml-auto text-xs">Restore</span></button>)}</div></div>}</div></section>;
+  const deleteTodo = (id: string | number) => window.dispatchEvent(new CustomEvent("family-delete-todo", { detail: id }));
+
+  return (
+    <section className="mx-auto max-w-[1600px] px-5 pb-8 md:px-9">
+      <div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-rose-500">FAMILY TASKS</p>
+            <h2 className="text-3xl font-bold">Today&apos;s to-dos</h2>
+          </div>
+          <button onClick={onAdd} className="rounded-xl bg-rose-500 px-4 py-3 font-bold text-white">+ Add task</button>
+        </div>
+
+        <div className="mt-7 grid gap-4 md:grid-cols-2">
+          {open.map((todo) => {
+            const person = assignee(todo);
+            return (
+              <article key={todo.id} className="flex min-h-20 items-center gap-3 rounded-2xl bg-rose-50 p-4 shadow-sm transition hover:-translate-y-0.5 dark:bg-rose-400/10">
+                <button onClick={() => onEdit(todo)} className="min-w-0 flex-1 text-left">
+                  <b className="block text-base">{todo.title}</b>
+                  <small className="mt-1 block text-sm text-slate-500">{todo.due || "No deadline"}</small>
+                  {person && <span className="mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold" style={{ backgroundColor: `${person.color ?? "#fda4af"}33`, color: person.color ?? "#be123c" }}>For {person.name}</span>}
+                </button>
+                <button onClick={() => onToggle(todo.id)} aria-label={`Complete ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-lg border-2 border-rose-400 bg-white text-xl font-black text-transparent transition hover:bg-rose-100">✓</button>
+                <button onClick={() => onEdit(todo)} aria-label={`Edit ${todo.title}`} className="grid size-9 shrink-0 place-items-center rounded-xl text-rose-500 hover:bg-rose-100"><AppIcon name="edit" className="size-4"/></button>
+              </article>
+            );
+          })}
+          {open.length === 0 && <p className="text-slate-400">You&apos;re all caught up.</p>}
+        </div>
+
+        {completed.length > 0 && (
+          <div className="mt-8 border-t border-slate-100 pt-5 dark:border-white/10">
+            <h3 className="font-bold text-emerald-600">Completed recently</h3>
+            <p className="mt-1 text-sm text-slate-500">Completed tasks stay here for 7 days, then move out of sight.</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {completed.map((todo) => (
+                <article key={todo.id} className="flex min-h-16 items-center gap-3 rounded-2xl bg-emerald-50 p-3 text-emerald-800 shadow-sm dark:bg-emerald-400/10 dark:text-emerald-200">
+                  <button onClick={() => onToggle(todo.id)} aria-label={`Restore ${todo.title}`} className="grid size-9 shrink-0 place-items-center rounded-lg border-2 border-emerald-500 bg-emerald-500 text-xl font-black text-white">✓</button>
+                  <button onClick={() => onEdit(todo)} className="min-w-0 flex-1 text-left text-sm font-bold line-through">{todo.title}</button>
+                  <button onClick={() => deleteTodo(todo.id)} title={`Delete ${todo.title}`} aria-label={`Permanently delete ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-xl border border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function TaskEditor({ title, assigneeMemberId, members, editing, onTitleChange, onAssigneeChange, onClose, onSave }: { title: string; assigneeMemberId: string; members: Member[]; editing: boolean; onTitleChange: (value: string) => void; onAssigneeChange: (value: string) => void; onClose: () => void; onSave: (event: FormEvent) => void }) {
