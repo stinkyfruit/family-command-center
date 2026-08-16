@@ -153,6 +153,17 @@ form button[type="button"].text-rose-600::after {
   color: #172033;
 }
 
+/* Keep the colorful shared-list cards readable in dark mode. */
+.dark article:has(.space-y-2 > button) .space-y-2 > button {
+  background: rgb(15 23 42 / .72);
+  color: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12);
+}
+
+.dark article:has(.space-y-2 > button) .space-y-2 > button > span:last-child {
+  color: inherit;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
