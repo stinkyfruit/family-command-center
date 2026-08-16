@@ -90,16 +90,21 @@ function choreIcon(title: string) {
   return "✨";
 }
 
-const notoChoreIconCodes = new Set([
-  "2728", "1f373", "1f392", "1f3c3", "1f371", "1f37d", "1f392", "1f43e", "1f455", "1f4a7", "1f4d6", "1f4da", "1f5d1", "1f6c1", "1f6cf", "1f968", "1f9f8", "1f9fa", "1faa5", "1fae7",
+const notoIconCodes = new Set([
+  "2728", "1f373", "1f382", "1f383", "1f384", "1f386", "1f389", "1f392", "1f3c3", "1f371", "1f37d", "1f423", "1f43e", "1f455", "1f497", "1f4a7", "1f4d6", "1f4da", "1f5d1", "1f6c1", "1f6cf", "1f968", "1f983", "1f9f8", "1f9fa", "1faa5", "1fae7",
 ]);
 
-function notoChoreIconPath(emoji: string) {
+function notoIconPath(emoji: string) {
   const code = Array.from(emoji)
     .filter((character) => character !== "\uFE0F" && character !== "\u200D")
     .map((character) => character.codePointAt(0)?.toString(16))
     .join("_");
-  return notoChoreIconCodes.has(code) ? `/chore-icons/${code}.svg` : null;
+  return notoIconCodes.has(code) ? `/chore-icons/${code}.svg` : null;
+}
+
+function NotoEmoji({ emoji, className = "size-4", alt = "" }: { emoji: string; className?: string; alt?: string }) {
+  const source = notoIconPath(emoji);
+  return source ? <img src={source} alt={alt} className={`inline-block shrink-0 object-contain ${className}`} /> : <span aria-hidden={alt ? undefined : "true"}>{emoji}</span>;
 }
 
 function timeGreeting() {
@@ -967,7 +972,7 @@ function FamilyColorKey({ members }: { members: Member[] }) {
 
 function EventChip({ event, members, compact = false }: { event: Event; members: Member[]; compact?: boolean }) {
   const icon = eventCategoryIcon(event);
-  return <div style={{ background: eventBlockBackground(event, members) }} className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold text-slate-900`}><span className="block truncate">{icon && `${icon} `}{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
+  return <div style={{ background: eventBlockBackground(event, members) }} className={`rounded-sm px-3 ${compact ? "py-1" : "py-1.5"} text-left text-xs font-semibold text-slate-900`}><span className="flex items-center gap-1 truncate">{icon && <NotoEmoji emoji={icon} className="size-3.5" />}{event.title}</span>{event.location && !compact && <span className="block truncate font-medium opacity-75">⌖ {event.location}</span>}</div>;
 }
 
 function EventDetails({ event, members, onClose, onEdit }: { event: Event; members: Member[]; onClose: () => void; onEdit: () => void }) {
@@ -995,7 +1000,7 @@ function TimelineEvent({ event, members, onClick, compact = false }: { event: Ev
   const position = timedEventPosition(event);
   const assignedMembers = eventMembers(event, members);
   const icon = eventCategoryIcon(event);
-  return <button onClick={(clickEvent) => { clickEvent.stopPropagation(); onClick?.(); }} style={{ top: position.top, height: position.height, background: eventBlockBackground(event, members) }} className={`absolute inset-x-1 z-10 overflow-hidden rounded-md p-2 text-left text-slate-900 shadow-sm hover:brightness-95 ${compact ? "text-[10px]" : "pb-7 text-xs"}`}><span className="absolute bottom-1.5 right-1.5 flex -space-x-1.5">{assignedMembers.slice(0, 4).map((member, index) => <i key={member.id} style={{ background: memberCalendarColor(member, members.indexOf(member)), zIndex: assignedMembers.length - index }} className="grid size-4 place-items-center rounded-full border border-white/80 text-[8px] not-italic font-black text-slate-800 shadow-sm">{member.name.slice(0, 1).toUpperCase()}</i>)}</span><p className={`${compact ? "truncate" : "truncate text-[17px] leading-tight"} font-black`}>{icon && `${icon} `}{event.title}</p>{!compact && event.notes && <p className="mt-0.5 truncate text-[14px] font-semibold leading-tight opacity-80">{event.notes}</p>}{!compact && event.location && <p className="mt-0.5 line-clamp-2 text-[11px] font-bold leading-tight opacity-60">⌖ {event.location}</p>}</button>;
+  return <button onClick={(clickEvent) => { clickEvent.stopPropagation(); onClick?.(); }} style={{ top: position.top, height: position.height, background: eventBlockBackground(event, members) }} className={`absolute inset-x-1 z-10 overflow-hidden rounded-md p-2 text-left text-slate-900 shadow-sm hover:brightness-95 ${compact ? "text-[10px]" : "pb-7 text-xs"}`}><span className="absolute bottom-1.5 right-1.5 flex -space-x-1.5">{assignedMembers.slice(0, 4).map((member, index) => <i key={member.id} style={{ background: memberCalendarColor(member, members.indexOf(member)), zIndex: assignedMembers.length - index }} className="grid size-4 place-items-center rounded-full border border-white/80 text-[8px] not-italic font-black text-slate-800 shadow-sm">{member.name.slice(0, 1).toUpperCase()}</i>)}</span><p className={`flex items-center gap-1 ${compact ? "truncate" : "truncate text-[17px] leading-tight"} font-black`}>{icon && <NotoEmoji emoji={icon} className={compact ? "size-3" : "size-4"} />}{event.title}</p>{!compact && event.notes && <p className="mt-0.5 truncate text-[14px] font-semibold leading-tight opacity-80">{event.notes}</p>}{!compact && event.location && <p className="mt-0.5 line-clamp-2 text-[11px] font-bold leading-tight opacity-60">⌖ {event.location}</p>}</button>;
 }
 
 function TimelineColumn({ date, events, members, onEdit, onCreate, compact = false }: { date: Date; events: Event[]; members: Member[]; onEdit?: (event: Event) => void; onCreate?: (day: Date, time: string) => void; compact?: boolean }) {
@@ -1196,7 +1201,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
         const chore = choreById.get(card.dataset.choreId ?? "");
         if (!chore) return;
         const emoji = !chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji;
-        const source = notoChoreIconPath(emoji);
+        const source = notoIconPath(emoji);
         const pictureSlot = card.querySelector<HTMLElement>("button > span:nth-of-type(2)");
         if (!source || !pictureSlot) return;
         const image = document.createElement("img");
