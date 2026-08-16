@@ -16,8 +16,8 @@ export const metadata: Metadata = {
   title: "The Vulpetti Home",
   description: "A family command center for the moments that matter.",
   icons: {
-    icon: "/icon.svg?v=2",
-    apple: "/apple-icon?v=2",
+    icon: "/icon.svg?v=3",
+    apple: "/apple-icon?v=3",
   },
   appleWebApp: {
     capable: true,
