@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean };
+type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 type Todo = { id: string | number; title: string; due: string; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
@@ -14,6 +14,18 @@ type SharedList = { id: string | number; title: string; icon: string; items: Sha
 type GoogleConnection = { id: string; name: string; enabled: boolean };
 type AppleFeed = { id: string; name: string; enabled: boolean };
 type ThemeMode = "auto" | "light" | "dark";
+
+function displayEventsOnce(events: Event[]) {
+  const unique = new Map<string, Event>();
+  const score = (event: Event) => ({ app: 30, google: 20, apple: 10 }[event.source ?? "app"] ?? 0) + (event.notes?.length ?? 0) + (event.location?.length ?? 0) + (event.memberIds?.length ?? 0);
+  for (const event of events) {
+    if (event.generatedHoliday) { unique.set(String(event.id), event); continue; }
+    const key = [event.title.trim().toLocaleLowerCase(), new Date(event.startsAt).getTime(), event.endsAt ? new Date(event.endsAt).getTime() : "", Boolean(event.allDay)].join("|");
+    const current = unique.get(key);
+    if (!current || score(event) > score(current)) unique.set(key, event);
+  }
+  return [...unique.values()];
+}
 type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "sun" | "moon";
 
 function AppIcon({ name, className = "size-5" }: { name: IconName; className?: string }) {
@@ -240,7 +252,7 @@ export default function Home() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     Promise.all([
-      supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at"),
+      supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, source").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
       supabase.from("chores").select("id, title, emoji, assignee_member_id").eq("household_id", householdId).eq("active", true).order("created_at"),
@@ -250,10 +262,10 @@ export default function Home() {
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
       supabase.from("calendar_feeds").select("id, display_name, enabled").eq("household_id", householdId).eq("provider", "apple").order("created_at"),
     ]).then(async ([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult, appleFeedResult]) => {
-      if (eventResult.data) setEvents(eventResult.data.map((event) => ({
-        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
+      if (eventResult.data) setEvents(displayEventsOnce(eventResult.data.map((event) => ({
+        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids, source: event.source,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      })));
+      }))));
       if (todoResult.data) {
         const archiveBefore = Date.now() - 7 * 24 * 60 * 60 * 1000;
         const expiredCompleted = todoResult.data.filter((todo) => todo.status === "completed" && todo.completed_at && new Date(todo.completed_at).getTime() < archiveBefore);
@@ -382,11 +394,11 @@ export default function Home() {
 
   async function refreshCalendarEvents() {
     if (!supabase || !householdId) return;
-    const { data } = await supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at");
-    if (data) setEvents(data.map((event) => ({
-      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
+    const { data } = await supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, source").eq("household_id", householdId).order("starts_at");
+    if (data) setEvents(displayEventsOnce(data.map((event) => ({
+      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids, source: event.source,
       time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-    })));
+    }))));
   }
 
   async function syncGoogleCalendar(force = true) {
