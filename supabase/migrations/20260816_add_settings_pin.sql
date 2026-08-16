@@ -12,7 +12,7 @@ create or replace function public.household_settings_pin_configured()
 returns boolean
 language sql
 security definer
-set search_path = public, private
+set search_path = extensions, public, private
 as $$
   select exists (
     select 1
@@ -26,7 +26,7 @@ create or replace function public.set_household_settings_pin(p_pin text)
 returns void
 language plpgsql
 security definer
-set search_path = public, private
+set search_path = extensions, public, private
 as $$
 declare
   target_household_id uuid;
@@ -56,7 +56,7 @@ create or replace function public.verify_household_settings_pin(p_pin text)
 returns boolean
 language plpgsql
 security definer
-set search_path = public, private
+set search_path = extensions, public, private
 as $$
 declare
   stored_hash text;
