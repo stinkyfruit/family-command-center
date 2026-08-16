@@ -14,6 +14,26 @@ type SharedList = { id: string | number; title: string; icon: string; items: Sha
 type GoogleConnection = { id: string; name: string; enabled: boolean };
 type AppleFeed = { id: string; name: string; enabled: boolean };
 type ThemeMode = "auto" | "light" | "dark";
+type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "plus" | "close" | "trash" | "chevronLeft" | "chevronRight" | "sun" | "moon";
+
+function AppIcon({ name, className = "size-5" }: { name: IconName; className?: string }) {
+  const props = { className, fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 2, viewBox: "0 0 24 24", "aria-hidden": true };
+  return <svg {...props}>
+    {name === "home" && <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>}
+    {name === "calendar" && <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>}
+    {name === "tasks" && <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 9 1.5 1.5L12 7.5M14 9h3M8 15l1.5 1.5L12 13.5M14 15h3"/></>}
+    {name === "chores" && <><path d="M6 3h12M8 3v5m8-5v5M5 8h14v13H5z"/><path d="m9 14 2 2 4-4"/></>}
+    {name === "lists" && <><path d="M9 6h10M9 12h10M9 18h10"/><path d="M5 6h.01M5 12h.01M5 18h.01"/></>}
+    {name === "settings" && <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V20.3h-3v-.08A1.7 1.7 0 0 0 10.7 18.7a1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7.04 15a1.7 1.7 0 0 0-1.56-1.03H5.4v-3h.08A1.7 1.7 0 0 0 7.04 9.94 1.7 1.7 0 0 0 6.7 8.06L6.64 8 8.76 5.88l.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.03-1.56V4.64h3v.08a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.82 8l-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z"/></>}
+    {name === "plus" && <path d="M12 5v14M5 12h14"/>}
+    {name === "close" && <path d="m6 6 12 12M18 6 6 18"/>}
+    {name === "trash" && <><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3M6 7l1 14h10l1-14"/></>}
+    {name === "chevronLeft" && <path d="m15 18-6-6 6-6"/>}
+    {name === "chevronRight" && <path d="m9 18 6-6-6-6"/>}
+    {name === "sun" && <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></>}
+    {name === "moon" && <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/>}
+  </svg>;
+}
 
 const starterEvents: Event[] = [
   { id: 1, title: "School drop-off", time: "8:10 AM", person: "Everyone", color: "bg-sky-400", startsAt: new Date().toISOString() },
@@ -584,13 +604,13 @@ export default function Home() {
     <main className={dark ? "dark min-h-screen" : "min-h-screen"}>
       <div className="min-h-screen bg-[#f8f7ff] text-slate-900 transition-colors dark:bg-[#151522] dark:text-slate-100 lg:pl-24">
         <aside className="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1c1c2b]/95 lg:inset-y-0 left-0 right-auto w-24 flex-col justify-start gap-3 border-r border-t-0 px-3 py-6">
-          <div className="hidden lg:grid size-12 place-items-center self-center rounded-2xl bg-violet-600 text-xl text-white shadow-lg shadow-violet-300/50">✦</div>
-          <nav className="flex flex-1 justify-around gap-1 lg:mt-8 lg:flex-col lg:justify-start">{([ ["calendar", "▦", "Calendar"], ["tasks", "✓", "Tasks"], ["chores", "✦", "Chores"], ["lists", "☰", "Lists"] ] as const).map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 text-xs font-bold transition-colors ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><span className="text-xl leading-none">{icon}</span><span className="hidden lg:block">{label}</span></button>)}</nav>
-          <button onClick={() => setActiveTab("settings")} title="Settings" className={`hidden lg:flex flex-col items-center gap-1 rounded-2xl px-3 py-2 text-xs font-bold transition-colors ${activeTab === "settings" ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><span className="text-xl leading-none">⚙</span><span>Settings</span></button>
+          <div className="hidden lg:grid size-12 place-items-center self-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/50"><AppIcon name="home" className="size-6"/></div>
+          <nav className="flex flex-1 justify-around gap-1 lg:mt-8 lg:flex-col lg:justify-start">{([ ["calendar", "calendar", "Calendar"], ["tasks", "tasks", "Tasks"], ["chores", "chores", "Chores"], ["lists", "lists", "Lists"] ] as const).map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 text-xs font-bold transition-colors ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name={icon} className="size-5"/><span className="hidden lg:block">{label}</span></button>)}</nav>
+          <button onClick={() => setActiveTab("settings")} title="Settings" className={`hidden lg:flex flex-col items-center gap-1 rounded-2xl px-3 py-2 text-xs font-bold transition-colors ${activeTab === "settings" ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name="settings" className="size-5"/><span>Settings</span></button>
         </aside>
         <header className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-5 py-5 md:px-9">
-          <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-2xl bg-violet-600 text-xl shadow-lg shadow-violet-300/50 lg:hidden">✦</div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div></div>
-          <div className="flex items-center gap-2"><button onClick={() => setScreenSaver(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/10">Photos</button><button onClick={() => updateThemeMode(dark ? "light" : "dark")} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/10 dark:ring-white/10">{dark ? "☀ Light" : "☾ Dark"}</button></div>
+          <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/50 lg:hidden"><AppIcon name="home" className="size-5"/></div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div></div>
+          <div className="flex items-center gap-2"><button onClick={() => setScreenSaver(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/10">Photos</button><button onClick={() => updateThemeMode(dark ? "light" : "dark")} className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/10 dark:ring-white/10"><AppIcon name={dark ? "sun" : "moon"} className="size-4"/>{dark ? "Light" : "Dark"}</button></div>
         </header>
         {activeTab === "calendar" ? <div className="mx-auto max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">
           <section className="grid gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
