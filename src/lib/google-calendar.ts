@@ -78,10 +78,12 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   const events = googleItems.map((item) => {
     const existing = existingByExternalId.get(item.id);
     const title = item.summary || "Untitled event";
+    const category = existing?.category_override ? existing.category : calendarEventCategory(title);
+    const isBirthday = category === "Birthday";
     return {
     household_id: connection.household_id, created_by: connection.connected_by, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
-    starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null), all_day: Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
-    category: existing?.category_override ? existing.category : calendarEventCategory(title),
+    starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
+    category,
     category_override: existing?.category_override ?? false,
   };
   });

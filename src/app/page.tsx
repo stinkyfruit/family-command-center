@@ -20,7 +20,11 @@ function displayEventsOnce(events: Event[]) {
   const score = (event: Event) => ({ app: 30, google: 20, apple: 10 }[event.source ?? "app"] ?? 0) + (event.notes?.length ?? 0) + (event.location?.length ?? 0) + (event.memberIds?.length ?? 0);
   for (const event of events) {
     if (event.generatedHoliday) { unique.set(String(event.id), event); continue; }
-    const key = [event.title.trim().toLocaleLowerCase(), new Date(event.startsAt).getTime(), event.endsAt ? new Date(event.endsAt).getTime() : "", Boolean(event.allDay)].join("|");
+    const startsAt = new Date(event.startsAt);
+    const birthdayDay = [startsAt.getFullYear(), startsAt.getMonth(), startsAt.getDate()].join("-");
+    const key = event.category === "Birthday"
+      ? ["birthday", event.title.trim().toLocaleLowerCase(), birthdayDay].join("|")
+      : [event.title.trim().toLocaleLowerCase(), startsAt.getTime(), event.endsAt ? new Date(event.endsAt).getTime() : "", Boolean(event.allDay)].join("|");
     const current = unique.get(key);
     if (!current || score(event) > score(current)) unique.set(key, event);
   }
