@@ -11,9 +11,8 @@ type Member = { id: string | number; name: string; role: "adult" | "child"; colo
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string };
 const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
+  { id: "After school", label: "After school & nighttime", icon: "🎒" },
   { id: "To-do", label: "Anytime to-dos", icon: "✨" },
-  { id: "After school", label: "After school", icon: "🎒" },
-  { id: "Nighttime", label: "Nighttime", icon: "🌙" },
 ] as const;
 type SharedListItem = { id: string | number; title: string; done: boolean };
 type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
