@@ -29,6 +29,11 @@ input[type="checkbox"] {
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
 }
 
+/* Keep all seven week columns visible in the iPad content area. */
+@media (max-width: 1279px) {
+  .min-w-\[920px\] { min-width: 720px; }
+}
+
 .dark .fixed > form {
   background: #242435;
   color: #f8fafc;
