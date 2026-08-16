@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[] };
+type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[] };
 type Todo = { id: string | number; title: string; due: string; done: boolean };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string };
@@ -51,7 +51,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"calendar" | "tasks" | "chores" | "lists" | "settings">("calendar");
   const [weather, setWeather] = useState<Weather | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [view, setView] = useState<"Day" | "Week" | "Month">("Month");
+  const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -124,7 +124,7 @@ export default function Home() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     Promise.all([
-      supabase.from("events").select("id, title, starts_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at"),
+      supabase.from("events").select("id, title, starts_at, ends_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
       supabase.from("chores").select("id, title, emoji, assignee_member_id").eq("household_id", householdId).eq("active", true).order("created_at"),
@@ -135,7 +135,7 @@ export default function Home() {
       supabase.from("calendar_feeds").select("id, display_name, enabled").eq("household_id", householdId).eq("provider", "apple").order("created_at"),
     ]).then(async ([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult, appleFeedResult]) => {
       if (eventResult.data) setEvents(eventResult.data.map((event) => ({
-        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
+        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       })));
       if (todoResult.data) setTodos(todoResult.data.map((todo) => ({ id: todo.id, title: todo.title, due: todo.due_at ? new Date(todo.due_at).toLocaleDateString([], { weekday: "short" }) : "", done: todo.status === "completed" })));
@@ -192,12 +192,13 @@ export default function Home() {
     const title = newItem.trim();
     if (!title) return;
     const startsAt = new Date(`${eventDate}T${eventTime}:00`);
+    const endsAt = eventAllDay ? null : new Date(startsAt.getTime() + 60 * 60_000);
     if (supabase && user && householdId) {
-      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), all_day: eventAllDay, color: "#34d399", location: eventLocation.trim() || null, category: eventCategory, member_ids: eventMemberIds }).select("id").single().then(({ data, error }) => {
-        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
+      supabase.from("events").insert({ household_id: householdId, created_by: user.id, title, starts_at: startsAt.toISOString(), ends_at: endsAt?.toISOString() ?? null, all_day: eventAllDay, color: "#34d399", location: eventLocation.trim() || null, category: eventCategory, member_ids: eventMemberIds }).select("id").single().then(({ data, error }) => {
+        if (!error && data) setEvents((items) => [...items, { id: data.id, title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), endsAt: endsAt?.toISOString() ?? null, location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
       });
     } else {
-      setEvents((items) => [...items, { id: Date.now().toString(), title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
+      setEvents((items) => [...items, { id: Date.now().toString(), title, time: eventAllDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), person: "Family", color: "bg-emerald-400", startsAt: startsAt.toISOString(), endsAt: endsAt?.toISOString() ?? null, location: eventLocation.trim() || null, category: eventCategory, allDay: eventAllDay, memberIds: eventMemberIds }]);
     }
     setNewItem("");
     setEventLocation("");
@@ -233,9 +234,9 @@ export default function Home() {
 
   async function refreshCalendarEvents() {
     if (!supabase || !householdId) return;
-    const { data } = await supabase.from("events").select("id, title, starts_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at");
+    const { data } = await supabase.from("events").select("id, title, starts_at, ends_at, all_day, color, location, category, member_ids").eq("household_id", householdId).order("starts_at");
     if (data) setEvents(data.map((event) => ({
-      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
+      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids,
       time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     })));
   }
@@ -556,9 +557,33 @@ function dayCardDecoration(events: Event[]) {
   return "";
 }
 
+const timelineStartHour = 6;
+const timelineEndHour = 21;
+const timelineHourHeight = 64;
+
+function timedEventPosition(event: Event) {
+  const start = new Date(event.startsAt);
+  const end = event.endsAt ? new Date(event.endsAt) : new Date(start.getTime() + 60 * 60_000);
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = Math.max(startMinutes + 30, end.getHours() * 60 + end.getMinutes());
+  return { top: Math.max(0, ((startMinutes - timelineStartHour * 60) / 60) * timelineHourHeight), height: Math.max(34, ((endMinutes - startMinutes) / 60) * timelineHourHeight) };
+}
+
+function TimelineEvent({ event, members, onClick, compact = false }: { event: Event; members: Member[]; onClick?: () => void; compact?: boolean }) {
+  const position = timedEventPosition(event);
+  return <button onClick={onClick} style={{ top: position.top, height: position.height, background: eventBlockBackground(event, members) }} className={`absolute inset-x-1 z-10 overflow-hidden rounded-md p-2 text-left text-slate-900 shadow-sm hover:brightness-95 ${compact ? "text-[10px]" : "text-sm"}`}><p className="truncate font-black">{event.title}</p><p className="truncate font-semibold opacity-70">{event.time}{event.location ? ` · ${event.location}` : ""}</p>{!compact && event.location && <p className="truncate text-xs font-medium opacity-65">⌖ {event.location}</p>}</button>;
+}
+
+function TimelineColumn({ date, events, members, onEdit, compact = false }: { date: Date; events: Event[]; members: Member[]; onEdit?: (event: Event) => void; compact?: boolean }) {
+  const dayEvents = events.filter((event) => eventOccursOn(event, date));
+  const timedEvents = dayEvents.filter((event) => !event.allDay);
+  return <div className="relative h-[960px] border-l border-slate-100 dark:border-white/10">{Array.from({ length: timelineEndHour - timelineStartHour + 1 }, (_, index) => <div key={index} style={{ top: index * timelineHourHeight }} className="absolute inset-x-0 border-t border-slate-100/80 dark:border-white/10"/>)}{timedEvents.map((event) => <TimelineEvent key={event.id} event={event} members={members} compact={compact} onClick={() => onEdit?.(event)} />)}</div>;
+}
+
 function DayCalendar({ date, events, members, onEdit }: { date: Date; events: Event[]; members: Member[]; onEdit: (event: Event) => void }) {
   const dayEvents = events.filter((event) => eventOccursOn(event, date));
-  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="sticky top-0 z-10 flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div><div className="p-4">{dayEvents.length ? <div className="space-y-2">{dayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} style={{ background: eventBlockBackground(event, members) }} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:brightness-95"><div><p className="font-bold">{event.title}</p><p className="text-sm text-slate-700/75">{event.time}{event.location ? ` · ${event.location}` : ""}</p></div><span className="ml-auto text-sm font-bold text-slate-700">Edit</span></button>)}</div> : <p className="py-8 text-center text-sm text-slate-400">Nothing scheduled for this day.</p>}</div></div>;
+  const allDayEvents = dayEvents.filter((event) => event.allDay);
+  return <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="flex items-baseline gap-2 border-b border-slate-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#151522]"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{date.toLocaleDateString([], { weekday: "short" })}</p><p className="text-2xl font-black leading-none">{date.getDate()}</p></div>{allDayEvents.length > 0 && <div className="border-b border-slate-100 p-3 dark:border-white/10"><p className="mb-2 text-xs font-bold text-slate-400">ALL DAY</p><div className="flex flex-wrap gap-2">{allDayEvents.map((event) => <button key={event.id} onClick={() => onEdit(event)} style={{ background: eventBlockBackground(event, members) }} className="rounded-md px-3 py-2 text-sm font-bold text-slate-900">{event.title}</button>)}</div></div>}<div className="grid grid-cols-[4rem_1fr] overflow-auto"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div><TimelineColumn date={date} events={events} members={members} onEdit={onEdit}/></div></div>;
 }
 
 function EventEditor({ event, members, onClose, onSave, onDelete }: { event: Event; members: Member[]; onClose: () => void; onSave: (event: Event) => void; onDelete: (event: Event) => void }) {
@@ -577,7 +602,7 @@ function EventEditor({ event, members, onClose, onSave, onDelete }: { event: Eve
 function WeekCalendar({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
   const first = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex aspect-square min-h-0 flex-col overflow-hidden rounded-xl p-2 text-left transition-colors ${isToday ? "bg-violet-600 text-white" : "bg-slate-50 hover:bg-violet-50 dark:bg-white/5 dark:hover:bg-white/10"} ${dayCardDecoration(dayEvents)}`}><div className="flex h-8 shrink-0 items-start gap-1.5"><span className={`pt-1 text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></div><div className="min-h-0 flex-1 space-y-1 overflow-hidden">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} />)}{dayEvents.length > 2 && <p className={`px-1 text-xs font-bold ${isToday ? "text-white" : "text-violet-600"}`}>+{dayEvents.length - 2} more</p>}</div></button>; })}</div>;
+  return <div className="overflow-x-auto"><div className="min-w-[920px] overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><div/>{days.map((day) => { const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex items-baseline justify-center gap-1 border-l border-slate-100 px-2 py-3 dark:border-white/10 ${isToday ? "bg-violet-600 text-white" : "hover:bg-violet-50 dark:hover:bg-white/5"}`}><span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></button>; })}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><span className="px-2 py-2 text-[10px] font-bold uppercase text-slate-400">All day</span>{days.map((day) => <div key={day.toISOString()} className="min-h-10 space-y-1 border-l border-slate-100 p-1 dark:border-white/10">{events.filter((event) => event.allDay && eventOccursOn(event, day)).slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}</div>)}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]"><div className="relative h-[960px] bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>{days.map((day) => <TimelineColumn key={day.toISOString()} date={day} events={events} members={members} compact />)}</div></div></div>;
 }
 
 function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
