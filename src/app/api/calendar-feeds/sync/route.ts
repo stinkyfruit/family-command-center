@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
     const { householdId, feedId } = await request.json();
     if (!user || !householdId) return NextResponse.json({ error: "Sign in before syncing." }, { status: 401 });
     const admin = serverSupabase();
+    const { data: household } = await admin.from("households").select("timezone").eq("id", householdId).single();
+    const householdTimeZone = household?.timezone ?? "America/Chicago";
     const base = admin.from("calendar_feeds").select("id, household_id, created_by, display_name, feed_url").eq("household_id", householdId).eq("created_by", user.id).eq("enabled", true);
     const { data: feeds, error } = feedId ? await base.eq("id", feedId) : await base;
     if (error) throw error;
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
     for (const feed of feeds ?? []) {
       const response = await fetch(appleFeedUrl(feed.feed_url), { cache: "no-store" });
       if (!response.ok) throw new Error(`Could not read ${feed.display_name}.`);
-      const parsedEvents = parseIcal(await response.text()).flatMap(appleOccurrences);
+      const parsedEvents = parseIcal(await response.text(), householdTimeZone).flatMap(appleOccurrences);
       const externalIds = parsedEvents.map((event) => `${feed.id}:${event.uid}`);
       const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
       const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
