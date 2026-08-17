@@ -209,6 +209,7 @@ export default function Home() {
   const [dark, setDark] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [sunTimes, setSunTimes] = useState<{ sunrise: number; sunset: number } | null>(null);
+  const [seasonalScreenSaver, setSeasonalScreenSaver] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
   const [todayKey, setTodayKey] = useState(() => new Date().toDateString());
   const [user, setUser] = useState<User | null>(null);
@@ -241,17 +242,26 @@ export default function Home() {
   const [celebratingChoreId, setCelebratingChoreId] = useState<string | number | null>(null);
 
   useEffect(() => {
-    if (screenSaver) return;
-    let timeout = window.setTimeout(() => setScreenSaver(true), 10 * 60_000);
-    const resetIdleTimer = () => {
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(() => setScreenSaver(true), 10 * 60_000);
+    if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
+    let seasonalTimeout: number | undefined;
+    let photoTimeout: number | undefined;
+    const startTimers = () => {
+      window.clearTimeout(seasonalTimeout);
+      window.clearTimeout(photoTimeout);
+      if (new Date().getMonth() === 9) seasonalTimeout = window.setTimeout(() => setSeasonalScreenSaver(true), 5 * 60_000);
+      photoTimeout = window.setTimeout(() => setScreenSaver(true), 15 * 60_000);
     };
+    const resetIdleTimer = () => {
+      setSeasonalScreenSaver(false);
+      startTimers();
+    };
+    startTimers();
     window.addEventListener("pointerdown", resetIdleTimer, { passive: true });
     window.addEventListener("keydown", resetIdleTimer);
     window.addEventListener("scroll", resetIdleTimer, { passive: true });
     return () => {
-      window.clearTimeout(timeout);
+      window.clearTimeout(seasonalTimeout);
+      window.clearTimeout(photoTimeout);
       window.removeEventListener("pointerdown", resetIdleTimer);
       window.removeEventListener("keydown", resetIdleTimer);
       window.removeEventListener("scroll", resetIdleTimer);
@@ -934,6 +944,7 @@ export default function Home() {
   if (supabase && user && dataReady && !householdId) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><span className="text-5xl">🏠</span>{inviteMessage ? <><h1 className="mt-5 text-2xl font-bold">We couldn&apos;t join this home</h1><p className="mt-2 text-slate-500">{inviteMessage}</p><button onClick={() => void supabase!.auth.signOut()} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Sign in with the invited email</button></> : <><h1 className="mt-5 text-2xl font-bold">Create your family home</h1><p className="mt-2 text-slate-500">This private space will hold your shared calendar, chores, and adult to-dos.</p><button onClick={createHousehold} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Create household</button></>}</section></main>;
 
   if (screenSaver) return <Screensaver onExit={() => setScreenSaver(false)} />;
+  if (seasonalScreenSaver) return <SeasonalScreensaver onExit={() => setSeasonalScreenSaver(false)} />;
 
   return (
     <main className={dark ? "dark min-h-screen" : "min-h-screen"}>
@@ -1232,6 +1243,13 @@ function Screensaver({ onExit }: { onExit: () => void }) {
     return () => window.clearInterval(interval);
   }, []);
   return <main className="min-h-screen cursor-pointer bg-[radial-gradient(circle_at_30%_20%,#fbcfe8,transparent_24%),radial-gradient(circle_at_70%_70%,#bfdbfe,transparent_28%),linear-gradient(120deg,#312e81,#0f766e)] p-5 text-white md:p-8" onPointerDown={onExit}><div className="flex h-[calc(100vh-2.5rem)] flex-col justify-between rounded-[2rem] border border-white/25 bg-black/10 p-7 backdrop-blur-sm md:h-[calc(100vh-4rem)] md:p-8"><div className="flex items-center justify-between text-sm font-medium text-white/80 md:text-lg"><span>{timeGreeting().replace("GOOD ", "Good ")}, family</span><span>Tap anywhere to return</span></div><div><p className="text-7xl font-semibold tracking-tight sm:text-8xl md:text-9xl">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p><p className="mt-3 text-xl text-white/80 md:text-2xl">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div><div className="flex flex-wrap items-center gap-3 text-sm md:text-lg"><span className="rounded-full bg-white/20 px-4 py-2">✦ Family time</span><span className="rounded-full bg-white/20 px-4 py-2">Photo memories coming soon</span></div></div></main>;
+}
+
+function SeasonalScreensaver({ onExit }: { onExit: () => void }) {
+  return <main className="relative min-h-screen cursor-pointer overflow-hidden bg-[#120617] text-white" onPointerDown={onExit} aria-label="Halloween screensaver. Tap anywhere to return.">
+    <video autoPlay loop muted playsInline className="absolute inset-0 size-full object-cover" src="/180287-863802333_tiny.mp4" />
+    <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-6 py-6 text-center text-sm font-semibold tracking-wide text-white/90 md:px-10 md:py-8 md:text-base">Halloween mode · Tap anywhere to return</div>
+  </main>;
 }
 
 function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[]; members: Member[]; onAdd: () => void; onToggle: (id: string | number) => void; onEdit: (todo: Todo) => void }) {
