@@ -9,7 +9,7 @@ create index if not exists events_series_external_id_idx
   on public.events (household_id, source, series_external_id)
   where series_external_id is not null;
 
-create table public.calendar_series_member_assignments (
+create table if not exists public.calendar_series_member_assignments (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references public.households(id) on delete cascade,
   created_by uuid not null references auth.users(id) on delete cascade,
@@ -21,10 +21,12 @@ create table public.calendar_series_member_assignments (
   unique (household_id, source, series_external_id)
 );
 
-create index calendar_series_member_assignments_lookup_idx
+create index if not exists calendar_series_member_assignments_lookup_idx
   on public.calendar_series_member_assignments (household_id, source, series_external_id);
 
 alter table public.calendar_series_member_assignments enable row level security;
+
+drop policy if exists "members access recurring event assignments" on public.calendar_series_member_assignments;
 
 create policy "members access recurring event assignments"
 on public.calendar_series_member_assignments for all
