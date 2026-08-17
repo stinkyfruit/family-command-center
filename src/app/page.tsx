@@ -40,6 +40,10 @@ type Event = { id: string | number; title: string; time: string; person: string;
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
+
+function localDateInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
 const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
@@ -191,7 +195,7 @@ export default function Home() {
   ]);
   const [newItem, setNewItem] = useState("");
   const [showEventForm, setShowEventForm] = useState(false);
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(() => localDateInputValue(new Date()));
   const [eventTime, setEventTime] = useState("09:00");
   const [eventEndTime, setEventEndTime] = useState("10:00");
   const [eventAllDay, setEventAllDay] = useState(false);
@@ -885,9 +889,17 @@ export default function Home() {
   }
 
   async function saveEvent(event: Event) {
+    const previous = events.find((item) => item.id === event.id);
     setEvents((items) => items.map((item) => item.id === event.id ? event : item));
+    if (supabase && householdId) {
+      const { error } = await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, ends_at: event.endsAt ?? null, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true, member_ids: event.memberIds ?? [], member_ids_override: Boolean(event.seriesExternalId) }).eq("id", event.id).eq("household_id", householdId);
+      if (error) {
+        if (previous) setEvents((items) => items.map((item) => item.id === previous.id ? previous : item));
+        window.alert(`Could not save this event: ${error.message}`);
+        return;
+      }
+    }
     setEditingEvent(null);
-    if (supabase && householdId) await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, ends_at: event.endsAt ?? null, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true, member_ids: event.memberIds ?? [], member_ids_override: Boolean(event.seriesExternalId) }).eq("id", event.id).eq("household_id", householdId);
   }
 
   async function applySeriesMembers(event: Event, memberIds: string[]) {
@@ -1205,14 +1217,14 @@ function EventEditor({ event, members, onClose, onSave, onApplySeries, onDelete 
   const source = new Date(event.startsAt);
   const endSource = event.endsAt ? new Date(event.endsAt) : new Date(source.getTime() + 60 * 60_000);
   const [title, setTitle] = useState(event.title);
-  const [date, setDate] = useState(event.allDay ? `${source.getUTCFullYear()}-${String(source.getUTCMonth() + 1).padStart(2, "0")}-${String(source.getUTCDate()).padStart(2, "0")}` : source.toISOString().slice(0, 10));
+  const [date, setDate] = useState(event.allDay ? `${source.getUTCFullYear()}-${String(source.getUTCMonth() + 1).padStart(2, "0")}-${String(source.getUTCDate()).padStart(2, "0")}` : localDateInputValue(source));
   const [time, setTime] = useState(source.toTimeString().slice(0, 5));
   const [endTime, setEndTime] = useState(endSource.toTimeString().slice(0, 5));
   const [location, setLocation] = useState(event.location ?? "");
   const [category, setCategory] = useState(event.category ?? "General");
   const [allDay, setAllDay] = useState(event.allDay ?? event.time === "All day");
   const [memberIds, setMemberIds] = useState(event.memberIds ?? []);
-  function submit(formEvent: FormEvent) { formEvent.preventDefault(); const startsAt = new Date(`${date}T${time}:00`); const selectedEnd = new Date(`${date}T${endTime}:00`); const endsAt = allDay ? null : (selectedEnd > startsAt ? selectedEnd : new Date(startsAt.getTime() + 60 * 60_000)); onSave({ ...event, title: title.trim(), startsAt: startsAt.toISOString(), endsAt: endsAt?.toISOString() ?? null, time: allDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), location: location.trim() || null, category, allDay, memberIds }); }
+  function submit(formEvent: FormEvent) { formEvent.preventDefault(); const startsAt = allDay ? new Date(`${date}T00:00:00.000Z`) : new Date(`${date}T${time}:00`); const selectedEnd = new Date(`${date}T${endTime}:00`); const endsAt = allDay ? null : (selectedEnd > startsAt ? selectedEnd : new Date(startsAt.getTime() + 60 * 60_000)); onSave({ ...event, title: title.trim(), startsAt: startsAt.toISOString(), endsAt: endsAt?.toISOString() ?? null, time: allDay ? "All day" : startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), location: location.trim() || null, category, allDay, memberIds }); }
   const canApplyToSeries = Boolean(event.seriesExternalId && (event.source === "google" || event.source === "apple"));
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5"><form onSubmit={submit} className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">EDIT EVENT</p><h2 className="text-2xl font-bold">Make a change</h2></div><button type="button" onClick={onClose} className="text-2xl text-slate-400">×</button></div><label className="mt-5 block text-sm font-bold">Event title<input required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3"><label className="col-span-2 text-sm font-bold sm:col-span-1">Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="text-sm font-bold">Starts<input disabled={allDay} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label><label className="text-sm font-bold">Ends<input disabled={allDay} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-50" /></label></div><label className="mt-4 block text-sm font-bold">Location<input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label><label className="mt-4 block text-sm font-bold">Category<select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><fieldset className="mt-4"><legend className="text-sm font-bold">Who is this for?</legend><div className="mt-2 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = memberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset>{canApplyToSeries && <div className="mt-4 rounded-xl bg-violet-50 p-3"><p className="text-xs font-semibold text-violet-800">Apply the selected people to every occurrence of this recurring event, including future syncs.</p><button type="button" onClick={() => onApplySeries(event, memberIds)} className="mt-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white">Apply people to entire series</button></div>}<label className="mt-4 flex gap-2 text-sm font-bold"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label><div className="mt-6 flex items-center justify-between gap-3"><button type="button" onClick={() => onDelete(event)} className="rounded-xl px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Delete event</button><div className="flex gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2 font-bold text-slate-500">Cancel</button><button className="rounded-xl bg-violet-600 px-5 py-2 font-bold text-white">Save event</button></div></div></form></div>;
 }
