@@ -16,7 +16,7 @@ import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.
 import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
 import sunnyAnimation from "../../public/animations/general/weather/sunny.json";
 
-const celebrationAnimations = [
+const generalCompletionAnimations = [
   "/animations/general/completions/celebrate.json",
   "/animations/general/completions/frog-catching-insect.json",
   "/animations/general/completions/cute-mascot-jumping.json",
@@ -28,11 +28,36 @@ const celebrationAnimations = [
   "/animations/general/completions/thumbs-up-birdie.json",
 ] as const;
 
+const halloweenCompletionAnimations = [
+  "/animations/holidays/halloween/completions/death-dance.json",
+  "/animations/holidays/halloween/completions/funny-halloween.json",
+  "/animations/holidays/halloween/completions/monster-flying.json",
+  "/animations/holidays/halloween/completions/pumpkin-animation.json",
+  "/animations/holidays/halloween/completions/pumpkin-black-cat.json",
+  "/animations/holidays/halloween/completions/ghost.json",
+  "/animations/holidays/halloween/completions/pumpkin-cat.json",
+  "/animations/holidays/halloween/completions/scary-ghost.json",
+  "/animations/holidays/halloween/completions/skull-eye-roll.json",
+  "/animations/holidays/halloween/completions/spider-walking.json",
+  "/animations/holidays/halloween/completions/spooky-hand.json",
+] as const;
+
+const halloweenScreensaverVideos = [
+  "/animations/holidays/halloween/screensavers/halloween-screensaver-1.mp4",
+  "/animations/holidays/halloween/screensavers/halloween-screensaver-2.mp4",
+] as const;
+
+function isHalloweenSeason() {
+  return new Date().getMonth() === 9;
+}
+
 function pickCelebrationAnimation() {
-  const lastAnimation = window.sessionStorage.getItem("family-last-celebration-animation");
-  const choices = celebrationAnimations.filter((animation) => animation !== lastAnimation);
-  const animation = choices[Math.floor(Math.random() * choices.length)] ?? celebrationAnimations[0];
-  window.sessionStorage.setItem("family-last-celebration-animation", animation);
+  const animations = isHalloweenSeason() ? halloweenCompletionAnimations : generalCompletionAnimations;
+  const storageKey = isHalloweenSeason() ? "family-last-halloween-celebration-animation" : "family-last-celebration-animation";
+  const lastAnimation = window.sessionStorage.getItem(storageKey);
+  const choices = animations.filter((animation) => animation !== lastAnimation);
+  const animation = choices[Math.floor(Math.random() * choices.length)] ?? animations[0];
+  window.sessionStorage.setItem(storageKey, animation);
   return animation;
 }
 
@@ -1246,8 +1271,9 @@ function Screensaver({ onExit }: { onExit: () => void }) {
 }
 
 function SeasonalScreensaver({ onExit }: { onExit: () => void }) {
+  const [video] = useState(() => halloweenScreensaverVideos[Math.floor(Math.random() * halloweenScreensaverVideos.length)] ?? halloweenScreensaverVideos[0]);
   return <main className="relative min-h-screen cursor-pointer overflow-hidden bg-[#120617] text-white" onPointerDown={onExit} aria-label="Halloween screensaver. Tap anywhere to return.">
-    <video autoPlay loop muted playsInline className="absolute inset-0 size-full object-cover" src="/animations/holidays/halloween/halloween-screensaver.mp4" />
+    <video autoPlay loop muted playsInline className="absolute inset-0 size-full object-cover" src={video} />
     <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-6 py-6 text-center text-sm font-semibold tracking-wide text-white/90 md:px-10 md:py-8 md:text-base">Halloween mode · Tap anywhere to return</div>
   </main>;
 }
