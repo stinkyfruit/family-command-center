@@ -15,7 +15,7 @@ function appleFeedUrl(value: string) {
 }
 
 function appleOccurrences(event: ReturnType<typeof parseIcal>[number]) {
-  if (!event.recurrenceRule?.includes("FREQ=YEARLY")) return [{ ...event, occurrenceId: event.uid }];
+  if (!event.recurrenceRule?.includes("FREQ=YEARLY")) return [{ ...event, occurrenceId: event.uid, seriesUid: event.recurrenceRule ? event.uid : null }];
   const start = new Date(event.startsAt);
   const end = event.endsAt ? new Date(event.endsAt) : null;
   const duration = end ? end.getTime() - start.getTime() : null;
@@ -25,7 +25,7 @@ function appleOccurrences(event: ReturnType<typeof parseIcal>[number]) {
     const occurrenceStart = new Date(start);
     occurrenceStart.setUTCFullYear(year);
     const occurrenceEnd = duration === null ? null : new Date(occurrenceStart.getTime() + duration);
-    return { ...event, uid: `${event.uid}:${year}`, startsAt: occurrenceStart.toISOString(), endsAt: occurrenceEnd?.toISOString() ?? null, occurrenceId: `${event.uid}:${year}` };
+    return { ...event, uid: `${event.uid}:${year}`, startsAt: occurrenceStart.toISOString(), endsAt: occurrenceEnd?.toISOString() ?? null, occurrenceId: `${event.uid}:${year}`, seriesUid: event.uid };
   });
 }
 
@@ -47,12 +47,17 @@ export async function POST(request: NextRequest) {
       const parsedEvents = parseIcal(await response.text(), householdTimeZone).flatMap(appleOccurrences);
       const externalIds = parsedEvents.map((event) => `${feed.id}:${event.uid}`);
       const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("calendar_feed_id", feed.id);
-      const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
+      const seriesExternalIds = [...new Set(parsedEvents.flatMap((event) => event.seriesUid ? [`${feed.id}:${event.seriesUid}`] : []))];
+      const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override, member_ids, member_ids_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
+      const { data: seriesAssignments } = seriesExternalIds.length ? await admin.from("calendar_series_member_assignments").select("series_external_id, member_ids").eq("household_id", feed.household_id).eq("source", "apple").in("series_external_id", seriesExternalIds) : { data: [] };
       const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
+      const assignmentsBySeriesId = new Map((seriesAssignments ?? []).map((assignment) => [assignment.series_external_id, assignment.member_ids]));
       const events = parsedEvents.map((event) => {
         const externalId = `${feed.id}:${event.uid}`;
         const existing = existingByExternalId.get(externalId);
-        return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false };
+        const seriesExternalId = event.seriesUid ? `${feed.id}:${event.seriesUid}` : null;
+        const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
+        return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, series_external_id: seriesExternalId, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false, ...(existing?.member_ids_override ? { member_ids: existing.member_ids, member_ids_override: true } : seriesMemberIds ? { member_ids: seriesMemberIds, member_ids_override: false } : {}) };
       });
       if (events.length) {
         const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });

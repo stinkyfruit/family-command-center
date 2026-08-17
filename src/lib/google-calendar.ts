@@ -71,21 +71,27 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&maxResults=2500`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
-  const googleItems = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled") as { id: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
+  const googleItems = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled") as { id: string; recurringEventId?: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
   const externalIds = googleItems.map((item) => item.id);
   const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("google_calendar_connection_id", connection.id);
-  const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
+  const seriesExternalIds = [...new Set(googleItems.flatMap((item) => item.recurringEventId ? [`${connection.id}:${item.recurringEventId}`] : []))];
+  const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override, member_ids, member_ids_override").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
+  const { data: seriesAssignments } = seriesExternalIds.length ? await admin.from("calendar_series_member_assignments").select("series_external_id, member_ids").eq("household_id", connection.household_id).eq("source", "google").in("series_external_id", seriesExternalIds) : { data: [] };
   const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
+  const assignmentsBySeriesId = new Map((seriesAssignments ?? []).map((assignment) => [assignment.series_external_id, assignment.member_ids]));
   const events = googleItems.map((item) => {
     const existing = existingByExternalId.get(item.id);
+    const seriesExternalId = item.recurringEventId ? `${connection.id}:${item.recurringEventId}` : null;
+    const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
     const title = item.summary || "Untitled event";
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
     const isBirthday = category === "Birthday";
     return {
-    household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
+    household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, series_external_id: seriesExternalId, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
     category,
     category_override: existing?.category_override ?? false,
+    ...(existing?.member_ids_override ? { member_ids: existing.member_ids, member_ids_override: true } : seriesMemberIds ? { member_ids: seriesMemberIds, member_ids_override: false } : {}),
   };
   });
   if (events.length) {
