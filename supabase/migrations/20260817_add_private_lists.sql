@@ -1,9 +1,9 @@
 -- PIN-gated lists are stored separately, never included in the ordinary lists query.
-create table private.household_private_lists (
+create table if not exists private.household_private_lists (
   id uuid primary key default gen_random_uuid(), household_id uuid not null references public.households(id) on delete cascade,
   title text not null, icon text not null default 'gift', created_at timestamptz not null default now()
 );
-create table private.household_private_list_items (
+create table if not exists private.household_private_list_items (
   id uuid primary key default gen_random_uuid(), list_id uuid not null references private.household_private_lists(id) on delete cascade,
   title text not null, completed boolean not null default false, created_at timestamptz not null default now()
 );
