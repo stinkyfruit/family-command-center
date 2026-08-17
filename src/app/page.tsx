@@ -3,7 +3,9 @@
 import { FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
+import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
+import celebrateAnimation from "../../public/celebrate-01.json";
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
@@ -1233,7 +1235,15 @@ function TaskEditor({ title, dueDate, assigneeMemberId, members, editing, onTitl
 }
 
 function ChoreCelebration() {
-  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm"><div className="relative grid place-items-center"><span className="celebration-firework celebration-firework-one"/><span className="celebration-firework celebration-firework-two"/><span className="celebration-firework celebration-firework-three"/><img src="/celebration-comet.png" alt="" className="max-h-[70vh] max-w-[92vw] animate-[bounce_900ms_ease-in-out_3] object-contain mix-blend-screen drop-shadow-2xl"/></div></div>;
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label="Routine complete"><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={celebrateAnimation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
 }
 
 function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {

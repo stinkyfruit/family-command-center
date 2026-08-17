@@ -76,28 +76,6 @@ article .space-y-2 > button > span:first-child.text-emerald-500::after {
   100% { transform: scale(1); }
 }
 
-.celebration-firework {
-  position: absolute;
-  width: min(42vw, 32rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: repeating-conic-gradient(from 12deg, #fef08a 0deg 5deg, transparent 6deg 22deg, #f9a8d4 23deg 28deg, transparent 29deg 46deg, #93c5fd 47deg 52deg, transparent 53deg 70deg);
-  mask-image: radial-gradient(circle, transparent 0 22%, #000 24% 34%, transparent 36%);
-  opacity: 0;
-  animation: firework-burst 2.7s cubic-bezier(.1, .7, .2, 1) both;
-}
-
-.celebration-firework-one { translate: -42% -34%; }
-.celebration-firework-two { translate: 42% -20%; scale: .78; animation-delay: .3s; }
-.celebration-firework-three { translate: 5% 42%; scale: .65; animation-delay: .55s; }
-
-@keyframes firework-burst {
-  0% { opacity: 0; transform: scale(.12); }
-  15% { opacity: 1; }
-  65% { opacity: .9; }
-  100% { opacity: 0; transform: scale(1.35); }
-}
-
 /* One visual language for destructive actions across lists, chores, and events. */
 button[title^="Delete"],
 form button[type="button"].text-rose-600 {
