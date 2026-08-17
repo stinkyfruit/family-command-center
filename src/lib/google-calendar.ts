@@ -68,11 +68,12 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   }
   const start = new Date();
   const end = new Date(); end.setFullYear(end.getFullYear() + 1);
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&maxResults=2500`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
   const googleItems = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled") as { id: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
   const externalIds = googleItems.map((item) => item.id);
+  const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("google_calendar_connection_id", connection.id);
   const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
   const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
   const events = googleItems.map((item) => {
@@ -81,7 +82,7 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
     const isBirthday = category === "Birthday";
     return {
-    household_id: connection.household_id, created_by: connection.connected_by, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
+    household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
     category,
     category_override: existing?.category_override ?? false,
@@ -90,6 +91,13 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   if (events.length) {
     const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });
     if (upsertError) throw upsertError;
+  }
+  // Only remove events that a prior sync already tied to this exact calendar.
+  // If Google gave us a paginated result, leave cleanup for the next complete sync.
+  const removedIds = (trackedEvents ?? []).filter((event) => !externalIds.includes(event.external_id)).map((event) => event.id);
+  if (!result.nextPageToken && removedIds.length) {
+    const { error: cleanupError } = await admin.from("events").delete().in("id", removedIds);
+    if (cleanupError) throw cleanupError;
   }
   await admin.from("google_calendar_connections").update({ last_synced_at: new Date().toISOString() }).eq("id", connection.id);
   return events.length;

@@ -46,16 +46,22 @@ export async function POST(request: NextRequest) {
       if (!response.ok) throw new Error(`Could not read ${feed.display_name}.`);
       const parsedEvents = parseIcal(await response.text(), householdTimeZone).flatMap(appleOccurrences);
       const externalIds = parsedEvents.map((event) => `${feed.id}:${event.uid}`);
+      const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("calendar_feed_id", feed.id);
       const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
       const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
       const events = parsedEvents.map((event) => {
         const externalId = `${feed.id}:${event.uid}`;
         const existing = existingByExternalId.get(externalId);
-        return { household_id: feed.household_id, created_by: feed.created_by, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false };
+        return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false };
       });
       if (events.length) {
         const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });
         if (upsertError) throw upsertError;
+      }
+      const removedIds = (trackedEvents ?? []).filter((event) => !externalIds.includes(event.external_id)).map((event) => event.id);
+      if (removedIds.length) {
+        const { error: cleanupError } = await admin.from("events").delete().in("id", removedIds);
+        if (cleanupError) throw cleanupError;
       }
       await admin.from("calendar_feeds").update({ last_synced_at: new Date().toISOString() }).eq("id", feed.id);
       imported += events.length;

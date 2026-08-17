@@ -52,8 +52,11 @@ export async function POST(request: NextRequest) {
     if (!eventsResponse.ok) throw new Error(calendar.error?.message ?? "Google Calendar could not be read.");
     const externalIds = (calendar.items ?? []).filter((event: { status?: string }) => event.status !== "cancelled").map((event: { id: string }) => event.id).filter(Boolean);
 
+    const { error: trackedEventsError } = await admin.from("events").delete().eq("household_id", householdId).eq("source", "google").eq("google_calendar_connection_id", connection.id);
+    if (trackedEventsError) throw trackedEventsError;
+
     if (externalIds.length) {
-      const { error: eventsError } = await admin.from("events").delete().eq("household_id", householdId).eq("source", "google").in("external_id", externalIds);
+      const { error: eventsError } = await admin.from("events").delete().eq("household_id", householdId).eq("source", "google").is("google_calendar_connection_id", null).in("external_id", externalIds);
       if (eventsError) throw eventsError;
     }
 
