@@ -1329,6 +1329,7 @@ function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[];
                 <article key={todo.id} className="flex min-h-16 items-center gap-3 rounded-2xl bg-emerald-50 p-3 text-emerald-800 shadow-sm dark:bg-emerald-400/10 dark:text-emerald-200">
                   <button onClick={() => onToggle(todo.id)} aria-label={`Restore ${todo.title}`} className="grid size-9 shrink-0 place-items-center rounded-lg border-2 border-emerald-500 bg-emerald-500 text-xl font-black text-white">✓</button>
                   <button onClick={() => onEdit(todo)} className="min-w-0 flex-1 text-left text-sm font-bold line-through">{todo.title}</button>
+                  <button onClick={() => onToggle(todo.id)} className="shrink-0 rounded-xl bg-white/80 px-3 py-2 text-xs font-black text-emerald-700 shadow-sm ring-1 ring-emerald-200 hover:bg-white dark:bg-white/10 dark:text-emerald-100 dark:ring-white/15">Restore</button>
                   <button onClick={() => deleteTodo(todo.id)} title={`Delete ${todo.title}`} aria-label={`Permanently delete ${todo.title}`} className="grid size-10 shrink-0 place-items-center rounded-xl border border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button>
                 </article>
               ))}
