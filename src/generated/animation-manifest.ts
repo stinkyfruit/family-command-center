@@ -1,0 +1,35 @@
+// This file is generated automatically. Do not edit it by hand.
+export const generalCompletionAnimations = [
+  "/animations/general/completions/3D%20Cute%20Planet.json",
+  "/animations/general/completions/Animation%20-%20Sophie%20Hatter.json",
+  "/animations/general/completions/Bouncy.json",
+  "/animations/general/completions/celebrate.json",
+  "/animations/general/completions/cute-mascot-jumping.json",
+  "/animations/general/completions/Death%20Dance.json",
+  "/animations/general/completions/fox%20greetings.json",
+  "/animations/general/completions/frog-catching-insect.json",
+  "/animations/general/completions/happy-star.json",
+  "/animations/general/completions/Little%20spider%20-%20Halloween.json",
+  "/animations/general/completions/lurking-cat.json",
+  "/animations/general/completions/robot-says-hello.json",
+  "/animations/general/completions/sloth-meditating.json",
+  "/animations/general/completions/Spiderman.json",
+  "/animations/general/completions/sundae-sit.json",
+  "/animations/general/completions/thumbs-up-birdie.json",
+  "/animations/general/completions/Two%20Pears.json"
+] as const;
+
+export const halloweenCompletionAnimations = [
+  "/animations/holidays/halloween/completions/death-dance.json",
+  "/animations/holidays/halloween/completions/funny-halloween.json",
+  "/animations/holidays/halloween/completions/ghost.json",
+  "/animations/holidays/halloween/completions/monster-flying.json",
+  "/animations/holidays/halloween/completions/pumpkin-animation.json",
+  "/animations/holidays/halloween/completions/pumpkin-black-cat.json",
+  "/animations/holidays/halloween/completions/pumpkin-cat.json",
+  "/animations/holidays/halloween/completions/Pumpkin%20Loader.json",
+  "/animations/holidays/halloween/completions/scary-ghost.json",
+  "/animations/holidays/halloween/completions/skull-eye-roll.json",
+  "/animations/holidays/halloween/completions/spider-walking.json",
+  "/animations/holidays/halloween/completions/spooky-hand.json"
+] as const;

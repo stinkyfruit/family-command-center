@@ -15,32 +15,7 @@ import snowAnimation from "@meteocons/lottie/flat/snow.json";
 import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.json";
 import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
 import sunnyAnimation from "../../public/animations/general/weather/sunny.json";
-
-const generalCompletionAnimations = [
-  "/animations/general/completions/celebrate.json",
-  "/animations/general/completions/frog-catching-insect.json",
-  "/animations/general/completions/cute-mascot-jumping.json",
-  "/animations/general/completions/happy-star.json",
-  "/animations/general/completions/lurking-cat.json",
-  "/animations/general/completions/robot-says-hello.json",
-  "/animations/general/completions/sloth-meditating.json",
-  "/animations/general/completions/sundae-sit.json",
-  "/animations/general/completions/thumbs-up-birdie.json",
-] as const;
-
-const halloweenCompletionAnimations = [
-  "/animations/holidays/halloween/completions/death-dance.json",
-  "/animations/holidays/halloween/completions/funny-halloween.json",
-  "/animations/holidays/halloween/completions/monster-flying.json",
-  "/animations/holidays/halloween/completions/pumpkin-animation.json",
-  "/animations/holidays/halloween/completions/pumpkin-black-cat.json",
-  "/animations/holidays/halloween/completions/ghost.json",
-  "/animations/holidays/halloween/completions/pumpkin-cat.json",
-  "/animations/holidays/halloween/completions/scary-ghost.json",
-  "/animations/holidays/halloween/completions/skull-eye-roll.json",
-  "/animations/holidays/halloween/completions/spider-walking.json",
-  "/animations/holidays/halloween/completions/spooky-hand.json",
-] as const;
+import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 
 const halloweenScreensaverVideos = [
   "/animations/holidays/halloween/screensavers/halloween-screensaver-1.mp4",
