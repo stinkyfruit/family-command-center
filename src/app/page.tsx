@@ -199,7 +199,7 @@ export default function Home() {
   const [eventLocation, setEventLocation] = useState("");
   const [eventCategory, setEventCategory] = useState("General");
   const [calendarAnchor, setCalendarAnchor] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<"home" | "calendar" | "tasks" | "chores" | "lists" | "settings">("calendar");
+  const [activeTab, setActiveTab] = useState<"home" | "calendar" | "tasks" | "chores" | "lists" | "settings">("home");
   const [weather, setWeather] = useState<Weather | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
