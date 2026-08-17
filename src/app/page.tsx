@@ -1232,7 +1232,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
   const children = members.filter((member) => member.role === "child");
   const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
-  const sortedChores = [...chores].sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
+  const sortedChores = chores.filter((chore) => chore.routine === "To-do" || chore.isFixed).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
 
   useEffect(() => {
     const choreById = new Map(chores.map((chore) => [String(chore.id), chore]));
