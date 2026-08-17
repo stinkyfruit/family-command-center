@@ -14,18 +14,18 @@ import rainAnimation from "@meteocons/lottie/flat/rain.json";
 import snowAnimation from "@meteocons/lottie/flat/snow.json";
 import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.json";
 import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
-import sunnyAnimation from "../../public/Sunny.json";
+import sunnyAnimation from "../../public/animations/general/weather/sunny.json";
 
 const celebrationAnimations = [
-  "/celebrate-01.json",
-  "/A%20frog%20catching%20an%20insect%20in%20animation%20style.json",
-  "/Cute%20Mascot%20Jumping%20Character.json",
-  "/Happy%20Star.json",
-  "/Lurking%20Cat.json",
-  "/Robot%20says%20hello.json",
-  "/Sloth%20doing%20meditation.json",
-  "/Sundae%20Sit.json",
-  "/Thumbs%20up%20birdie.json",
+  "/animations/general/completions/celebrate.json",
+  "/animations/general/completions/frog-catching-insect.json",
+  "/animations/general/completions/cute-mascot-jumping.json",
+  "/animations/general/completions/happy-star.json",
+  "/animations/general/completions/lurking-cat.json",
+  "/animations/general/completions/robot-says-hello.json",
+  "/animations/general/completions/sloth-meditating.json",
+  "/animations/general/completions/sundae-sit.json",
+  "/animations/general/completions/thumbs-up-birdie.json",
 ] as const;
 
 function pickCelebrationAnimation() {
@@ -979,7 +979,7 @@ export default function Home() {
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
       {showTodoForm && <TaskEditor title={todoTitle} dueDate={todoDueDate} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onDueDateChange={setTodoDueDate} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
       {celebratingTaskId !== null && <ChoreCelebration />}
-      {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/Birthday-Animation.json" />}
+      {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/animations/holidays/birthday/birthday.json" />}
     </main>
   );
 }
@@ -1247,7 +1247,7 @@ function Screensaver({ onExit }: { onExit: () => void }) {
 
 function SeasonalScreensaver({ onExit }: { onExit: () => void }) {
   return <main className="relative min-h-screen cursor-pointer overflow-hidden bg-[#120617] text-white" onPointerDown={onExit} aria-label="Halloween screensaver. Tap anywhere to return.">
-    <video autoPlay loop muted playsInline className="absolute inset-0 size-full object-cover" src="/180287-863802333_tiny.mp4" />
+    <video autoPlay loop muted playsInline className="absolute inset-0 size-full object-cover" src="/animations/holidays/halloween/halloween-screensaver.mp4" />
     <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-6 py-6 text-center text-sm font-semibold tracking-wide text-white/90 md:px-10 md:py-8 md:text-base">Halloween mode · Tap anywhere to return</div>
   </main>;
 }
