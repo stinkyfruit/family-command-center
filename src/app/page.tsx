@@ -430,15 +430,21 @@ export default function Home() {
   useEffect(() => {
     async function loadWeather(latitude: number, longitude: number) {
       try {
-        const [weatherResponse, placeResponse] = await Promise.all([
-          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&timeformat=unixtime`),
-          fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`),
-        ]);
-        const [data, place] = await Promise.all([weatherResponse.json(), placeResponse.json()]);
-        const address = place.address ?? {};
-        const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.suburb ?? address.city_district ?? address.county ?? "Your location";
-        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: city, code: data.current.weather_code, isDay: Boolean(data.current.is_day) });
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&timeformat=unixtime`);
+        if (!weatherResponse.ok) throw new Error("Weather request failed");
+        const data = await weatherResponse.json();
+        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: "Local forecast", code: data.current.weather_code, isDay: Boolean(data.current.is_day) });
         if (data.daily.sunrise?.[0] && data.daily.sunset?.[0]) setSunTimes({ sunrise: data.daily.sunrise[0] * 1000, sunset: data.daily.sunset[0] * 1000 });
+
+        // A city name is nice to have, but its lookup must never hide usable weather.
+        try {
+          const placeResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
+          if (!placeResponse.ok) return;
+          const place = await placeResponse.json();
+          const address = place.address ?? {};
+          const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.suburb ?? address.city_district ?? address.county;
+          if (city) setWeather((current) => current ? { ...current, location: city } : current);
+        } catch { /* Keep the useful "Local forecast" fallback. */ }
       } catch { setWeather(null); }
     }
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
