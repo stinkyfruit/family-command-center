@@ -48,7 +48,7 @@ button[aria-label^="Complete"].task-checking::after { opacity: 1; }
 
 span.rounded-full.border-4 { border-radius: .85rem; }
 
-article .space-y-2 > button > span:first-child {
+article .mt-5.space-y-2 > button > span:first-child {
   display: grid;
   width: 1rem;
   height: 1rem;
@@ -59,12 +59,12 @@ article .space-y-2 > button > span:first-child {
   font-size: 0;
 }
 
-article .space-y-2 > button > span:first-child.text-emerald-500 {
+article .mt-5.space-y-2 > button > span:first-child.text-emerald-500 {
   background: currentColor;
   color: white;
 }
 
-article .space-y-2 > button > span:first-child.text-emerald-500::after {
+article .mt-5.space-y-2 > button > span:first-child.text-emerald-500::after {
   content: "✓";
   font-size: .7rem;
   font-weight: 900;
@@ -192,13 +192,13 @@ button[title^="Delete"]:has(svg)::after {
 }
 
 /* Keep the colorful shared-list cards readable in dark mode. */
-.dark article:has(.space-y-2 > button) .space-y-2 > button {
+.dark article:has(.mt-5.space-y-2 > button) .mt-5.space-y-2 > button {
   background: rgb(15 23 42 / .72);
   color: #f8fafc;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12);
 }
 
-.dark article:has(.space-y-2 > button) .space-y-2 > button > span:last-child {
+.dark article:has(.mt-5.space-y-2 > button) .mt-5.space-y-2 > button > span:last-child {
   color: inherit;
 }
 
