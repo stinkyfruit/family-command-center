@@ -83,6 +83,8 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     const existing = existingByExternalId.get(item.id);
     const seriesExternalId = item.recurringEventId ? `${connection.id}:${item.recurringEventId}` : null;
     const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
+    const memberIds = existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? [];
+    const memberIdsOverride = Boolean(existing?.member_ids_override);
     const title = item.summary || "Untitled event";
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
     const isBirthday = category === "Birthday";
@@ -90,8 +92,7 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, series_external_id: seriesExternalId, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
     category,
-    category_override: existing?.category_override ?? false,
-    ...(existing?.member_ids_override ? { member_ids: existing.member_ids, member_ids_override: true } : seriesMemberIds ? { member_ids: seriesMemberIds, member_ids_override: false } : {}),
+    category_override: existing?.category_override ?? false, member_ids: memberIds, member_ids_override: memberIdsOverride,
   };
   });
   if (events.length) {

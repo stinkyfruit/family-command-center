@@ -57,7 +57,9 @@ export async function POST(request: NextRequest) {
         const existing = existingByExternalId.get(externalId);
         const seriesExternalId = event.seriesUid ? `${feed.id}:${event.seriesUid}` : null;
         const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
-        return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, series_external_id: seriesExternalId, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false, ...(existing?.member_ids_override ? { member_ids: existing.member_ids, member_ids_override: true } : seriesMemberIds ? { member_ids: seriesMemberIds, member_ids_override: false } : {}) };
+        const memberIds = existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? [];
+        const memberIdsOverride = Boolean(existing?.member_ids_override);
+        return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, series_external_id: seriesExternalId, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false, member_ids: memberIds, member_ids_override: memberIdsOverride };
       });
       if (events.length) {
         const { error: upsertError } = await admin.from("events").upsert(events, { onConflict: "household_id,source,external_id" });
