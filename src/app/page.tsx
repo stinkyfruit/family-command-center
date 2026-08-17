@@ -5,7 +5,26 @@ import type { User } from "@supabase/supabase-js";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
-import celebrateAnimation from "../../public/celebrate-01.json";
+
+const celebrationAnimations = [
+  "/celebrate-01.json",
+  "/A%20frog%20catching%20an%20insect%20in%20animation%20style.json",
+  "/Cute%20Mascot%20Jumping%20Character.json",
+  "/Happy%20Star.json",
+  "/Lurking%20Cat.json",
+  "/Robot%20says%20hello.json",
+  "/Sloth%20doing%20meditation.json",
+  "/Sundae%20Sit.json",
+  "/Thumbs%20up%20birdie.json",
+] as const;
+
+function pickCelebrationAnimation() {
+  const lastAnimation = window.sessionStorage.getItem("family-last-celebration-animation");
+  const choices = celebrationAnimations.filter((animation) => animation !== lastAnimation);
+  const animation = choices[Math.floor(Math.random() * choices.length)] ?? celebrationAnimations[0];
+  window.sessionStorage.setItem("family-last-celebration-animation", animation);
+  return animation;
+}
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
@@ -1236,6 +1255,7 @@ function TaskEditor({ title, dueDate, assigneeMemberId, members, editing, onTitl
 
 function ChoreCelebration() {
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [animation] = useState(() => pickCelebrationAnimation());
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReduceMotion(media.matches);
@@ -1243,7 +1263,7 @@ function ChoreCelebration() {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label="Routine complete"><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={celebrateAnimation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
+  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label="Routine complete"><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={animation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
 }
 
 function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
