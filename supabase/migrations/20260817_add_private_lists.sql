@@ -47,3 +47,16 @@ begin
 end; $$;
 revoke all on function public.delete_private_list(text, uuid) from public, anon;
 grant execute on function public.delete_private_list(text, uuid) to authenticated;
+
+create or replace function public.update_private_list_item(p_pin text, p_item_id uuid, p_completed boolean, p_delete boolean default false)
+returns void language plpgsql security definer set search_path = extensions, public, private as $$
+begin
+ perform public.get_private_lists(p_pin);
+ if p_delete then
+   delete from private.household_private_list_items i using private.household_private_lists l, public.members m where i.id=p_item_id and i.list_id=l.id and l.household_id=m.household_id and m.user_id=auth.uid();
+ else
+   update private.household_private_list_items i set completed=p_completed from private.household_private_lists l, public.members m where i.id=p_item_id and i.list_id=l.id and l.household_id=m.household_id and m.user_id=auth.uid();
+ end if;
+end; $$;
+revoke all on function public.update_private_list_item(text, uuid, boolean, boolean) from public, anon;
+grant execute on function public.update_private_list_item(text, uuid, boolean, boolean) to authenticated;
