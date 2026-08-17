@@ -9,7 +9,7 @@ type Event = { id: string | number; title: string; time: string; person: string;
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
-type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean };
+type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
 const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
   { id: "After school", label: "After school & nighttime", icon: "🎒" },
@@ -314,7 +314,7 @@ export default function Home() {
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, source").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
-      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, active").eq("household_id", householdId).order("sort_order").order("created_at"),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active").eq("household_id", householdId).order("sort_order").order("created_at"),
       supabase.from("chore_completions").select("id, chore_id, completed_at").order("completed_at", { ascending: false }),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
@@ -356,7 +356,7 @@ export default function Home() {
         }
         setChores(choreResult.data.map((chore) => {
           const isDaily = chore.is_daily ?? chore.routine !== "To-do";
-          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, completionId: completionByChore.get(chore.id) ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined) };
+          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, completionId: completionByChore.get(chore.id) ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined) };
         }));
       }
       if (listResult.data) {
@@ -639,6 +639,16 @@ export default function Home() {
     return () => window.removeEventListener("family-delete-todo", handleTaskDeletion);
   }, [todos, householdId]);
 
+  useEffect(() => {
+    const handleChoreEdit: EventListener = (event) => {
+      const choreId = (event as unknown as CustomEvent<string | number>).detail;
+      const chore = chores.find((item) => item.id === choreId);
+      if (chore) void editChore(chore);
+    };
+    window.addEventListener("family-edit-chore", handleChoreEdit);
+    return () => window.removeEventListener("family-edit-chore", handleChoreEdit);
+  }, [chores, householdId]);
+
   async function addChild() {
     const name = window.prompt("Child's name?");
     if (!name?.trim() || !householdId) return;
@@ -653,13 +663,26 @@ export default function Home() {
     const title = window.prompt("What is the chore?");
     if (!title?.trim() || !householdId) return;
     const emoji = choreIcon(title);
-    const isDaily = routine !== "To-do";
+    const isDaily = false;
+    const scheduledFor = routine === "To-do" ? null : new Date().toLocaleDateString("en-CA");
     const sortOrder = Math.max(0, ...chores.filter((chore) => String(chore.assigneeMemberId) === String(memberId) && chore.routine === routine).map((chore) => chore.sortOrder)) + 1;
     if (supabase) {
-      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily").single();
+      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, scheduled_for: scheduledFor }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, scheduled_for").single();
       if (error) { window.alert(error.message); return; }
-      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: false }]);
-    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed: false }]);
+      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: false, scheduledFor: data.scheduled_for }]);
+    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed: false, scheduledFor }]);
+  }
+
+  async function editChore(chore: ChoreEntry) {
+    if (chore.isFixed) return;
+    const title = window.prompt("Update this chore", chore.title)?.trim();
+    if (!title || title === chore.title) return;
+    const emoji = choreIcon(title);
+    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title, emoji } : item));
+    if (supabase) {
+      const { error } = await supabase.from("chores").update({ title, emoji }).eq("id", chore.id).eq("household_id", householdId);
+      if (error) { window.alert(`Could not update this chore: ${error.message}`); }
+    }
   }
 
   async function reorderChores(memberId: string | number, routine: string, movedId: string | number, targetId: string | number) {
@@ -690,8 +713,9 @@ export default function Home() {
       }
       return;
     }
+    const today = new Date().toLocaleDateString("en-CA");
     const completesRoutine = chores
-      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine)
+      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine && (item.routine === "To-do" || item.isFixed || item.scheduledFor === today))
       .every((item) => item.id === chore.id || Boolean(item.completionId));
     const choreCard = document.querySelector<HTMLElement>(`[data-chore-id="${String(chore.id)}"]`);
     choreCard?.setAttribute("data-completing", "true");
@@ -1224,8 +1248,17 @@ function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChor
     if (target?.dataset.childId === String(childId) && target.dataset.routine === routine && target.dataset.choreId) onReorder(childId, routine, draggedChoreId, target.dataset.choreId);
     setDraggedChoreId(null);
   }
-  return <WeekdayChoresBoard members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={onAddChild} onAddChore={onAddChore} onToggle={onToggle} onDeleteChore={onDeleteChore} onReorder={onReorder} />;
+  return <><WeekdayChoresBoard members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={onAddChild} onAddChore={onAddChore} onToggle={onToggle} onDeleteChore={onDeleteChore} onReorder={onReorder} /><TemporaryRoutineChores members={members} chores={chores} onAddChore={onAddChore} onDeleteChore={onDeleteChore} /></>;
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Daily routines</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Drag an unfinished chore by its grip to rearrange it inside a routine.</p></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2">{children.map((child) => { const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-5 space-y-5">{choreRoutines.map((routine) => { const routineChores = chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === routine.id); return <section key={routine.id} className="rounded-2xl bg-white/45 p-3"><div className="flex items-center justify-between gap-3"><h4 className="text-sm font-black text-slate-700"><span className="mr-1.5">{routine.icon}</span>{routine.label}</h4><button onClick={() => onAddChore(child.id, routine.id)} aria-label={`Add ${routine.label} chore for ${child.name}`} className="grid size-8 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600 shadow-sm">+</button></div><div className="mt-3 grid gap-3">{routineChores.map((chore) => <div key={chore.id} data-chore-id={String(chore.id)} data-child-id={String(child.id)} data-routine={routine.id} draggable={!chore.completionId} onDragStart={() => setDraggedChoreId(chore.id)} onDragEnd={() => setDraggedChoreId(null)} onDragOver={(event) => { if (!chore.completionId) event.preventDefault(); }} onDrop={() => { if (draggedChoreId !== null && !chore.completionId) onReorder(child.id, routine.id, draggedChoreId, chore.id); setDraggedChoreId(null); }} className={`relative min-w-0 transition ${draggedChoreId === chore.id ? "opacity-45" : ""}`}><button onClick={() => onToggle(chore)} className={`flex min-h-20 w-full items-center gap-2 rounded-2xl bg-white/90 p-3 text-left shadow-sm transition-transform active:scale-[.98] ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span title={chore.completionId ? undefined : "Drag to reorder"} onPointerDown={(event) => startTouchDrag(event, chore)} onPointerUp={(event) => finishTouchDrag(event, child.id, routine.id)} onPointerCancel={() => setDraggedChoreId(null)} onClick={(event) => event.stopPropagation()} className={`shrink-0 select-none touch-none text-base leading-none text-slate-400 ${chore.completionId ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}>⠿</span><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-3xl shadow-sm">{!chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji}</span><span className={`min-w-0 flex-1 text-base font-black leading-tight ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className={`grid size-9 shrink-0 place-items-center rounded-lg border-2 text-xl font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>{celebratingChoreId === chore.id && <ChoreCelebration/>}<button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} className="absolute right-1 top-1 rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-rose-600"><AppIcon name="trash" className="size-3.5"/></button></div>)}{routineChores.length === 0 && <p className="rounded-xl bg-white/50 px-3 py-4 text-center text-xs font-semibold text-slate-600">Add a chore for this routine.</p>}</div></section>; })}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add Michael and Lucas (or anyone else) to create their chore boards.</div>}</div></section>;
+}
+
+function TemporaryRoutineChores({ members, chores, onAddChore, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; onAddChore: (memberId: string | number, routine: string) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
+  const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
+  const today = new Date().toLocaleDateString("en-CA");
+  const children = members.filter((member) => member.role === "child");
+  const temporary = chores.filter((chore) => !chore.isFixed && chore.scheduledFor === today && (chore.routine === "Before school" || chore.routine === "After school"));
+  if (!isWeekday || !children.length) return null;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-violet-50 p-5 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:ring-violet-400/20"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">For today only</p><h2 className="mt-1 text-xl font-black">One-time routine chores</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Add a different task for this morning or afternoon. It will disappear from the routine tomorrow.</p></div><div className="mt-4 grid gap-3 md:grid-cols-2">{children.map((child) => { const childChores = temporary.filter((chore) => chore.assigneeMemberId === child.id); return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-[#242435]/80"><div className="flex items-center justify-between gap-3"><h3 className="font-black">{child.name}</h3><div className="flex gap-2"><button onClick={() => onAddChore(child.id, "Before school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ Morning</button><button onClick={() => onAddChore(child.id, "After school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ After school</button></div></div><div className="mt-3 space-y-2">{childChores.length ? childChores.map((chore) => <div key={chore.id} className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-white/5"><span className="text-lg">{chore.emoji}</span><span className="min-w-0 flex-1 text-sm font-bold">{chore.title}</span><span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-600 dark:bg-white/10 dark:text-violet-200">{chore.routine === "Before school" ? "Morning" : "After school"}</span><button onClick={() => window.dispatchEvent(new CustomEvent("family-edit-chore", { detail: chore.id }))} title={`Edit ${chore.title}`} aria-label={`Edit ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4"/></button><button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} aria-label={`Delete ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 dark:hover:bg-white/10"><AppIcon name="trash" className="size-4"/></button></div>) : <p className="rounded-xl border border-dashed border-violet-200 px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:border-violet-300/25 dark:text-slate-300">Nothing extra today.</p>}</div></article>; })}</div></div></section>;
 }
 
 function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
@@ -1233,11 +1266,12 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
   const children = members.filter((member) => member.role === "child");
   const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
+  const today = new Date().toLocaleDateString("en-CA");
   const fixedRoutineTitles = new Set([
     "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
     "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
   ]);
-  const sortedChores = chores.filter((chore) => chore.routine === "To-do" || fixedRoutineTitles.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
+  const sortedChores = chores.filter((chore) => chore.routine === "To-do" || fixedRoutineTitles.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
 
   useEffect(() => {
     const choreById = new Map(chores.map((chore) => [String(chore.id), chore]));
