@@ -1017,7 +1017,7 @@ function weatherSummary(code: number) {
 }
 
 function weatherAnimation(code: number, isDay: boolean) {
-  if (code === 0) return isDay ? sunnyAnimation : clearNightAnimation;
+  if (code <= 1) return isDay ? sunnyAnimation : clearNightAnimation;
   if (code <= 2) return isDay ? partlyCloudyDayAnimation : partlyCloudyNightAnimation;
   if (code === 3) return cloudyAnimation;
   if (code === 45 || code === 48) return fogAnimation;
