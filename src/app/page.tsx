@@ -5,7 +5,6 @@ import type { User } from "@supabase/supabase-js";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
-import clearDayAnimation from "@meteocons/lottie/flat/clear-day.json";
 import clearNightAnimation from "@meteocons/lottie/flat/clear-night.json";
 import cloudyAnimation from "@meteocons/lottie/flat/cloudy.json";
 import fogAnimation from "@meteocons/lottie/flat/fog.json";
@@ -15,6 +14,7 @@ import rainAnimation from "@meteocons/lottie/flat/rain.json";
 import snowAnimation from "@meteocons/lottie/flat/snow.json";
 import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.json";
 import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
+import sunnyAnimation from "../../public/Sunny.json";
 
 const celebrationAnimations = [
   "/celebrate-01.json",
@@ -994,7 +994,7 @@ function weatherSummary(code: number) {
 }
 
 function weatherAnimation(code: number, isDay: boolean) {
-  if (code === 0) return isDay ? clearDayAnimation : clearNightAnimation;
+  if (code === 0) return isDay ? sunnyAnimation : clearNightAnimation;
   if (code <= 2) return isDay ? partlyCloudyDayAnimation : partlyCloudyNightAnimation;
   if (code === 3) return cloudyAnimation;
   if (code === 45 || code === 48) return fogAnimation;
