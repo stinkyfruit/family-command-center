@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@meteocons/lottie": "^0.1.0",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.112.3",
     "lottie-react": "^3.1.0",

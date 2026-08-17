@@ -5,6 +5,16 @@ import type { User } from "@supabase/supabase-js";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
+import clearDayAnimation from "@meteocons/lottie/flat/clear-day.json";
+import clearNightAnimation from "@meteocons/lottie/flat/clear-night.json";
+import cloudyAnimation from "@meteocons/lottie/flat/cloudy.json";
+import fogAnimation from "@meteocons/lottie/flat/fog.json";
+import partlyCloudyDayAnimation from "@meteocons/lottie/flat/partly-cloudy-day.json";
+import partlyCloudyNightAnimation from "@meteocons/lottie/flat/partly-cloudy-night.json";
+import rainAnimation from "@meteocons/lottie/flat/rain.json";
+import snowAnimation from "@meteocons/lottie/flat/snow.json";
+import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.json";
+import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
 
 const celebrationAnimations = [
   "/celebrate-01.json",
@@ -28,7 +38,7 @@ function pickCelebrationAnimation() {
 
 type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
-type Weather = { temperature: number; high: number; low: number; summary: string; location: string };
+type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
 type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
 const choreRoutines = [
@@ -411,13 +421,13 @@ export default function Home() {
     async function loadWeather(latitude: number, longitude: number) {
       try {
         const [weatherResponse, placeResponse] = await Promise.all([
-          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&timeformat=unixtime`),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&timeformat=unixtime`),
           fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`),
         ]);
         const [data, place] = await Promise.all([weatherResponse.json(), placeResponse.json()]);
         const address = place.address ?? {};
         const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.suburb ?? address.city_district ?? address.county ?? "Your location";
-        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: city });
+        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: city, code: data.current.weather_code, isDay: Boolean(data.current.is_day) });
         if (data.daily.sunrise?.[0] && data.daily.sunset?.[0]) setSunTimes({ sunrise: data.daily.sunrise[0] * 1000, sunset: data.daily.sunset[0] * 1000 });
       } catch { setWeather(null); }
     }
@@ -937,7 +947,7 @@ export default function Home() {
         </header>
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <>
           <section className="grid gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
-            <article className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50"><span className="absolute -right-5 -top-9 size-28 rounded-full bg-yellow-200/70"/><div className="relative flex h-full items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-wide">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold text-white/90">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="text-5xl drop-shadow-sm">{weather?.summary === "Rain" ? "🌦️" : weather?.summary === "Snow" ? "❄️" : weather?.summary === "Cloudy" ? "☁️" : "☀️"}</span></div></article>
+            <article className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50"><span className="absolute -right-5 -top-9 size-28 rounded-full bg-yellow-200/70"/><div className="relative flex h-full items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-wide">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold text-white/90">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div>{weather ? <WeatherAnimation weather={weather} /> : <span className="text-5xl drop-shadow-sm">☀️</span>}</div></article>
             <article className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-rose-500">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-8 place-items-center rounded-xl bg-rose-100 text-lg font-bold text-rose-600 hover:bg-rose-200">+</button></div><div className="mt-3 space-y-1">{openTodos.slice(0, 2).map((todo) => { const assignee = members.find((member) => member.id === todo.assigneeMemberId); return <label key={todo.id} className="flex cursor-pointer items-center gap-2 rounded-lg p-1 text-sm hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => toggleTodo(todo.id)} className="size-4 accent-rose-500"/><span className="min-w-0 flex-1 truncate font-medium">{todo.title}</span>{assignee && <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${assignee.color ?? "#fda4af"}33`, color: assignee.color ?? "#be123c" }}>{assignee.name}</span>}</label>; })}{openTodos.length === 0 && <p className="text-sm text-slate-400">You&apos;re all caught up.</p>}</div><button onClick={() => setActiveTab("tasks")} className="mt-2 text-xs font-bold text-violet-600">View all tasks →</button></article>
             <article className="rounded-[1.75rem] bg-amber-100 p-5 text-amber-950"><div className="flex items-start justify-between gap-3"><p className="text-xs font-bold text-amber-700">FAMILY NOTE</p>{!editingFamilyNote && <button onClick={() => { setFamilyNoteDraft(familyNote); setEditingFamilyNote(true); }} className="rounded-lg px-2 py-1 text-xs font-bold text-amber-800 hover:bg-amber-200">Edit</button>}</div>{editingFamilyNote ? <><textarea autoFocus value={familyNoteDraft} onChange={(event) => setFamilyNoteDraft(event.target.value)} maxLength={280} rows={3} className="mt-2 w-full resize-none rounded-xl border border-amber-300 bg-white/80 px-3 py-2 text-base font-semibold leading-snug outline-amber-500"/><div className="mt-3 flex justify-end gap-2"><button onClick={() => setEditingFamilyNote(false)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-200">Cancel</button><button onClick={saveFamilyNote} disabled={!familyNoteDraft.trim()} className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">Save</button></div></> : <><p className="mt-2 text-base font-bold leading-snug">{familyNote}</p><p className="mt-3 text-xs font-semibold text-amber-700">— {familyNoteAuthor}</p></>}</article>
           </section>
@@ -981,6 +991,29 @@ function weatherSummary(code: number) {
   if (code <= 67) return "Rain";
   if (code <= 77) return "Snow";
   return "Showers";
+}
+
+function weatherAnimation(code: number, isDay: boolean) {
+  if (code === 0) return isDay ? clearDayAnimation : clearNightAnimation;
+  if (code <= 2) return isDay ? partlyCloudyDayAnimation : partlyCloudyNightAnimation;
+  if (code === 3) return cloudyAnimation;
+  if (code === 45 || code === 48) return fogAnimation;
+  if (code >= 71 && code <= 77 || code === 85 || code === 86) return snowAnimation;
+  if (code >= 95) return isDay ? thunderstormsDayAnimation : thunderstormsNightAnimation;
+  return rainAnimation;
+}
+
+function WeatherAnimation({ weather }: { weather: Weather }) {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const fallback = weather.code >= 95 ? "⛈️" : weather.code >= 71 && weather.code <= 77 ? "❄️" : weather.code >= 45 && weather.code <= 67 ? "🌧️" : weather.code === 3 ? "☁️" : weather.isDay ? "☀️" : "🌙";
+  return reduceMotion ? <span className="text-5xl drop-shadow-sm" aria-label={weather.summary}>{fallback}</span> : <Lottie src={weatherAnimation(weather.code, weather.isDay)} autoplay loop className="size-20 drop-shadow-sm" aria-label={weather.summary} />;
 }
 
 function sameDate(first: Date, second: Date) {
