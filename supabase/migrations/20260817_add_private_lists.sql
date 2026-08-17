@@ -37,3 +37,13 @@ begin
 end; $$;
 revoke all on function public.add_private_list(text, text), public.add_private_list_item(text, uuid, text) from public, anon;
 grant execute on function public.add_private_list(text, text), public.add_private_list_item(text, uuid, text) to authenticated;
+
+create or replace function public.delete_private_list(p_pin text, p_list_id uuid)
+returns void language plpgsql security definer set search_path = extensions, public, private as $$
+begin
+ perform public.get_private_lists(p_pin);
+ delete from private.household_private_lists l using public.members m
+ where l.id = p_list_id and l.household_id = m.household_id and m.user_id = auth.uid();
+end; $$;
+revoke all on function public.delete_private_list(text, uuid) from public, anon;
+grant execute on function public.delete_private_list(text, uuid) to authenticated;
