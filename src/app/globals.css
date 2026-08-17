@@ -202,6 +202,29 @@ button[title^="Delete"]:has(svg)::after {
   color: inherit;
 }
 
+/* Private lists use the same colorful card language once their PIN is unlocked. */
+section.space-y-8 > div:last-child > div.mt-4.grid > div {
+  border-radius: 2rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / .12);
+  border: 1px solid rgb(255 255 255 / .72);
+}
+
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 1) { background: rgb(254 205 211); }
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 2) { background: rgb(186 230 253); }
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 3) { background: rgb(253 230 138); }
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 4) { background: rgb(167 243 208); }
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 5) { background: rgb(221 214 254); }
+section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n) { background: rgb(254 215 170); }
+
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div { color: #f8fafc; border-color: rgb(255 255 255 / .14); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 1) { background: rgb(190 24 93 / .55); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 2) { background: rgb(3 105 161 / .55); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 3) { background: rgb(161 98 7 / .55); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 4) { background: rgb(4 120 87 / .55); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n + 5) { background: rgb(109 40 217 / .55); }
+.dark section.space-y-8 > div:last-child > div.mt-4.grid > div:nth-child(6n) { background: rgb(194 65 12 / .55); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
