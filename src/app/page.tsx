@@ -1234,8 +1234,8 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const children = members.filter((member) => member.role === "child");
   const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
   const fixedRoutineTitles = new Set([
-    "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch",
-    "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|homework", "after school|move body", "after school|eat dinner", "after school|dinner", "after school|bring plate to the sink", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book", "after school|read",
+    "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
+    "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
   ]);
   const sortedChores = chores.filter((chore) => chore.routine === "To-do" || fixedRoutineTitles.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
 
