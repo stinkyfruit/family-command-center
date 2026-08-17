@@ -193,6 +193,8 @@ export default function Home() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [celebratingBirthdayDate, setCelebratingBirthdayDate] = useState<string | null>(null);
+  const [openedBirthdayDate, setOpenedBirthdayDate] = useState<string | null>(null);
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
@@ -441,6 +443,20 @@ export default function Home() {
   }, [themeMode, sunTimes]);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
   const calendarEvents = useMemo(() => [...events, ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap(familyHolidaysForYear)], [events, calendarAnchor]);
+
+  useEffect(() => {
+    if (view !== "Day") {
+      setOpenedBirthdayDate(null);
+      return;
+    }
+    const dateKey = calendarAnchor.toDateString();
+    const hasBirthday = calendarEvents.some((event) => eventOccursOn(event, calendarAnchor) && isBirthdayEvent(event));
+    if (!hasBirthday || openedBirthdayDate === dateKey) return;
+    setOpenedBirthdayDate(dateKey);
+    setCelebratingBirthdayDate(dateKey);
+    const timer = window.setTimeout(() => setCelebratingBirthdayDate((date) => date === dateKey ? null : date), 3000);
+    return () => window.clearTimeout(timer);
+  }, [view, calendarAnchor, calendarEvents, openedBirthdayDate]);
 
   function openEventFormAt(day: Date, time = "09:00") {
     const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
@@ -941,6 +957,7 @@ export default function Home() {
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onDelete={deleteEvent} />}
       {showTodoForm && <TaskEditor title={todoTitle} dueDate={todoDueDate} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onDueDateChange={setTodoDueDate} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
       {celebratingTaskId !== null && <ChoreCelebration />}
+      {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/Birthday-Animation.json" />}
     </main>
   );
 }
@@ -1253,9 +1270,9 @@ function TaskEditor({ title, dueDate, assigneeMemberId, members, editing, onTitl
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={onSave} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-rose-500">FAMILY TASK</p><h2 className="text-2xl font-bold">{editing ? "Edit task" : "Add a to-do"}</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">What needs to get done?<input required autoFocus value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="e.g. Pick up groceries" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-rose-500" /></label><label className="mt-5 block text-sm font-bold">Deadline <span className="font-normal text-slate-400">(optional)</span><input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-rose-500" /></label><fieldset className="mt-5"><legend className="text-sm font-bold">Assign to <span className="font-normal text-slate-400">(optional)</span></legend><div className="mt-2 flex flex-wrap gap-2"><label className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${!assigneeMemberId ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-200"}`}><input className="sr-only" type="radio" name="task-assignee" checked={!assigneeMemberId} onChange={() => onAssigneeChange("")} />Anyone</label>{members.map((member) => <label key={member.id} className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${assigneeMemberId === String(member.id) ? "text-white" : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"}`} style={assigneeMemberId === String(member.id) ? { backgroundColor: member.color ?? "#f43f5e" } : undefined}><input className="sr-only" type="radio" name="task-assignee" checked={assigneeMemberId === String(member.id)} onChange={() => onAssigneeChange(String(member.id))} />{member.name}</label>)}</div></fieldset><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-600">{editing ? "Save task" : "Add task"}</button></div></form></div>;
 }
 
-function ChoreCelebration() {
+function ChoreCelebration({ animationSrc }: { animationSrc?: string }) {
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [animation] = useState(() => pickCelebrationAnimation());
+  const [animation] = useState(() => animationSrc ?? pickCelebrationAnimation());
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReduceMotion(media.matches);
