@@ -4,6 +4,7 @@ export const generalCompletionAnimations = [
   "/animations/general/completions/Animation%20-%20Sophie%20Hatter.json",
   "/animations/general/completions/Bouncy.json",
   "/animations/general/completions/celebrate.json",
+  "/animations/general/completions/Celebrations%20Begin.json",
   "/animations/general/completions/cute-mascot-jumping.json",
   "/animations/general/completions/Death%20Dance.json",
   "/animations/general/completions/fox%20greetings.json",
