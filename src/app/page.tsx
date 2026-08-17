@@ -15,6 +15,13 @@ const choreRoutines = [
   { id: "After school", label: "After school & nighttime", icon: "🎒" },
   { id: "To-do", label: "Anytime to-dos", icon: "✨" },
 ] as const;
+const fixedRoutineChoreKeys = new Set([
+  "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
+  "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
+]);
+function isVisibleRoutineChore(chore: ChoreEntry, today: string) {
+  return chore.routine === "To-do" || fixedRoutineChoreKeys.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today);
+}
 type SharedListItem = { id: string | number; title: string; done: boolean };
 type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
 type GoogleConnection = { id: string; name: string; enabled: boolean };
@@ -715,7 +722,7 @@ export default function Home() {
     }
     const today = new Date().toLocaleDateString("en-CA");
     const completesRoutine = chores
-      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine && (item.routine === "To-do" || item.isFixed || item.scheduledFor === today))
+      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine && isVisibleRoutineChore(item, today))
       .every((item) => item.id === chore.id || Boolean(item.completionId));
     const choreCard = document.querySelector<HTMLElement>(`[data-chore-id="${String(chore.id)}"]`);
     choreCard?.setAttribute("data-completing", "true");
@@ -1267,11 +1274,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   const children = members.filter((member) => member.role === "child");
   const routines = choreRoutines.filter((routine) => isWeekday || routine.id === "To-do");
   const today = new Date().toLocaleDateString("en-CA");
-  const fixedRoutineTitles = new Set([
-    "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
-    "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
-  ]);
-  const sortedChores = chores.filter((chore) => chore.routine === "To-do" || fixedRoutineTitles.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
+  const sortedChores = chores.filter((chore) => isVisibleRoutineChore(chore, today)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
 
   useEffect(() => {
     const choreById = new Map(chores.map((chore) => [String(chore.id), chore]));
