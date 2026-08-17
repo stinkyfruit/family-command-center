@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { Lottie } from "lottie-react";
@@ -194,7 +194,7 @@ export default function Home() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [celebratingBirthdayDate, setCelebratingBirthdayDate] = useState<string | null>(null);
-  const [openedBirthdayDate, setOpenedBirthdayDate] = useState<string | null>(null);
+  const openedBirthdayDate = useRef<string | null>(null);
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [dark, setDark] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
@@ -446,17 +446,18 @@ export default function Home() {
 
   useEffect(() => {
     if (view !== "Day") {
-      setOpenedBirthdayDate(null);
+      openedBirthdayDate.current = null;
+      setCelebratingBirthdayDate(null);
       return;
     }
     const dateKey = calendarAnchor.toDateString();
     const hasBirthday = calendarEvents.some((event) => eventOccursOn(event, calendarAnchor) && isBirthdayEvent(event));
-    if (!hasBirthday || openedBirthdayDate === dateKey) return;
-    setOpenedBirthdayDate(dateKey);
+    if (!hasBirthday || openedBirthdayDate.current === dateKey) return;
+    openedBirthdayDate.current = dateKey;
     setCelebratingBirthdayDate(dateKey);
     const timer = window.setTimeout(() => setCelebratingBirthdayDate((date) => date === dateKey ? null : date), 3000);
     return () => window.clearTimeout(timer);
-  }, [view, calendarAnchor, calendarEvents, openedBirthdayDate]);
+  }, [view, calendarAnchor, calendarEvents]);
 
   function openEventFormAt(day: Date, time = "09:00") {
     const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
