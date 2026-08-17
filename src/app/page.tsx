@@ -83,6 +83,7 @@ function listVisualIcon(icon: string) {
 function choreIcon(title: string) {
   const text = title.toLowerCase();
   if (/bed|pillow|blanket/.test(text)) return "🛏️";
+  if (/hair|comb/.test(text)) return "🪮";
   if (/teeth|brush|tooth/.test(text)) return "🪥";
   if (/dish|plate|kitchen|table/.test(text)) return "🍽️";
   if (/trash|garbage|bin/.test(text)) return "🗑️";
