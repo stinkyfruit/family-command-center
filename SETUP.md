@@ -14,3 +14,27 @@
 5. Restart `npm run dev`, then use **Connect Google Calendar** on the dashboard. The first version imports the signed-in adult's primary Google Calendar as read-only events.
 
 Once connected, the dashboard refreshes Google Calendar when it opens if the most recent sync is over 10 minutes old. **Sync now** always requests an immediate refresh. A 15-minute server schedule should be enabled only after deployment to an always-on host; for example, Vercel Hobby permits only daily cron jobs, while its paid plans permit more frequent schedules.
+
+## Assistant tooling — documentation MCP servers
+
+Cline (VS Code) reads MCP server config from `.mcp.json` in the repo root. Two servers are expected:
+
+| Server | Purpose | Source |
+|---|---|---|
+| `context7` | On-demand, version-specific docs for external libraries (Supabase, Tailwind, others) | `@upstash/context7-mcp` (free for dev use, loads only libraries you explicitly add) |
+| `nextjs-docs-local` | Version-exact **Next.js 16** App Router docs, read-only filesystem access | `@modelcontextprotocol/server-filesystem`, scoped to `node_modules/next/dist/docs/` |
+
+To activate them:
+
+1. Open the Cline MCP panel / reload the Cline window so `.mcp.json` is re-read. Both servers launch via `npx`, so first load downloads the packages and can take a moment.
+2. Wait for `context7` (tools: `resolve-library-id`, `query-docs`) and `nextjs-docs-local` (filesystem tools) to appear and initialize.
+
+> **Note:** `node_modules` is gitignored, so the `nextjs-docs-local` path in `.mcp.json` is absolute and machine-specific. If the repo is cloned elsewhere, update that path to the target `node_modules/next/dist/docs` (Next.js docs resolve from the repo root). Direct file reads of the same directory are a portable fallback.
+
+### Best-practice rules for writing code
+
+The stack (Next.js 16 App Router, React, TypeScript, Tailwind, Supabase) changes fast, so agents are instructed to **reference the authoritative documentation before writing code** — never improvise APIs or config from memory. The enforceable rule set lives in `.clinerules/coding-rules.md`, with a summary in `AGENTS.md`:
+
+- **Next.js**: read `node_modules/next/dist/docs/` (e.g. `01-app`, `03-api-reference`) directly or via `nextjs-docs-local` — this is the version-exact source and overrides generic training data. Heed deprecation notices.
+- **Supabase / Tailwind / other libs**: use Context7 `resolve-library-id` + `query-docs` for current, version-specific docs.
+- Agents should cite which docs they followed in their final response for each major change.
