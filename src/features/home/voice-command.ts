@@ -86,7 +86,7 @@ function stripPhrases(text: string, section: VoiceSection, member: Member | null
     .replace(/^\s*(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(add|create|put|schedule|make|set)\s+/i, "")
     .replace(/^\s*(a|an|the)\s+/i, "")
     .replace(/\b(?:to\s+the\s+)?(?:wishlist|wish\s+list)\b/gi, "")
-    .replace(list ? new RegExp(`\\b(?:to|on)\\s+(?:the\\s+)?${escapeRegExp(list.title)}\\s+lists?\\b`, "i") : /$^/, "")
+    .replace(list ? new RegExp(`\\b(?:to|on)\\s+(?:the\\s+)?${escapeRegExp(list.title.trim())}(?:\\s+list)?\\b`, "i") : /$^/, "")
     .replace(/\b(?:to|on)\s+(?:the\s+)?lists?\b/gi, "")
     .replace(/\b(?:calendar\s+)?(?:event|appointment)\b/gi, "")
     .replace(/\b(?:task|to-?do)\b/gi, "")
