@@ -9,6 +9,7 @@ import { christmasAnimations } from "@/generated/animation-manifest";
 type Kid = { id: string; name: string; color: string; emoji: string };
 type WishItem = { id: string; title: string; note: string; category: string; priority: boolean; createdAt: string };
 type WishlistByKid = Record<string, WishItem[]>;
+export type WishlistVoiceDraft = { id: string; title: string; memberId: string | null };
 
 const categories = ["Play", "Create", "Learn", "Cozy", "Surprise"] as const;
 const christmasTreeAnimation = christmasAnimations.find((src) => src.includes("Christmas%20Tree")) ?? "/animations/holidays/christmas/Christmas%20Tree%20Animation.json";
@@ -16,7 +17,7 @@ const gingerbreadAnimation = christmasAnimations.find((src) => src.includes("Gin
 const snowmanAnimation = christmasAnimations.find((src) => src.includes("snowman")) ?? "/animations/holidays/christmas/Happy%20snowman%20jumping%20and%20waving%20his%20hand.json";
 const santaSleighAnimation = christmasAnimations.find((src) => src.includes("santa%20sleigh")) ?? "/animations/holidays/christmas/santa%20sleigh.json";
 
-export default function ChristmasWishlistPage() {
+export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraft?: WishlistVoiceDraft | null } = {}) {
   const [kids, setKids] = useState<Kid[]>([]);
   const [wishlists, setWishlists] = useState<WishlistByKid>({});
   const [selectedKidId, setSelectedKidId] = useState<string | null>(null);
@@ -32,6 +33,17 @@ export default function ChristmasWishlistPage() {
   const selectedKid = kids.find((kid) => kid.id === selectedKidId) ?? kids[0];
   const selectedWishes = useMemo(() => wishlists[selectedKid?.id ?? ""] ?? [], [selectedKid?.id, wishlists]);
   const totalWishes = Object.values(wishlists).reduce((total, list) => total + list.length, 0);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!voiceDraft) return;
+    const targetKid = kids.find((kid) => kid.id === voiceDraft.memberId);
+    if (targetKid) setSelectedKidId(targetKid.id);
+    setNewWish(voiceDraft.title);
+    setNewNote("");
+    setShowForm(true);
+  }, [kids, voiceDraft]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (!supabase) return;

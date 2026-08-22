@@ -38,7 +38,7 @@ import {
   weatherOrbClass,
   weatherSummary,
 } from "@/features/home/model";
-import { AppIcon, NotoEmoji, StyledSelect } from "@/components/home/shared-ui";
+import { AppIcon, NotoEmoji, SpeechInputButton, StyledSelect } from "@/components/home/shared-ui";
 import { eventOccursOn as calendarEventOccursOn, isBirthdayEvent, memberCalendarColor, shiftCalendar } from "@/components/home/calendar";
 import {
   CalendarPersonFilter,
@@ -52,6 +52,7 @@ import {
 import { FamilyMoodCard } from "@/components/home/mood";
 import { AuthScreen, Screensaver, SeasonalScreensaver, TaskEditor, TasksPage } from "@/components/home/task-components";
 import ChristmasWishlistPage from "@/features/christmas-wishlist/christmas-wishlist-page";
+import { parseVoiceCommand } from "@/features/home/voice-command";
 
 const navigationTabs = [
   ["home", "home", "Home"],
@@ -63,6 +64,9 @@ const navigationTabs = [
   ["settings", "settings", "Settings"],
 ] as const;
 type HomeTab = typeof navigationTabs[number][0];
+type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
+type VoiceChoreDraft = { title: string; memberId: string; routine: string; scheduledFor: string };
+type VoiceListDraft = { title: string; listId: string };
 
 export default function Home() {
   const [events, setEvents] = useState(starterEvents);
@@ -127,6 +131,11 @@ export default function Home() {
   const [selectedMood, setSelectedMood] = useState<MoodKey>("good");
   const [savingMood, setSavingMood] = useState(false);
   const [moodMessage, setMoodMessage] = useState("");
+  const [voiceCommand, setVoiceCommand] = useState("");
+  const [voiceMessage, setVoiceMessage] = useState("");
+  const [voiceWishlistDraft, setVoiceWishlistDraft] = useState<VoiceWishlistDraft | null>(null);
+  const [voiceChoreDraft, setVoiceChoreDraft] = useState<VoiceChoreDraft | null>(null);
+  const [voiceListDraft, setVoiceListDraft] = useState<VoiceListDraft | null>(null);
 
   useEffect(() => {
     if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
@@ -403,6 +412,77 @@ export default function Home() {
     setEventCategory("General");
     setEventMemberIds([]);
     setShowEventForm(true);
+  }
+
+  function oneHourLater(time: string) {
+    const [hours, minutes] = time.split(":").map(Number);
+    const end = new Date(2000, 0, 1, hours, minutes + 60);
+    return `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function applyVoiceCommand(command: string) {
+    const parsed = parseVoiceCommand(command, members, sharedLists);
+    if (!parsed) {
+      setVoiceMessage("I couldn’t identify what to add. Try naming a section, like “add batteries to the wishlist.”");
+      return;
+    }
+
+    setVoiceCommand("");
+    if (parsed.section === "calendar") {
+      const date = parsed.date ?? localDateInputValue(new Date());
+      const time = parsed.time ?? "09:00";
+      setActiveTab("calendar");
+      setNewItem(parsed.title);
+      setEventDate(date);
+      setEventTime(time);
+      setEventEndTime(oneHourLater(time));
+      setEventAllDay(!parsed.time);
+      setEventLocation("");
+      setEventCategory("General");
+      setEventMemberIds(parsed.member ? [String(parsed.member.id)] : []);
+      setCalendarAnchor(new Date(`${date}T12:00:00`));
+      setShowEventForm(true);
+      setVoiceMessage(`Calendar form ready for ${parsed.title}. Review it before saving.`);
+      return;
+    }
+
+    if (parsed.section === "tasks") {
+      setActiveTab("tasks");
+      setEditingTodo(null);
+      setTodoTitle(parsed.title);
+      setTodoDueDate(parsed.date ?? "");
+      setTodoAssigneeMemberId(parsed.member ? String(parsed.member.id) : "");
+      setShowTodoForm(true);
+      setVoiceMessage(`To-do form ready for ${parsed.title}. Review it before saving.`);
+      return;
+    }
+
+    if (parsed.section === "wishlist") {
+      setVoiceWishlistDraft({ id: `${Date.now()}`, title: parsed.title, memberId: parsed.member ? String(parsed.member.id) : null });
+      setActiveTab("wishlist");
+      setVoiceMessage(`Wish-list form ready for ${parsed.title}. Review it before saving.`);
+      return;
+    }
+
+    if (parsed.section === "lists") {
+      if (!parsed.list) {
+        setVoiceMessage("I couldn’t find that family list. Try using the list’s exact name.");
+        return;
+      }
+      setVoiceListDraft({ title: parsed.title, listId: String(parsed.list.id) });
+      setActiveTab("lists");
+      setVoiceMessage(`List item ready for ${parsed.list.title}. Review it before saving.`);
+      return;
+    }
+
+    if (!parsed.member) {
+      setActiveTab("chores");
+      setVoiceMessage("Which family member should this chore be assigned to? Try “add a chore for Maya to feed the dog.”");
+      return;
+    }
+    setVoiceChoreDraft({ title: parsed.title, memberId: String(parsed.member.id), routine: parsed.routine ?? "To-do", scheduledFor: parsed.date ?? localDateInputValue(new Date()) });
+    setActiveTab("chores");
+    setVoiceMessage(`Chore form ready for ${parsed.member.name}. Review it before saving.`);
   }
 
   function toggleCalendarMemberFilter(memberId: string) {
@@ -718,12 +798,12 @@ export default function Home() {
     if (result.error) window.alert(result.error);
   }
 
-  async function addChore(memberId: string | number, routine: string) {
-    const title = window.prompt("What is the chore?");
+  async function addChore(memberId: string | number, routine: string, titleOverride?: string, scheduledForOverride?: string | null) {
+    const title = titleOverride ?? window.prompt("What is the chore?");
     if (!title?.trim() || !householdId) return;
     const emoji = choreIcon(title);
     const isDaily = false;
-    const scheduledFor = routine === "To-do" ? null : new Date().toLocaleDateString("en-CA");
+    const scheduledFor = routine === "To-do" ? null : scheduledForOverride ?? new Date().toLocaleDateString("en-CA");
     const sortOrder = Math.max(0, ...chores.filter((chore) => String(chore.assigneeMemberId) === String(memberId) && chore.routine === routine).map((chore) => chore.sortOrder)) + 1;
     if (supabase) {
       const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, scheduled_for: scheduledFor }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, scheduled_for").single();
@@ -832,8 +912,8 @@ export default function Home() {
     } else setSharedLists((items) => [...items, { id: Date.now().toString(), title: title.trim(), icon, items: [] }]);
   }
 
-  async function addListItem(listId: string | number) {
-    const title = window.prompt("Add an item");
+  async function addListItem(listId: string | number, titleOverride?: string) {
+    const title = titleOverride ?? window.prompt("Add an item");
     if (!title?.trim()) return;
     if (supabase) {
       const { data, error } = await supabase.from("list_items").insert({ list_id: listId, title: title.trim() }).select("id, title, completed").single();
@@ -1044,8 +1124,9 @@ export default function Home() {
         </aside>
         <header className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-5 py-5 md:px-9">
           <div className="flex items-center gap-3"><div className="hidden size-11 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/50 md:grid lg:hidden"><AppIcon name="home" className="size-5"/></div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className={activeTab === "wishlist" ? "text-sm text-white/70" : "text-sm text-slate-500 dark:text-slate-400"}>{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div></div>
-          <div className="flex items-center gap-2"><button onClick={() => setScreenSaver(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/10">Photos</button><button onClick={() => updateThemeMode(dark ? "light" : "dark")} className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold shadow-sm ring-1 transition-colors ${activeTab === "wishlist" ? dark ? "bg-slate-950/75 text-white ring-white/20 hover:scale-105 hover:bg-emerald-800 hover:ring-emerald-300/50 hover:shadow-lg" : "bg-white/95 text-slate-700 ring-slate-200 hover:scale-105 hover:bg-amber-100 hover:text-amber-900 hover:ring-amber-300 hover:shadow-lg" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50 dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><AppIcon name={dark ? "sun" : "moon"} className="size-4"/>{dark ? "Light" : "Dark"}</button></div>
+          <div className="flex items-center gap-2"><SpeechInputButton value={voiceCommand} onChange={(value) => { setVoiceCommand(value); setVoiceMessage(""); }} onComplete={(value) => { setVoiceCommand(""); applyVoiceCommand(value); }} buttonLabel="Speak a command to add an event, task, chore, wish, or list item" showMessage={false} /><button onClick={() => setScreenSaver(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/10">Photos</button><button onClick={() => updateThemeMode(dark ? "light" : "dark")} className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold shadow-sm ring-1 transition-colors ${activeTab === "wishlist" ? dark ? "bg-slate-950/75 text-white ring-white/20 hover:scale-105 hover:bg-emerald-800 hover:ring-emerald-300/50 hover:shadow-lg" : "bg-white/95 text-slate-700 ring-slate-200 hover:scale-105 hover:bg-amber-100 hover:text-amber-900 hover:ring-amber-300 hover:shadow-lg" : "bg-white text-slate-700 ring-slate-200 dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><AppIcon name={dark ? "sun" : "moon"} className="size-4"/>{dark ? "Light" : "Dark"}</button></div>
         </header>
+        {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <>
           <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
             <article className="relative w-full overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50 max-md:min-h-40 max-md:p-5 md:max-lg:min-h-40 md:max-lg:p-5 md:p-6"><span className={`absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="relative flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="block size-24 shrink-0 overflow-hidden max-md:size-28 md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">☀️</span>}</span></div></article>
@@ -1061,14 +1142,16 @@ export default function Home() {
             <CalendarPersonFilter members={members} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={toggleCalendarMemberFilter} onToggleFamily={() => setShowFamilyEvents((visible) => !visible)} />
             {view === "Day" ? <DayCalendar date={calendarAnchor} events={visibleCalendarEvents} members={members} onEdit={setSelectedEvent} /> : view === "Week" ? <WeekCalendar anchor={calendarAnchor} events={visibleCalendarEvents} members={members} onEdit={setSelectedEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} onCreate={openEventFormAt} /> : <MonthGrid anchor={calendarAnchor} events={visibleCalendarEvents} members={members} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} />}
             <div className="mt-6 border-t border-slate-100 pt-5 dark:border-white/10">
-              {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => setEventCategory(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
+            {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><div className="mt-3"><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => setEventCategory(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"/></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onApplySeries={applySeriesMembers} onDelete={deleteEvent} />}
       {showTodoForm && <TaskEditor title={todoTitle} dueDate={todoDueDate} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={setTodoTitle} onDueDateChange={setTodoDueDate} onAssigneeChange={setTodoAssigneeMemberId} onClose={() => { setEditingTodo(null); setShowTodoForm(false); }} onSave={saveTodo} />}
+      {voiceChoreDraft && <VoiceChoreEditor draft={voiceChoreDraft} members={members} onClose={() => setVoiceChoreDraft(null)} onSave={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} />}
+      {voiceListDraft && <VoiceListEditor draft={voiceListDraft} lists={sharedLists} onClose={() => setVoiceListDraft(null)} onSave={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} />}
       {celebratingTaskId !== null && <ChoreCelebration animationSrc="/animations/general/completions/Celebrations%20Begin.json" />}
       {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/animations/holidays/birthday/birthday.json" />}
     </main>
@@ -1099,6 +1182,20 @@ function ChoreCelebration({ animationSrc }: { animationSrc?: string }) {
     return () => media.removeEventListener("change", update);
   }, []);
   return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label="Routine complete"><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={animation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
+}
+
+function VoiceChoreEditor({ draft, members, onClose, onSave }: { draft: VoiceChoreDraft; members: Member[]; onClose: () => void; onSave: (draft: VoiceChoreDraft) => Promise<void> }) {
+  const [title, setTitle] = useState(draft.title);
+  const [memberId, setMemberId] = useState(draft.memberId);
+  const [routine, setRoutine] = useState(draft.routine);
+  const [scheduledFor, setScheduledFor] = useState(draft.scheduledFor);
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={(event) => { event.preventDefault(); void onSave({ title, memberId, routine, scheduledFor }); }} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">VOICE ADD</p><h2 className="text-2xl font-bold">Review chore</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Chore<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><label className="mt-4 block text-sm font-bold">Assign to<StyledSelect value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.filter((member) => member.role === "child").map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}</StyledSelect></label><label className="mt-4 block text-sm font-bold">Routine<StyledSelect value={routine} onChange={(event) => setRoutine(event.target.value)}><option>Before school</option><option>After school</option><option>To-do</option></StyledSelect></label><label className="mt-4 block text-sm font-bold">Date<input type="date" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Save chore</button></div></form></div>;
+}
+
+function VoiceListEditor({ draft, lists, onClose, onSave }: { draft: VoiceListDraft; lists: SharedList[]; onClose: () => void; onSave: (draft: VoiceListDraft) => Promise<void> }) {
+  const [title, setTitle] = useState(draft.title);
+  const [listId, setListId] = useState(draft.listId);
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={(event) => { event.preventDefault(); void onSave({ title, listId }); }} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">VOICE ADD</p><h2 className="text-2xl font-bold">Review list item</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Item<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><label className="mt-4 block text-sm font-bold">Add to<StyledSelect value={listId} onChange={(event) => setListId(event.target.value)}>{lists.map((list) => <option key={list.id} value={String(list.id)}>{list.title}</option>)}</StyledSelect></label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Save item</button></div></form></div>;
 }
 
 function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
