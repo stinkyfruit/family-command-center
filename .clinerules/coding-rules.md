@@ -28,7 +28,7 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 ## UI consistency and interaction conventions
 
 - Match the existing visual language across pages: reuse established spacing, typography, colors, border radii, shadows, responsive breakpoints, button treatments, focus states, and empty/loading/error states.
-- Prefer existing shared components and helpers over one-off UI implementations. When a new pattern is genuinely needed, make it reusable if another feature is likely to need it.
+- When developing new UI, begin with the nearest existing screen or component pattern and keep the result visually and behaviorally consistent with neighboring features. Prefer existing shared components and helpers over one-off UI implementations. When a new pattern is genuinely needed, make it reusable if another feature is likely to need it; for example, use StyledSelect for dropdowns instead of styling each select independently.
 - Use animation when it improves interaction feedback, communicates state, or supports an appropriate seasonal theme. Keep motion purposeful and restrained; respect `prefers-reduced-motion` and provide a clear static fallback.
 - Use the shared Phosphor icon library through `src/components/home/shared-ui.tsx` and `AppIcon` for interface icons. Do not introduce a second icon library or use ad hoc Unicode characters as functional controls. Emoji may still be used as decorative or user-facing content where it fits the existing design.
 - Keep interaction behavior consistent with neighboring features, including button sizes, hover/active states, delete affordances, confirmation/error behavior, keyboard focus, and accessible labels.
