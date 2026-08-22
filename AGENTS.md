@@ -16,4 +16,6 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 - **Supabase / Tailwind / other libraries:** consult the Context7 MCP server via Codex’s `mcp_servers.context7` entry in `~/.codex/config.toml` using `resolve-library-id` + `query-docs` for current, version-specific docs. The repo-level `.mcp.json` remains for Cline compatibility.
 - **Conventions:** App Router structure (`src/app/`, `src/lib/`), strict TypeScript with `@/*` alias, Supabase client in `src/lib/supabase.ts` (server ops on `SUPABASE_SERVICE_ROLE_KEY`), route handlers delegated to lib helpers, and Lottie animations regenerated via `scripts/generate-animation-manifest.mjs` (run `npm run dev`/`build`). Match the pattern of files you touch.
 
+- **Calendar source of truth:** External Google and iCloud calendars are authoritative for imported event existence. A local delete removes only the imported event projection; it must not create a tombstone that blocks a later sync from recreating an event still present externally. Family member assignments are app-owned data and must be stored separately by imported event identity (and by recurring series for series-wide assignments), so assignments survive upserts, local deletion, and future syncs.
+
 See `.clinerules/coding-rules.md` for the full, stack-aware rule set.

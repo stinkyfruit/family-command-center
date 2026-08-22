@@ -76,15 +76,18 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("google_calendar_connection_id", connection.id);
   const seriesExternalIds = [...new Set(googleItems.flatMap((item) => item.recurringEventId ? [`${connection.id}:${item.recurringEventId}`] : []))];
   const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override, member_ids, member_ids_override").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
+  const { data: eventAssignments } = externalIds.length ? await admin.from("calendar_event_member_assignments").select("external_id, member_ids").eq("household_id", connection.household_id).eq("source", "google").in("external_id", externalIds) : { data: [] };
   const { data: seriesAssignments } = seriesExternalIds.length ? await admin.from("calendar_series_member_assignments").select("series_external_id, member_ids").eq("household_id", connection.household_id).eq("source", "google").in("series_external_id", seriesExternalIds) : { data: [] };
   const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
+  const assignmentsByExternalId = new Map((eventAssignments ?? []).map((assignment) => [assignment.external_id, assignment.member_ids]));
   const assignmentsBySeriesId = new Map((seriesAssignments ?? []).map((assignment) => [assignment.series_external_id, assignment.member_ids]));
   const events = googleItems.map((item) => {
     const existing = existingByExternalId.get(item.id);
     const seriesExternalId = item.recurringEventId ? `${connection.id}:${item.recurringEventId}` : null;
+    const eventMemberIds = assignmentsByExternalId.get(item.id);
     const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
-    const memberIds = existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? [];
-    const memberIdsOverride = Boolean(existing?.member_ids_override);
+    const memberIds = eventMemberIds ?? (existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? existing?.member_ids ?? []);
+    const memberIdsOverride = Boolean(existing?.member_ids_override) || Boolean(eventMemberIds !== undefined && seriesExternalId);
     const title = item.summary || "Untitled event";
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
     const isBirthday = category === "Birthday";

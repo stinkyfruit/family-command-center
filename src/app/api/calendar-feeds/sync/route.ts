@@ -49,16 +49,19 @@ export async function POST(request: NextRequest) {
       const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("calendar_feed_id", feed.id);
       const seriesExternalIds = [...new Set(parsedEvents.flatMap((event) => event.seriesUid ? [`${feed.id}:${event.seriesUid}`] : []))];
       const { data: existingEvents } = externalIds.length ? await admin.from("events").select("external_id, category, category_override, member_ids, member_ids_override").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
+      const { data: eventAssignments } = externalIds.length ? await admin.from("calendar_event_member_assignments").select("external_id, member_ids").eq("household_id", feed.household_id).eq("source", "apple").in("external_id", externalIds) : { data: [] };
       const { data: seriesAssignments } = seriesExternalIds.length ? await admin.from("calendar_series_member_assignments").select("series_external_id, member_ids").eq("household_id", feed.household_id).eq("source", "apple").in("series_external_id", seriesExternalIds) : { data: [] };
       const existingByExternalId = new Map((existingEvents ?? []).map((event) => [event.external_id, event]));
+      const assignmentsByExternalId = new Map((eventAssignments ?? []).map((assignment) => [assignment.external_id, assignment.member_ids]));
       const assignmentsBySeriesId = new Map((seriesAssignments ?? []).map((assignment) => [assignment.series_external_id, assignment.member_ids]));
       const events = parsedEvents.map((event) => {
         const externalId = `${feed.id}:${event.uid}`;
         const existing = existingByExternalId.get(externalId);
         const seriesExternalId = event.seriesUid ? `${feed.id}:${event.seriesUid}` : null;
+        const eventMemberIds = assignmentsByExternalId.get(externalId);
         const seriesMemberIds = seriesExternalId ? assignmentsBySeriesId.get(seriesExternalId) : undefined;
-        const memberIds = existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? [];
-        const memberIdsOverride = Boolean(existing?.member_ids_override);
+        const memberIds = eventMemberIds ?? (existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? existing?.member_ids ?? []);
+        const memberIdsOverride = Boolean(existing?.member_ids_override) || Boolean(eventMemberIds !== undefined && seriesExternalId);
         return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, series_external_id: seriesExternalId, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: event.endsAt, all_day: event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category: existing?.category_override ? existing.category : calendarEventCategory(event.title), category_override: existing?.category_override ?? false, member_ids: memberIds, member_ids_override: memberIdsOverride };
       });
       if (events.length) {
