@@ -14,6 +14,11 @@ import rainAnimation from "../../public/animations/general/weather/rain.json";
 import snowAnimation from "@meteocons/lottie/flat/snow.json";
 import thunderstormsAnimation from "../../public/animations/general/weather/thunderstorms.json";
 import sunnyAnimation from "../../public/animations/general/weather/sunny.json";
+import greatMoodAnimation from "../../public/animations/general/moods/1f600.json";
+import goodMoodAnimation from "../../public/animations/general/moods/1f642.json";
+import okayMoodAnimation from "../../public/animations/general/moods/1f610.json";
+import tiredMoodAnimation from "../../public/animations/general/moods/1f634.json";
+import lowMoodAnimation from "../../public/animations/general/moods/1f622.json";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 
 const halloweenScreensaverVideos = [
@@ -39,6 +44,24 @@ type Event = { id: string | number; title: string; time: string; person: string;
 type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
 type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
+type MoodKey = "great" | "good" | "okay" | "tired" | "low";
+type MoodCheckin = { id: string | number; memberId: string | number; mood: MoodKey; checkedInAt: string };
+
+const moodOptions = [
+  { key: "great", label: "Great", emoji: "😀", animation: greatMoodAnimation, color: "bg-amber-100 text-amber-900 ring-amber-200" },
+  { key: "good", label: "Good", emoji: "🙂", animation: goodMoodAnimation, color: "bg-emerald-100 text-emerald-900 ring-emerald-200" },
+  { key: "okay", label: "Okay", emoji: "😐", animation: okayMoodAnimation, color: "bg-slate-100 text-slate-800 ring-slate-200" },
+  { key: "tired", label: "Tired", emoji: "😴", animation: tiredMoodAnimation, color: "bg-indigo-100 text-indigo-900 ring-indigo-200" },
+  { key: "low", label: "Low", emoji: "😢", animation: lowMoodAnimation, color: "bg-sky-100 text-sky-900 ring-sky-200" },
+] as const satisfies ReadonlyArray<{ key: MoodKey; label: string; emoji: string; animation: object; color: string }>;
+
+function isMoodKey(value: unknown): value is MoodKey {
+  return moodOptions.some((mood) => mood.key === value);
+}
+
+function moodOption(key: MoodKey) {
+  return moodOptions.find((mood) => mood.key === key) ?? moodOptions[2];
+}
 
 function localDateInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -61,6 +84,12 @@ type SharedList = { id: string | number; title: string; icon: string; items: Sha
 type GoogleConnection = { id: string; name: string; enabled: boolean };
 type AppleFeed = { id: string; name: string; enabled: boolean };
 type ThemeMode = "auto" | "light" | "dark";
+const defaultMemberColor = "#7c3aed";
+const memberColorOptions = ["#f43f5e", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899"] as const;
+
+function isHexColor(value: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(value);
+}
 
 function displayEventsOnce(events: Event[]) {
   const unique = new Map<string, Event>();
@@ -218,10 +247,6 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [householdName, setHouseholdName] = useState("Your Family Home");
-  const [familyNote, setFamilyNote] = useState("Don't forget: wear your team jersey for soccer tomorrow!");
-  const [familyNoteAuthor, setFamilyNoteAuthor] = useState("Mom");
-  const [editingFamilyNote, setEditingFamilyNote] = useState(false);
-  const [familyNoteDraft, setFamilyNoteDraft] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -243,6 +268,11 @@ export default function Home() {
   const [googleConnections, setGoogleConnections] = useState<GoogleConnection[]>([]);
   const [appleFeeds, setAppleFeeds] = useState<AppleFeed[]>([]);
   const [celebratingChoreId, setCelebratingChoreId] = useState<string | number | null>(null);
+  const [moodCheckins, setMoodCheckins] = useState<MoodCheckin[]>([]);
+  const [moodMemberId, setMoodMemberId] = useState("");
+  const [selectedMood, setSelectedMood] = useState<MoodKey>("good");
+  const [savingMood, setSavingMood] = useState(false);
+  const [moodMessage, setMoodMessage] = useState("");
 
   useEffect(() => {
     if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
@@ -350,9 +380,6 @@ export default function Home() {
           setHouseholdName(household.name);
           if (household.theme_mode === "light" || household.theme_mode === "dark" || household.theme_mode === "auto") setThemeMode(household.theme_mode);
         }
-        const { data: note } = await supabase!.from("households").select("family_note, family_note_author").eq("id", id).single();
-        if (note?.family_note) setFamilyNote(note.family_note);
-        if (note?.family_note_author) setFamilyNoteAuthor(note.family_note_author);
       }
       setDataReady(true);
     }
@@ -373,7 +400,8 @@ export default function Home() {
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
       supabase.from("calendar_feeds").select("id, display_name, enabled").eq("household_id", householdId).eq("provider", "apple").order("created_at"),
-    ]).then(async ([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult, appleFeedResult]) => {
+      supabase.from("mood_checkins").select("id, member_id, mood, checked_in_at").eq("household_id", householdId).eq("checkin_date", localDateInputValue(new Date())).order("checked_in_at", { ascending: false }),
+    ]).then(async ([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult, appleFeedResult, moodResult]) => {
       if (eventResult.data) setEvents(displayEventsOnce(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: event.member_ids, seriesExternalId: event.series_external_id, source: event.source,
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
@@ -397,6 +425,7 @@ export default function Home() {
           if (data) loadedMembers.push({ id: data.id, userId: data.user_id, name: data.display_name, role: data.role, color: data.color });
         }
         setMembers(loadedMembers.map(({ id, userId, name, role, color }) => ({ id, userId, name, role, color })));
+        setMoodMemberId((current) => current || String(loadedMembers.find((member) => member.userId === user?.id)?.id ?? loadedMembers[0]?.id ?? ""));
       }
       if (choreResult.data) {
         const choreById = new Map(choreResult.data.map((chore) => [chore.id, chore]));
@@ -419,8 +448,15 @@ export default function Home() {
       }
       if (connectionResult.data) setGoogleConnections(connectionResult.data.map((connection) => ({ id: connection.id, name: connection.display_name, enabled: connection.enabled })));
       if (appleFeedResult.data) setAppleFeeds(appleFeedResult.data.map((feed) => ({ id: feed.id, name: feed.display_name, enabled: feed.enabled })));
+      if (moodResult.data) {
+        const loadedMoods = moodResult.data.filter((checkin) => isMoodKey(checkin.mood)).map((checkin) => ({ id: checkin.id, memberId: checkin.member_id, mood: checkin.mood, checkedInAt: checkin.checked_in_at }));
+        setMoodCheckins(loadedMoods);
+        const initialMemberId = String(memberResult.data?.find((member) => member.user_id === user?.id)?.id ?? memberResult.data?.[0]?.id ?? "");
+        const initialMood = loadedMoods.find((checkin) => String(checkin.memberId) === initialMemberId)?.mood;
+        if (initialMood) setSelectedMood(initialMood);
+      }
     });
-  }, [householdId, todayKey]);
+  }, [householdId, todayKey, user?.id]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTodayKey((current) => {
@@ -727,10 +763,10 @@ export default function Home() {
     const name = window.prompt("Child's name?");
     if (!name?.trim() || !householdId) return;
     if (supabase) {
-      const { data, error } = await supabase.from("members").insert({ household_id: householdId, display_name: name.trim(), role: "child" }).select("id, display_name, role").single();
+      const { data, error } = await supabase.from("members").insert({ household_id: householdId, display_name: name.trim(), role: "child" }).select("id, display_name, role, color").single();
       if (error) { window.alert(error.message); return; }
-      if (data) setMembers((items) => [...items, { id: data.id, name: data.display_name, role: data.role }]);
-    } else setMembers((items) => [...items, { id: Date.now().toString(), name: name.trim(), role: "child" }]);
+      if (data) setMembers((items) => [...items, { id: data.id, name: data.display_name, role: data.role, color: data.color }]);
+    } else setMembers((items) => [...items, { id: Date.now().toString(), name: name.trim(), role: "child", color: memberColorOptions[items.length % memberColorOptions.length] }]);
   }
 
   async function addChore(memberId: string | number, routine: string) {
@@ -926,22 +962,36 @@ export default function Home() {
     }
   }
 
-  async function saveFamilyNote() {
-    const note = familyNoteDraft.trim();
-    if (!note) return;
-    const author = members.find((member) => member.userId === user?.id)?.name ?? "Family";
-    const previous = { note: familyNote, author: familyNoteAuthor };
-    setFamilyNote(note);
-    setFamilyNoteAuthor(author);
-    setEditingFamilyNote(false);
-    if (supabase && householdId) {
-      const { error } = await supabase.from("households").update({ family_note: note, family_note_author: author }).eq("id", householdId);
+  async function saveMoodCheckin() {
+    if (!moodMemberId || savingMood) return false;
+    const member = members.find((item) => String(item.id) === moodMemberId);
+    if (!member) return false;
+    const checkedInAt = new Date().toISOString();
+    const optimistic: MoodCheckin = { id: `local-${moodMemberId}`, memberId: member.id, mood: selectedMood, checkedInAt };
+    const previous = moodCheckins;
+    setMoodCheckins((items) => [optimistic, ...items.filter((item) => String(item.memberId) !== moodMemberId)]);
+    setMoodMessage("");
+    setSavingMood(true);
+
+    if (supabase && householdId && user) {
+      const { data, error } = await supabase.from("mood_checkins").upsert({ household_id: householdId, member_id: member.id, checkin_date: localDateInputValue(new Date()), mood: selectedMood, checked_in_at: checkedInAt, created_by: user.id }, { onConflict: "household_id,member_id,checkin_date" }).select("id, member_id, mood, checked_in_at").single();
       if (error) {
-        setFamilyNote(previous.note);
-        setFamilyNoteAuthor(previous.author);
-        window.alert(`Could not save the family note: ${error.message}`);
+        setMoodCheckins(previous);
+        const message = error.code === "42P01"
+          ? "Run the mood check-ins migration in Supabase first."
+          : error.code === "42501"
+            ? "Supabase blocked this check-in. Re-run the latest mood check-ins migration to refresh its policy."
+            : `Couldn’t save ${member.name}’s check-in: ${error.message}`;
+        setMoodMessage(message);
+        setSavingMood(false);
+        return false;
       }
+      if (data && isMoodKey(data.mood)) setMoodCheckins((items) => [ { id: data.id, memberId: data.member_id, mood: data.mood, checkedInAt: data.checked_in_at }, ...items.filter((item) => String(item.memberId) !== moodMemberId) ]);
     }
+
+    setMoodMessage(`${member.name} checked in as ${moodOption(selectedMood).label}.`);
+    setSavingMood(false);
+    return true;
   }
 
   function updateThemeMode(mode: ThemeMode) {
@@ -949,6 +999,18 @@ export default function Home() {
     if (mode === "light") setDark(false);
     if (mode === "dark") setDark(true);
     if (supabase && householdId) void supabase.from("households").update({ theme_mode: mode }).eq("id", householdId);
+  }
+
+  async function updateMemberColor(memberId: string | number, color: string) {
+    if (!isHexColor(color)) return;
+    const previousColor = members.find((member) => String(member.id) === String(memberId))?.color;
+    setMembers((items) => items.map((member) => String(member.id) === String(memberId) ? { ...member, color } : member));
+    if (!supabase || !householdId) return;
+    const { error } = await supabase.from("members").update({ color }).eq("id", memberId).eq("household_id", householdId);
+    if (error) {
+      setMembers((items) => items.map((member) => String(member.id) === String(memberId) ? { ...member, color: previousColor } : member));
+      window.alert(`Could not save this color: ${error.message}`);
+    }
   }
 
   async function createHousehold() {
@@ -990,9 +1052,9 @@ export default function Home() {
 
   return (
     <main className={`${dark ? "dark " : ""}h-dvh overflow-x-hidden overflow-y-auto overscroll-y-auto`}>
-      <div className="min-h-full bg-[#f8f7ff] text-slate-900 transition-colors dark:bg-[#151522] dark:text-slate-100 lg:pl-24">
-        <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-100 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1c1c2b]/95 md:flex md:justify-around md:p-2 lg:inset-y-0 lg:left-0 lg:right-auto lg:w-24 lg:border-r lg:border-t-0 lg:px-3 lg:py-6">
-          <nav className="grid grid-cols-6 gap-1 md:flex md:flex-1 md:justify-around lg:mt-8 lg:flex-col lg:justify-start">{([ ["home", "home", "Home"], ["calendar", "calendar", "Calendar"], ["tasks", "tasks", "Tasks"], ["chores", "chores", "Chores"], ["lists", "lists", "Lists"], ["settings", "settings", "Settings"] ] as const).map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-bold transition-colors md:min-h-0 md:rounded-2xl md:px-3 lg:px-3 ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name={icon} className="size-5"/><span className="hidden lg:block">{label}</span></button>)}</nav>
+      <div className="min-h-full bg-[#f8f7ff] text-slate-900 transition-colors dark:bg-[#151522] dark:text-slate-100 lg:pl-28">
+        <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-100 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1c1c2b]/95 md:flex md:justify-around md:p-2 lg:inset-y-0 lg:left-0 lg:right-auto lg:w-28 lg:border-r lg:border-t-0 lg:px-3 lg:py-6">
+          <nav className="grid min-w-0 grid-cols-6 gap-1 md:flex md:flex-1 md:justify-around lg:mt-8 lg:flex-col lg:justify-start">{([ ["home", "home", "Home"], ["calendar", "calendar", "Calendar"], ["tasks", "tasks", "Tasks"], ["chores", "chores", "Chores"], ["lists", "lists", "Lists"], ["settings", "settings", "Settings"] ] as const).map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-bold transition-colors md:min-h-0 md:flex-1 md:rounded-2xl md:px-3 lg:w-full lg:flex-none lg:px-1 ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name={icon} className="size-5"/><span className="hidden max-w-full truncate lg:block">{label}</span></button>)}</nav>
         </aside>
         <header className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-5 py-5 md:px-9">
           <div className="flex items-center gap-3"><div className="hidden size-11 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/50 md:grid lg:hidden"><AppIcon name="home" className="size-5"/></div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div></div>
@@ -1000,10 +1062,10 @@ export default function Home() {
         </header>
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <>
           <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
-            <article className="relative w-full max-md:max-w-[22rem] md:max-w-none overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50 max-md:min-h-36 max-md:p-4 md:max-lg:min-h-40 md:max-lg:p-5 md:p-6"><span className={`absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="relative flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="block size-[5.5rem] shrink-0 overflow-hidden md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">☀️</span>}</span></div></article>
+            <article className="relative w-full max-md:max-w-[22rem] md:max-w-none overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#7dd3fc] via-[#60a5fa] to-[#818cf8] p-5 text-white shadow-lg shadow-sky-200/50 max-md:min-h-40 max-md:p-5 md:max-lg:min-h-40 md:max-lg:p-5 md:p-6"><span className={`absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="relative flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p></div><span className="block size-24 shrink-0 overflow-hidden md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">☀️</span>}</span></div></article>
             <article className="min-w-0 overflow-hidden rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-rose-500">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-8 place-items-center rounded-xl bg-rose-100 text-lg font-bold text-rose-600 hover:bg-rose-200">+</button></div><div className="mt-3 min-w-0 space-y-1">{openTodos.slice(0, 5).map((todo) => { const assignee = members.find((member) => member.id === todo.assigneeMemberId); return <label key={todo.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 text-sm hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => toggleTodo(todo.id)} className="size-4 accent-rose-500"/><span className="min-w-0 flex-1 truncate font-medium">{todo.title}</span>{assignee && <span className="max-w-24 shrink-0 truncate rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${assignee.color ?? "#fda4af"}33`, color: assignee.color ?? "#be123c" }}>{assignee.name}</span>}</label>; })}{openTodos.length === 0 && <p className="text-sm text-slate-400">You&apos;re all caught up.</p>}</div><button onClick={() => setActiveTab("tasks")} className="mt-2 text-xs font-bold text-violet-600">View all tasks →</button></article>
             <div className="min-w-0 md:hidden"><PhoneHomeCalendar events={calendarEvents} members={members} onOpenDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} onOpenEvent={setSelectedEvent} /></div>
-            <article className="min-w-0 overflow-hidden rounded-[1.75rem] bg-amber-100 p-5 text-amber-950"><div className="flex items-start justify-between gap-3"><p className="text-xs font-bold text-amber-700">FAMILY NOTE</p>{!editingFamilyNote && <button onClick={() => { setFamilyNoteDraft(familyNote); setEditingFamilyNote(true); }} className="rounded-lg px-2 py-1 text-xs font-bold text-amber-800 hover:bg-amber-200">Edit</button>}</div>{editingFamilyNote ? <><textarea autoFocus value={familyNoteDraft} onChange={(event) => setFamilyNoteDraft(event.target.value)} maxLength={280} rows={3} className="mt-2 w-full resize-none rounded-xl border border-amber-300 bg-white/80 px-3 py-2 text-base font-semibold leading-snug outline-amber-500"/><div className="mt-3 flex justify-end gap-2"><button onClick={() => setEditingFamilyNote(false)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-200">Cancel</button><button onClick={saveFamilyNote} disabled={!familyNoteDraft.trim()} className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">Save</button></div></> : <><p className="mt-2 break-words text-base font-bold leading-snug">{familyNote}</p><p className="mt-3 truncate text-xs font-semibold text-amber-700">— {familyNoteAuthor}</p></>}</article>
+            <FamilyMoodCard members={members} checkins={moodCheckins} selectedMemberId={moodMemberId} selectedMood={selectedMood} saving={savingMood} message={moodMessage} onMemberChange={(memberId) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); }} onMoodChange={setSelectedMood} onSave={saveMoodCheckin} />
           </section>
           <section className="hidden rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:block md:p-7"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-violet-600">CALENDAR</p><h2 className="text-xl font-bold">This month</h2></div><button onClick={() => setActiveTab("calendar")} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">Open calendar</button></div><div className="mt-4"><MonthGrid anchor={calendarAnchor} events={calendarEvents} members={members} onOpenDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} /></div></section></>}
           {activeTab === "calendar" && <section className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-7">
@@ -1016,7 +1078,7 @@ export default function Home() {
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<select value={eventCategory} onChange={(event) => setEventCategory(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></select></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "settings" ? <SettingsPage themeMode={themeMode} onThemeModeChange={updateThemeMode} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "settings" ? <SettingsPage members={members} onMemberColorChange={updateMemberColor} themeMode={themeMode} onThemeModeChange={updateThemeMode} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onApplySeries={applySeriesMembers} onDelete={deleteEvent} />}
@@ -1025,6 +1087,94 @@ export default function Home() {
       {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/animations/holidays/birthday/birthday.json" />}
     </main>
   );
+}
+
+function MoodAnimation({ mood, className = "size-full" }: { mood: MoodKey; className?: string }) {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const option = moodOption(mood);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return reduceMotion ? <span className="grid size-full place-items-center text-3xl" aria-label={option.label}>{option.emoji}</span> : <Lottie src={option.animation} autoplay loop className={className} aria-label={option.label} />;
+}
+
+function FamilyMoodCard({
+  members,
+  checkins,
+  selectedMemberId,
+  selectedMood,
+  saving,
+  message,
+  onMemberChange,
+  onMoodChange,
+  onSave,
+}: {
+  members: Member[];
+  checkins: MoodCheckin[];
+  selectedMemberId: string;
+  selectedMood: MoodKey;
+  saving: boolean;
+  message: string;
+  onMemberChange: (memberId: string) => void;
+  onMoodChange: (mood: MoodKey) => void;
+  onSave: () => Promise<boolean>;
+}) {
+  const [showMoodModal, setShowMoodModal] = useState(false);
+  const selectedMember = members.find((member) => String(member.id) === selectedMemberId);
+  const selectedMoodOption = moodOption(selectedMood);
+
+  async function handleSave() {
+    if (await onSave()) setShowMoodModal(false);
+  }
+
+  return <article className="min-w-0 overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-violet-100 via-fuchsia-50 to-sky-100 p-4 text-slate-900 shadow-sm ring-1 ring-violet-100 dark:from-violet-500/20 dark:via-fuchsia-500/10 dark:to-sky-500/10 dark:text-slate-100 dark:ring-white/10">
+    <div className="flex items-start justify-between gap-3">
+      <div><p className="text-xs font-black tracking-wide text-violet-700 dark:text-violet-200">FAMILY CHECK-IN</p><h2 className="mt-1 text-lg font-black">How&apos;s everyone feeling?</h2><p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">A little pulse for today.</p></div>
+      <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700 dark:bg-white/10 dark:text-violet-100">Today</span>
+    </div>
+    {members.length === 0 ? <p className="mt-5 rounded-2xl bg-white/60 p-4 text-sm font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Add family members to start checking in.</p> : <>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {members.map((member) => {
+          const checkin = checkins.find((item) => String(item.memberId) === String(member.id));
+          const mood = checkin ? moodOption(checkin.mood) : null;
+          const memberColor = memberCalendarColor(member, members.indexOf(member));
+          return <div key={member.id} style={mood ? { backgroundColor: memberColor } : undefined} className={`flex min-w-0 items-center gap-2 rounded-2xl p-2 ${mood ? "shadow-sm" : "bg-white/65 dark:bg-white/10"}`}>
+            <div className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl ${mood ? "" : "border border-dashed border-violet-300/80 text-xl text-violet-400 dark:border-violet-300/30"}`}>
+              {mood ? <MoodAnimation mood={mood.key} /> : <span aria-hidden="true">?</span>}
+            </div>
+            <div className="min-w-0"><p className="truncate text-xs font-black">{member.name}</p><p className="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-300">{mood?.label ?? "Not checked in"}</p></div>
+          </div>;
+        })}
+      </div>
+      <button type="button" onClick={() => setShowMoodModal(true)} aria-haspopup="dialog" className="mt-4 flex w-full items-center justify-between gap-3 rounded-2xl bg-white/75 px-4 py-3 text-left shadow-sm ring-1 ring-violet-200 transition hover:bg-white dark:bg-white/10 dark:ring-white/10">
+        <span className="min-w-0"><span className="block text-sm font-black text-violet-900 dark:text-violet-100">How are you feeling?</span><span className="mt-0.5 block truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{selectedMember?.name ?? "Choose a person"} · {selectedMoodOption.emoji} {selectedMoodOption.label}</span></span>
+        <span className="shrink-0 text-xs font-black text-violet-700 dark:text-violet-200">Check in →</span>
+      </button>
+      {showMoodModal && <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5">
+        <section role="dialog" aria-modal="true" aria-labelledby="mood-dialog-title" className="w-full max-w-md rounded-[2rem] bg-white p-5 text-slate-900 shadow-2xl dark:bg-[#242435] dark:text-slate-100">
+          <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black tracking-wide text-violet-600 dark:text-violet-200">FAMILY CHECK-IN</p><h2 id="mood-dialog-title" className="mt-1 text-2xl font-black">How are you feeling?</h2><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">Choose who you are and check in for today.</p></div><button type="button" onClick={() => setShowMoodModal(false)} aria-label="Close mood check-in" className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>
+          <div className="mt-5 space-y-4">
+            <label className="block text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">Who are you checking in for?
+              <select value={selectedMemberId} onChange={(event) => onMemberChange(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-base font-bold text-slate-800 outline-violet-500 dark:border-white/10 dark:bg-white/10 dark:text-slate-100">
+                {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+              </select>
+            </label>
+            <div><p id="mood-options-label" className="text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">How are you feeling?</p><div role="group" aria-labelledby="mood-options-label" className="mt-2 grid grid-cols-5 gap-2">
+              {moodOptions.map((mood) => <button key={mood.key} type="button" aria-pressed={selectedMood === mood.key} onClick={() => onMoodChange(mood.key)} className={`grid min-w-0 place-items-center gap-1 rounded-2xl px-1 py-3 text-center transition ${selectedMood === mood.key ? `${mood.color} ring-2` : "bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"}`}><span className="text-2xl leading-none">{mood.emoji}</span><span className="truncate text-[11px] font-black">{mood.label}</span></button>)}
+            </div></div>
+            {message && <p role="status" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message}</p>}
+            <div className="flex items-center justify-end gap-2"><button type="button" onClick={() => setShowMoodModal(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button type="button" onClick={() => void handleSave()} disabled={!selectedMember || saving} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-violet-700 disabled:opacity-50">{saving ? "Saving…" : "Save check-in"}</button></div>
+          </div>
+        </section>
+      </div>}
+    </>}
+  </article>;
 }
 
 function Chore({ emoji, title, person, done = false }: { emoji: string; title: string; person: string; done?: boolean }) {
@@ -1108,9 +1258,9 @@ function shiftCalendar(date: Date, view: "Day" | "Week" | "Month", direction: nu
 
 function memberCalendarColor(member: Member, index: number) {
   const name = member.name.toLowerCase();
+  if (member.color && member.color !== defaultMemberColor) return member.color;
   if (name === "michael") return "#86efac";
   if (name === "lucas") return "#fb923c";
-  if (member.color && member.color !== "#7c3aed") return member.color;
   return ["#a5b4fc", "#f9a8d4", "#fde68a", "#67e8f9", "#c4b5fd"][index % 5];
 }
 
@@ -1477,7 +1627,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Weekday routines</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Fixed routines reset Monday through Friday. Anytime to-dos are flexible.</p></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2">{children.map((child) => { const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-5 space-y-5">{routines.map((routine) => { const routineChores = sortedChores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === routine.id); return <section key={routine.id} className="rounded-2xl bg-white/45 p-3"><div className="flex items-center justify-between gap-3"><h4 className="text-sm font-black text-slate-700"><span className="mr-1.5">{routine.icon}</span>{routine.label}</h4>{routine.id === "To-do" && <button onClick={() => onAddChore(child.id, routine.id)} aria-label={`Add ${routine.label} chore for ${child.name}`} className="grid size-8 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600 shadow-sm">+</button>}</div><div className="mt-3 grid gap-3">{routineChores.map((chore) => <div key={chore.id} data-chore-id={String(chore.id)} data-child-id={String(child.id)} data-routine={routine.id} draggable={!chore.completionId && !chore.isFixed} onDragStart={() => !chore.isFixed && setDraggedChoreId(chore.id)} onDragEnd={() => setDraggedChoreId(null)} onDragOver={(event) => { if (!chore.completionId && !chore.isFixed) event.preventDefault(); }} onDrop={() => { if (draggedChoreId !== null && !chore.completionId && !chore.isFixed) onReorder(child.id, routine.id, draggedChoreId, chore.id); setDraggedChoreId(null); }} className={`relative min-w-0 transition ${draggedChoreId === chore.id ? "opacity-45" : ""}`}><button onClick={() => onToggle(chore)} className={`flex min-h-20 w-full items-center gap-2 rounded-2xl bg-white/90 p-3 text-left shadow-sm transition-transform active:scale-[.98] ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span onPointerDown={(event) => { if (event.pointerType !== "mouse" && !chore.isFixed) { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDraggedChoreId(chore.id); } }} onPointerUp={(event) => finishTouchDrag(event, child.id, routine.id)} onPointerCancel={() => setDraggedChoreId(null)} onClick={(event) => event.stopPropagation()} className={`shrink-0 select-none touch-none text-base leading-none ${chore.isFixed ? "text-transparent" : "cursor-grab text-slate-400 active:cursor-grabbing"}`}>⠿</span><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-3xl shadow-sm">{!chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji}</span><span className={`min-w-0 flex-1 text-base font-black leading-tight ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className={`grid size-9 shrink-0 place-items-center rounded-lg border-2 text-xl font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>{celebratingChoreId === chore.id && <ChoreCelebration/>}{!chore.isFixed && <button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} className="absolute right-1 top-1 rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-rose-600"><AppIcon name="trash" className="size-3.5"/></button>}</div>)}{routineChores.length === 0 && <p className="rounded-xl bg-white/50 px-3 py-4 text-center text-xs font-semibold text-slate-600">{routine.id === "To-do" ? "Add an anytime to-do." : isWeekday ? "Routine is ready for the weekday." : "Back on Monday."}</p>}</div></section>; })}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add Michael and Lucas (or anyone else) to create their chore boards.</div>}</div></section>;
 }
 
-function SettingsPage({ themeMode, onThemeModeChange, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult }: { themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void; googleConnections: GoogleConnection[]; appleFeeds: AppleFeed[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void; onAddApple: (name: string, url: string) => void; onToggleApple: (feed: AppleFeed) => void; onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }> }) {
+function SettingsPage({ members, onMemberColorChange, themeMode, onThemeModeChange, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult }: { members: Member[]; onMemberColorChange: (memberId: string | number, color: string) => Promise<void>; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void; googleConnections: GoogleConnection[]; appleFeeds: AppleFeed[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void; onAddApple: (name: string, url: string) => void; onToggleApple: (feed: AppleFeed) => void; onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }> }) {
   const [appleName, setAppleName] = useState("Home");
   const [appleUrl, setAppleUrl] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -1511,7 +1661,7 @@ function SettingsPage({ themeMode, onThemeModeChange, googleConnections, appleFe
   function addApple(event: FormEvent) { event.preventDefault(); if (!appleUrl.trim()) return; onAddApple(appleName.trim() || "Apple Calendar", appleUrl.trim()); setAppleUrl(""); }
   async function inviteAdult(event: FormEvent) { event.preventDefault(); setInviteStatus("Creating a private invite…"); const result = await onInviteAdult(inviteEmail, inviteName); if (result.error) { setInviteStatus(result.error); return; } setInviteStatus("Invite link copied. Send it only to this email address."); setInviteEmail(""); if (result.link) window.prompt("Copy this private invitation link and send it to them:", result.link); }
   if (pinMode !== "unlocked") return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-md rounded-[2rem] bg-white p-7 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS LOCK</p><h2 className="mt-1 text-3xl font-bold">{pinMode === "setup" ? "Create a settings PIN" : "Enter settings PIN"}</h2><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{pinMode === "setup" ? "Choose a 4–8 digit PIN so little hands cannot change calendar connections or family settings." : "Enter the family PIN to open Settings."}</p>{pinMode === "loading" ? <p className="mt-6 text-sm font-semibold text-slate-400">Checking lock…</p> : <form onSubmit={submitPin} className="mt-6 space-y-3"><input required inputMode="numeric" pattern="[0-9]{4,8}" minLength={4} maxLength={8} autoFocus type="password" value={settingsPin} onChange={(event) => setSettingsPin(event.target.value.replace(/\D/g, ""))} placeholder="4–8 digit PIN" className="w-full rounded-xl border border-violet-200 bg-white px-4 py-3 text-center text-lg tracking-[.35em] text-slate-800"/>{pinMode === "setup" && <input required inputMode="numeric" pattern="[0-9]{4,8}" minLength={4} maxLength={8} type="password" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, ""))} placeholder="Confirm PIN" className="w-full rounded-xl border border-violet-200 bg-white px-4 py-3 text-center text-lg tracking-[.35em] text-slate-800"/>}<button className="w-full rounded-xl bg-violet-600 px-4 py-3 font-bold text-white hover:bg-violet-700">{pinMode === "setup" ? "Save PIN" : "Unlock settings"}</button>{pinMessage && <p className="text-sm font-semibold text-rose-600">{pinMessage}</p>}</form>}</div></section>;
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl space-y-5"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><p className="font-bold">Appearance</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Auto follows local sunrise and sunset using the weather location.</p><div className="mt-4 flex flex-wrap gap-2">{([ ["auto", "◐ Auto"], ["light", "☀ Light"], ["dark", "☾ Dark"] ] as const).map(([mode, label]) => <button key={mode} onClick={() => onThemeModeChange(mode)} className={`rounded-xl px-4 py-2 text-sm font-bold ${themeMode === mode ? "bg-sky-600 text-white shadow-sm" : "bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100 dark:bg-white/10 dark:text-sky-100 dark:ring-white/10"}`}>{label}</button>)}</div></article><article className="mt-5 rounded-2xl bg-emerald-50 p-5 dark:bg-emerald-400/10"><p className="font-bold">Invite an adult</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">They&apos;ll get their own login and see this same family home.</p><form onSubmit={inviteAdult} className="mt-4 grid gap-3 sm:grid-cols-2"><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Adult&apos;s email address" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Name, e.g. Matt" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Create private invite</button></form>{inviteStatus && <p className="mt-3 text-sm font-semibold text-emerald-700 dark:text-emerald-200">{inviteStatus}</p>}</article><article className="mt-5 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose which Google calendars appear in your family calendar.</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnections.length ? "+ Add Google account" : "Connect Google"}</button></div>{googleConnections.length > 0 && <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">{googleConnections.map((connection) => <label key={connection.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold shadow-sm dark:bg-white/5"><input type="checkbox" checked={connection.enabled} onChange={() => onToggleConnection(connection)} className="size-4 accent-violet-600"/><span className="flex-1">{connection.name}</span><span className={connection.enabled ? "text-emerald-600" : "text-slate-400"}>{connection.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article><article className="mt-5 rounded-2xl bg-rose-50 p-5 dark:bg-rose-400/10"><div><p className="font-bold">Apple / iCloud Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Paste a public iCloud calendar link for read-only import.</p></div><form onSubmit={addApple} className="mt-4 grid gap-3 sm:grid-cols-[10rem_1fr_auto]"><input value={appleName} onChange={(event) => setAppleName(event.target.value)} placeholder="Calendar name" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><input required value={appleUrl} onChange={(event) => setAppleUrl(event.target.value)} placeholder="Paste public iCloud link" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-bold text-white">Add</button></form>{appleFeeds.length > 0 && <div className="mt-5 space-y-2 border-t border-rose-200 pt-4">{appleFeeds.map((feed) => <label key={feed.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm"><input type="checkbox" checked={feed.enabled} onChange={() => onToggleApple(feed)} className="size-4 accent-rose-500"/><span className="flex-1">{feed.name}</span><span className={feed.enabled ? "text-emerald-600" : "text-slate-400"}>{feed.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article></div></div></section>;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl space-y-5"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><p className="font-bold">Appearance</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Auto follows local sunrise and sunset using the weather location.</p><div className="mt-4 flex flex-wrap gap-2">{([ ["auto", "◐ Auto"], ["light", "☀ Light"], ["dark", "☾ Dark"] ] as const).map(([mode, label]) => <button key={mode} onClick={() => onThemeModeChange(mode)} className={`rounded-xl px-4 py-2 text-sm font-bold ${themeMode === mode ? "bg-sky-600 text-white shadow-sm" : "bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100 dark:bg-white/10 dark:text-sky-100 dark:ring-white/10"}`}>{label}</button>)}</div></article><article className="mt-5 rounded-2xl bg-violet-50 p-5 dark:bg-violet-400/10"><p className="font-bold">Person colors</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Choose a color for each person. It appears on their calendar events and assigned tasks.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">{members.map((member, index) => { const currentColor = isHexColor(member.color ?? "") && member.color !== defaultMemberColor ? member.color! : memberCalendarColor(member, index); return <div key={member.id} className="rounded-2xl bg-white/80 p-3 ring-1 ring-violet-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center gap-3"><span className="size-8 shrink-0 rounded-full ring-2 ring-white" style={{ backgroundColor: currentColor }} /><div className="min-w-0"><p className="truncate font-bold">{member.name}</p><p className="text-xs text-slate-500 dark:text-slate-300">{member.role === "adult" ? "Adult" : "Child"}</p></div></div><div className="mt-3 flex flex-wrap items-center gap-2">{memberColorOptions.map((color) => <button key={color} type="button" aria-label={`Set ${member.name}'s color`} onClick={() => void onMemberColorChange(member.id, color)} className={`size-7 rounded-full border-2 ${currentColor.toLowerCase() === color ? "border-slate-900 ring-2 ring-white" : "border-white/80 dark:border-white/20"}`} style={{ backgroundColor: color }} />)}<label className="relative grid size-7 cursor-pointer place-items-center overflow-hidden rounded-full border-2 border-dashed border-violet-300 text-xs font-black text-violet-600 dark:border-violet-200 dark:text-violet-200" title={`Choose ${member.name}'s custom color`}><span aria-hidden="true">+</span><input type="color" aria-label={`Choose ${member.name}'s custom color`} value={currentColor} onChange={(event) => void onMemberColorChange(member.id, event.target.value)} className="absolute inset-0 size-full cursor-pointer opacity-0" /></label></div></div>; })}</div>{members.length === 0 && <p className="mt-4 text-sm text-slate-500">No people have been added yet.</p>}</article><article className="mt-5 rounded-2xl bg-emerald-50 p-5 dark:bg-emerald-400/10"><p className="font-bold">Invite an adult</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">They&apos;ll get their own login and see this same family home.</p><form onSubmit={inviteAdult} className="mt-4 grid gap-3 sm:grid-cols-2"><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Adult&apos;s email address" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Name, e.g. Matt" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Create private invite</button></form>{inviteStatus && <p className="mt-3 text-sm font-semibold text-emerald-700 dark:text-emerald-200">{inviteStatus}</p>}</article><article className="mt-5 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose which Google calendars appear in your family calendar.</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnections.length ? "+ Add Google account" : "Connect Google"}</button></div>{googleConnections.length > 0 && <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">{googleConnections.map((connection) => <label key={connection.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold shadow-sm dark:bg-white/5"><input type="checkbox" checked={connection.enabled} onChange={() => onToggleConnection(connection)} className="size-4 accent-violet-600"/><span className="flex-1">{connection.name}</span><span className={connection.enabled ? "text-emerald-600" : "text-slate-400"}>{connection.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article><article className="mt-5 rounded-2xl bg-rose-50 p-5 dark:bg-rose-400/10"><div><p className="font-bold">Apple / iCloud Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Paste a public iCloud calendar link for read-only import.</p></div><form onSubmit={addApple} className="mt-4 grid gap-3 sm:grid-cols-[10rem_1fr_auto]"><input value={appleName} onChange={(event) => setAppleName(event.target.value)} placeholder="Calendar name" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><input required value={appleUrl} onChange={(event) => setAppleUrl(event.target.value)} placeholder="Paste public iCloud link" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-bold text-white">Add</button></form>{appleFeeds.length > 0 && <div className="mt-5 space-y-2 border-t border-rose-200 pt-4">{appleFeeds.map((feed) => <label key={feed.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm"><input type="checkbox" checked={feed.enabled} onChange={() => onToggleApple(feed)} className="size-4 accent-rose-500"/><span className="flex-1">{feed.name}</span><span className={feed.enabled ? "text-emerald-600" : "text-slate-400"}>{feed.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article></div></div></section>;
 }
 
 function ListsPage({ lists, onAddList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {

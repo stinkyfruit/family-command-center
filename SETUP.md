@@ -2,7 +2,7 @@
 
 1. Create a new Supabase project and enable an Auth provider (email is enough for the first release).
 2. Copy `.env.example` to `.env.local` and fill in the project URL and **publishable** key from the Supabase Connect dialog. Never put the service-role key in a `NEXT_PUBLIC_` variable.
-3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql`.
+3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql` and `supabase/migrations/20260822_add_mood_checkins.sql`.
 4. Restart `npm run dev`. The current screen remains a local demo until the next implementation slice connects authentication and data queries.
 
 ## Google Calendar sync
@@ -17,7 +17,16 @@ Once connected, the dashboard refreshes Google Calendar when it opens if the mos
 
 ## Assistant tooling — documentation MCP servers
 
-Cline (VS Code) reads MCP server config from `.mcp.json` in the repo root. Two servers are expected:
+Codex reads MCP server config from `~/.codex/config.toml`. Add this entry for Context7:
+
+```toml
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+startup_timeout_sec = 120
+```
+
+Restart Codex after changing the config. The repo-level `.mcp.json` is retained for Cline compatibility. Cline reads it from the repo root. Two servers are expected there:
 
 | Server | Purpose | Source |
 |---|---|---|
