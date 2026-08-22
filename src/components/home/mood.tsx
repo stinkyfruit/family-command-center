@@ -77,7 +77,7 @@ export function FamilyMoodCard({
           <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black tracking-wide text-violet-600 dark:text-violet-200">FAMILY CHECK-IN</p><h2 id="mood-dialog-title" className="mt-1 text-2xl font-black">How are you feeling?</h2><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">Choose who you are and check in for today.</p></div><button type="button" onClick={() => setShowMoodModal(false)} aria-label="Close mood check-in" className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>
           <div className="mt-5 space-y-4">
             <label className="block text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">Who are you checking in for?
-              <StyledSelect value={selectedMemberId} onChange={(event) => onMemberChange(event.target.value)} className="mt-1.5 text-base">
+              <StyledSelect value={selectedMemberId} onChange={(event) => onMemberChange(event.target.value)}>
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
               </StyledSelect>
             </label>
