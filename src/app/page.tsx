@@ -6,14 +6,13 @@ import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, Clip
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
 import clearNightAnimation from "@meteocons/lottie/flat/clear-night.json";
-import cloudyAnimation from "@meteocons/lottie/flat/cloudy.json";
+import cloudyAnimation from "../../public/animations/general/weather/cloudy.json";
 import fogAnimation from "@meteocons/lottie/flat/fog.json";
 import partlyCloudyDayAnimation from "@meteocons/lottie/flat/partly-cloudy-day.json";
 import partlyCloudyNightAnimation from "@meteocons/lottie/flat/partly-cloudy-night.json";
-import rainAnimation from "@meteocons/lottie/flat/rain.json";
+import rainAnimation from "../../public/animations/general/weather/rain.json";
 import snowAnimation from "@meteocons/lottie/flat/snow.json";
-import thunderstormsDayAnimation from "@meteocons/lottie/flat/thunderstorms-day.json";
-import thunderstormsNightAnimation from "@meteocons/lottie/flat/thunderstorms-night.json";
+import thunderstormsAnimation from "../../public/animations/general/weather/thunderstorms.json";
 import sunnyAnimation from "../../public/animations/general/weather/sunny.json";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 
@@ -1054,7 +1053,7 @@ function weatherAnimation(code: number, isDay: boolean) {
   if (code === 3) return cloudyAnimation;
   if (code === 45 || code === 48) return fogAnimation;
   if (code >= 71 && code <= 77 || code === 85 || code === 86) return snowAnimation;
-  if (code >= 95) return isDay ? thunderstormsDayAnimation : thunderstormsNightAnimation;
+  if (code >= 95) return thunderstormsAnimation;
   return rainAnimation;
 }
 
