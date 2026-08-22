@@ -15,6 +15,8 @@ create table public.households (
   latitude numeric,
   longitude numeric,
   theme_mode text not null default 'auto' check (theme_mode in ('auto', 'light', 'dark')),
+  show_chores_tab boolean not null default true,
+  show_wishlist_tab boolean not null default true,
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

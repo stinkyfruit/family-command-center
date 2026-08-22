@@ -53,6 +53,17 @@ import { FamilyMoodCard } from "@/components/home/mood";
 import { AuthScreen, Screensaver, SeasonalScreensaver, TaskEditor, TasksPage } from "@/components/home/task-components";
 import ChristmasWishlistPage from "@/features/christmas-wishlist/christmas-wishlist-page";
 
+const navigationTabs = [
+  ["home", "home", "Home"],
+  ["calendar", "calendar", "Calendar"],
+  ["tasks", "tasks", "Tasks"],
+  ["chores", "chores", "Chores"],
+  ["lists", "lists", "Lists"],
+  ["wishlist", "wishlist", "Wish lists"],
+  ["settings", "settings", "Settings"],
+] as const;
+type HomeTab = typeof navigationTabs[number][0];
+
 export default function Home() {
   const [events, setEvents] = useState(starterEvents);
   const [todos, setTodos] = useState<Todo[]>([
@@ -70,7 +81,7 @@ export default function Home() {
   const [eventLocation, setEventLocation] = useState("");
   const [eventCategory, setEventCategory] = useState("General");
   const [calendarAnchor, setCalendarAnchor] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<"home" | "calendar" | "tasks" | "chores" | "lists" | "wishlist" | "settings">("home");
+  const [activeTab, setActiveTab] = useState<HomeTab>("home");
   const [weather, setWeather] = useState<Weather | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -81,6 +92,8 @@ export default function Home() {
   const [showFamilyEvents, setShowFamilyEvents] = useState(false);
   const [dark, setDark] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
+  const [showChoresTab, setShowChoresTab] = useState(true);
+  const [showWishlistTab, setShowWishlistTab] = useState(true);
   const [sunTimes, setSunTimes] = useState<{ sunrise: number; sunset: number } | null>(null);
   const [seasonalScreenSaver, setSeasonalScreenSaver] = useState(false);
   const [screenSaver, setScreenSaver] = useState(false);
@@ -222,10 +235,12 @@ export default function Home() {
       const id = data?.[0]?.household_id ?? null;
       setHouseholdId(id);
       if (id) {
-        const { data: household } = await supabase!.from("households").select("name, theme_mode").eq("id", id).single();
+        const { data: household } = await supabase!.from("households").select("name, theme_mode, show_chores_tab, show_wishlist_tab").eq("id", id).single();
         if (household) {
           setHouseholdName(household.name);
           if (household.theme_mode === "light" || household.theme_mode === "dark" || household.theme_mode === "auto") setThemeMode(household.theme_mode);
+          if (typeof household.show_chores_tab === "boolean") setShowChoresTab(household.show_chores_tab);
+          if (typeof household.show_wishlist_tab === "boolean") setShowWishlistTab(household.show_wishlist_tab);
         }
       }
       setDataReady(true);
@@ -946,6 +961,23 @@ export default function Home() {
     if (supabase && householdId) void supabase.from("households").update({ theme_mode: mode }).eq("id", householdId);
   }
 
+  async function updateTabVisibility(tab: "chores" | "wishlist", visible: boolean) {
+    const previous = tab === "chores" ? showChoresTab : showWishlistTab;
+    if (previous === visible) return;
+    if (tab === "chores") setShowChoresTab(visible);
+    else setShowWishlistTab(visible);
+    if (!visible && activeTab === tab) setActiveTab("home");
+    if (!supabase || !householdId) return;
+
+    const column = tab === "chores" ? "show_chores_tab" : "show_wishlist_tab";
+    const { error } = await supabase.from("households").update({ [column]: visible }).eq("id", householdId);
+    if (error) {
+      if (tab === "chores") setShowChoresTab(previous);
+      else setShowWishlistTab(previous);
+      window.alert(`Could not update the ${tab} tab: ${error.message}`);
+    }
+  }
+
   async function updateMemberColor(memberId: string | number, color: string) {
     if (!isHexColor(color)) return;
     const previousColor = members.find((member) => String(member.id) === String(memberId))?.color;
@@ -1001,12 +1033,14 @@ export default function Home() {
   if (screenSaver) return <Screensaver onExit={() => setScreenSaver(false)} />;
   if (seasonalScreenSaver) return <SeasonalScreensaver onExit={() => setSeasonalScreenSaver(false)} />;
 
+  const visibleNavigationTabs = navigationTabs.filter(([tab]) => tab !== "chores" || showChoresTab).filter(([tab]) => tab !== "wishlist" || showWishlistTab);
+
   return (
     <main className={`${dark ? "dark " : ""}h-dvh overflow-x-hidden overflow-y-auto overscroll-y-auto`}>
       <div className={`relative min-h-full transition-colors lg:pl-24 ${activeTab === "wishlist" ? "christmas-home-shell text-white" : "bg-[#f8f7ff] text-slate-900 dark:bg-[#151522] dark:text-slate-100"}`}>
         {activeTab === "wishlist" && <div className="christmas-pine-scene pointer-events-none absolute inset-0 z-0" aria-hidden="true" />}
         <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-100 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1c1c2b]/95 md:flex md:justify-around md:p-2 lg:inset-y-0 lg:left-0 lg:right-auto lg:w-24 lg:border-r lg:border-t-0 lg:px-2 lg:py-4">
-          <nav className="grid min-w-0 grid-cols-7 gap-1 md:flex md:flex-1 md:justify-around lg:mt-6 lg:flex-col lg:justify-start">{([ ["home", "home", "Home"], ["calendar", "calendar", "Calendar"], ["tasks", "tasks", "Tasks"], ["chores", "chores", "Chores"], ["lists", "lists", "Lists"], ["wishlist", "wishlist", "Wish lists"], ["settings", "settings", "Settings"] ] as const).map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-bold transition-colors md:min-h-0 md:flex-1 md:rounded-2xl md:px-3 lg:w-full lg:flex-none lg:px-1 ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name={icon} className="size-5"/><span className="hidden max-w-full truncate lg:block">{label}</span></button>)}</nav>
+          <nav style={{ gridTemplateColumns: `repeat(${visibleNavigationTabs.length}, minmax(0, 1fr))` }} className="grid min-w-0 gap-1 md:flex md:flex-1 md:justify-around lg:mt-6 lg:flex-col lg:justify-start">{visibleNavigationTabs.map(([tab, icon, label]) => <button key={tab} onClick={() => setActiveTab(tab)} title={label} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-bold transition-colors md:min-h-0 md:flex-1 md:rounded-2xl md:px-3 lg:w-full lg:flex-none lg:px-1 ${activeTab === tab ? "bg-violet-600 text-white shadow-md" : "text-slate-500 hover:bg-violet-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><AppIcon name={icon} className="size-5"/><span className="hidden max-w-full truncate lg:block">{label}</span></button>)}</nav>
         </aside>
         <header className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-5 py-5 md:px-9">
           <div className="flex items-center gap-3"><div className="hidden size-11 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/50 md:grid lg:hidden"><AppIcon name="home" className="size-5"/></div><div><h1 className="text-xl font-bold tracking-tight">{householdName}</h1><p className={activeTab === "wishlist" ? "text-sm text-white/70" : "text-sm text-slate-500 dark:text-slate-400"}>{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div></div>
@@ -1030,7 +1064,7 @@ export default function Home() {
               {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="mt-3 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => setEventCategory(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onApplySeries={applySeriesMembers} onDelete={deleteEvent} />}
@@ -1134,15 +1168,20 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
 
 function SettingsPage(props: Parameters<typeof SettingsPageContent>[0]) {
   const [signOutMessage, setSignOutMessage] = useState("");
+  const [settingsUnlocked, setSettingsUnlocked] = useState(!supabase);
   async function handleSignOut() {
     setSignOutMessage("Signing out…");
     const result = await props.onSignOut();
     if (result.error) setSignOutMessage(result.error);
   }
-  return <><SettingsPageContent {...props} />{supabase && <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-600">ACCOUNT</p><h2 className="mt-1 text-2xl font-bold">Sign out</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Sign out of this family command center on this device.</p></div><button type="button" onClick={() => void handleSignOut()} className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"><AppIcon name="signOut" className="size-4" />Log out</button></div>{signOutMessage && <p className="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-200">{signOutMessage}</p>}</div></section>}</>;
+  return <><SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} />{settingsUnlocked && <TabVisibilitySettings showChoresTab={props.showChoresTab} showWishlistTab={props.showWishlistTab} onTabVisibilityChange={props.onTabVisibilityChange} />}{supabase && <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-600">ACCOUNT</p><h2 className="mt-1 text-2xl font-bold">Sign out</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Sign out of this family command center on this device.</p></div><button type="button" onClick={() => void handleSignOut()} className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"><AppIcon name="signOut" className="size-4" />Log out</button></div>{signOutMessage && <p className="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-200">{signOutMessage}</p>}</div></section>}</>;
 }
 
-function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult, onSignOut }: { members: Member[]; currentUserId: string | null; onMemberColorChange: (memberId: string | number, color: string) => Promise<void>; onAddMember: (name: string, role: Member["role"]) => Promise<{ error?: string }>; onRemoveMember: (member: Member) => Promise<{ error?: string }>; onUpdateCurrentMemberName: (name: string) => Promise<{ error?: string }>; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void; googleConnections: GoogleConnection[]; appleFeeds: AppleFeed[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void; onAddApple: (name: string, url: string) => void; onToggleApple: (feed: AppleFeed) => void; onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }>; onSignOut: () => Promise<{ error?: string }> }) {
+function TabVisibilitySettings({ showChoresTab, showWishlistTab, onTabVisibilityChange }: { showChoresTab: boolean; showWishlistTab: boolean; onTabVisibilityChange: (tab: "chores" | "wishlist", visible: boolean) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9 lg:pb-5"><div className="max-w-2xl rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-100 dark:bg-amber-400/10 dark:ring-amber-300/20"><p className="text-sm font-bold text-amber-700 dark:text-amber-200">NAVIGATION</p><h2 className="mt-1 text-2xl font-bold">Home tabs</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Hide sections your household does not use. Your data stays saved if you hide a tab.</p><div className="mt-4 space-y-2"><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showChoresTab} onChange={(event) => onTabVisibilityChange("chores", event.target.checked)} className="size-4 accent-amber-600"/><span className="flex-1">Chores</span><span className={showChoresTab ? "text-emerald-600" : "text-slate-400"}>{showChoresTab ? "Shown" : "Hidden"}</span></label><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showWishlistTab} onChange={(event) => onTabVisibilityChange("wishlist", event.target.checked)} className="size-4 accent-amber-600"/><span className="flex-1">Wish lists</span><span className={showWishlistTab ? "text-emerald-600" : "text-slate-400"}>{showWishlistTab ? "Shown" : "Hidden"}</span></label></div></div></section>;
+}
+
+function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult, onSignOut }: { members: Member[]; currentUserId: string | null; onMemberColorChange: (memberId: string | number, color: string) => Promise<void>; onAddMember: (name: string, role: Member["role"]) => Promise<{ error?: string }>; onRemoveMember: (member: Member) => Promise<{ error?: string }>; onUpdateCurrentMemberName: (name: string) => Promise<{ error?: string }>; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void; showChoresTab: boolean; showWishlistTab: boolean; onTabVisibilityChange: (tab: "chores" | "wishlist", visible: boolean) => void; onUnlocked?: () => void; googleConnections: GoogleConnection[]; appleFeeds: AppleFeed[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void; onAddApple: (name: string, url: string) => void; onToggleApple: (feed: AppleFeed) => void; onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }>; onSignOut: () => Promise<{ error?: string }> }) {
   void onSignOut;
   const [appleName, setAppleName] = useState("Home");
   const [appleUrl, setAppleUrl] = useState("");
@@ -1181,12 +1220,12 @@ function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAd
       if (settingsPin !== pinConfirmation) { setPinMessage("Those PINs do not match."); return; }
       const { error } = await supabase.rpc("set_household_settings_pin", { p_pin: settingsPin });
       if (error) { setPinMessage(error.message); return; }
-      setSettingsPin(""); setPinConfirmation(""); setPinMode("unlocked"); return;
+      setSettingsPin(""); setPinConfirmation(""); setPinMode("unlocked"); onUnlocked?.(); return;
     }
     const { data, error } = await supabase.rpc("verify_household_settings_pin", { p_pin: settingsPin });
     if (error) { setPinMessage(error.message); return; }
     if (!data) { setPinMessage("That PIN is not right. Try again."); setSettingsPin(""); return; }
-    setSettingsPin(""); setPinMode("unlocked");
+    setSettingsPin(""); setPinMode("unlocked"); onUnlocked?.();
   }
   function addApple(event: FormEvent) { event.preventDefault(); if (!appleUrl.trim()) return; onAddApple(appleName.trim() || "Apple Calendar", appleUrl.trim()); setAppleUrl(""); }
   async function inviteAdult(event: FormEvent) { event.preventDefault(); setInviteStatus("Creating a private invite…"); const result = await onInviteAdult(inviteEmail, inviteName); if (result.error) { setInviteStatus(result.error); return; } setInviteStatus("Invite link copied. Send it only to this email address."); setInviteEmail(""); if (result.link) window.prompt("Copy this private invitation link and send it to them:", result.link); }
