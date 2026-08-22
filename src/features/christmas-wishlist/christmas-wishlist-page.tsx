@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
+import { AppIcon } from "@/components/home/shared-ui";
 
 type Kid = { id: string; name: string; color: string; emoji: string };
 type WishItem = { id: string; title: string; note: string; category: string; priority: boolean; createdAt: string };
@@ -38,6 +39,8 @@ export default function ChristmasWishlistPage() {
   const [celebrating, setCelebrating] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [deletedWishIds, setDeletedWishIds] = useState<string[]>([]);
+  const [storageHydrated, setStorageHydrated] = useState(false);
 
   const selectedKid = kids.find((kid) => kid.id === selectedKidId) ?? kids[0];
   const selectedWishes = useMemo(() => wishlists[selectedKid?.id ?? ""] ?? [], [selectedKid?.id, wishlists]);
@@ -46,35 +49,50 @@ export default function ChristmasWishlistPage() {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(storageKey);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as { kids?: Kid[]; wishlists?: WishlistByKid };
+      if (!saved) {
+        // Browser storage hydration is intentionally a one-time external-state sync.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStorageHydrated(true);
+        return;
+      }
+      const parsed = JSON.parse(saved) as { kids?: Kid[]; wishlists?: WishlistByKid; deletedWishIds?: string[] };
       if (parsed.kids?.length && parsed.wishlists) {
         // Hydrate from browser storage after the static shell renders.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setKids(parsed.kids);
         setWishlists(parsed.wishlists);
         setSelectedKidId(parsed.kids[0].id);
+        setDeletedWishIds(parsed.deletedWishIds ?? []);
       }
+      setStorageHydrated(true);
     } catch {
       // Keep the starter list if local storage is unavailable or malformed.
+      setStorageHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!storageHydrated) return;
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ kids, wishlists }));
+      window.localStorage.setItem(storageKey, JSON.stringify({ kids, wishlists, deletedWishIds }));
     } catch {
       // The page remains usable without local storage.
     }
-  }, [kids, wishlists]);
+  }, [kids, wishlists, deletedWishIds, storageHydrated]);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !storageHydrated) return;
     let cancelled = false;
 
     async function loadFamilyWishlist() {
       const { data: userResult } = await supabase!.auth.getUser();
       if (!userResult.user) return;
+      let locallyDeletedWishIds: string[] = [];
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        if (saved) locallyDeletedWishIds = (JSON.parse(saved) as { deletedWishIds?: string[] }).deletedWishIds ?? [];
+      } catch {
+        // Continue with the server list if local storage is unavailable.
+      }
       const { data: membership } = await supabase!.from("members").select("household_id").eq("user_id", userResult.user.id).limit(1).maybeSingle();
       if (!membership?.household_id) return;
 
@@ -92,6 +110,7 @@ export default function ChristmasWishlistPage() {
       }));
       const loadedWishlists = Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid;
       for (const wish of wishRows ?? []) {
+        if (locallyDeletedWishIds.includes(String(wish.id))) continue;
         const memberId = String(wish.member_id);
         if (!loadedWishlists[memberId]) loadedWishlists[memberId] = [];
         loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
@@ -99,13 +118,14 @@ export default function ChristmasWishlistPage() {
       setHouseholdId(membership.household_id);
       setKids(loadedKids);
       setWishlists(loadedWishlists);
+      setDeletedWishIds(locallyDeletedWishIds);
       setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0].id);
       setSyncMessage("Synced with your family home");
     }
 
     void loadFamilyWishlist();
     return () => { cancelled = true; };
-  }, []);
+  }, [storageHydrated]);
 
   function addWish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -142,7 +162,12 @@ export default function ChristmasWishlistPage() {
   function removeWish(wish: WishItem) {
     if (!selectedKid) return;
     setWishlists((current) => ({ ...current, [selectedKid.id]: (current[selectedKid.id] ?? []).filter((item) => item.id !== wish.id) }));
-    if (supabase && householdId && !wish.id.startsWith("local-")) void supabase.from("christmas_wishlist_items").delete().eq("id", wish.id);
+    setDeletedWishIds((current) => current.includes(wish.id) ? current : [...current, wish.id]);
+    if (supabase && householdId && !wish.id.startsWith("local-")) {
+      void supabase.from("christmas_wishlist_items").delete().eq("id", wish.id).then(({ error }) => {
+        if (error) setSyncMessage("Removed here · the family copy could not be deleted yet");
+      });
+    }
   }
 
   if (!selectedKid) return null;
@@ -189,5 +214,5 @@ export default function ChristmasWishlistPage() {
 }
 
 function WishRow({ wish, index, onTogglePriority, onRemove }: { wish: WishItem; index: number; onTogglePriority: () => void; onRemove: () => void }) {
-  return <article className="group flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/5"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-xs font-black text-amber-700">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-slate-800 dark:text-slate-100">{wish.title}</h3>{wish.priority && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">Top dream</span>}</div>{wish.note && <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">{wish.note}</p>}<span className="mt-1.5 inline-block text-[10px] font-black uppercase tracking-wide text-slate-400">{wish.category}</span></div><div className="flex shrink-0 gap-1"><button onClick={onTogglePriority} aria-label={wish.priority ? "Remove top dream" : "Make top dream"} className={`grid size-8 place-items-center rounded-lg text-lg hover:bg-amber-50 ${wish.priority ? "text-amber-500" : "text-slate-300"}`}>★</button><button onClick={onRemove} aria-label={`Remove ${wish.title}`} className="grid size-8 place-items-center rounded-lg text-lg text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100 focus:opacity-100">×</button></div></article>;
+  return <article className="group flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/5"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-xs font-black text-amber-700">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-slate-800 dark:text-slate-100">{wish.title}</h3>{wish.priority && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">Top dream</span>}</div>{wish.note && <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">{wish.note}</p>}<span className="mt-1.5 inline-block text-[10px] font-black uppercase tracking-wide text-slate-400">{wish.category}</span></div><div className="flex shrink-0 gap-1"><button type="button" onClick={onTogglePriority} aria-label={wish.priority ? "Remove top dream" : "Make top dream"} className={`grid size-8 place-items-center rounded-lg text-lg hover:bg-amber-50 ${wish.priority ? "text-amber-500" : "text-slate-300"}`}>★</button><button type="button" onClick={onRemove} title={`Delete ${wish.title}`} aria-label={`Delete ${wish.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 opacity-0 hover:bg-rose-100 group-hover:opacity-100 focus:opacity-100"><AppIcon name="trash" className="size-4" /></button></div></article>;
 }
