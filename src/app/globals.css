@@ -19,8 +19,16 @@ button:disabled { cursor: not-allowed; }
   background-image: radial-gradient(ellipse at 50% -12%, rgb(55 145 111 / .38), transparent 52%), radial-gradient(ellipse at 0% 100%, rgb(3 25 23 / .95), transparent 62%), radial-gradient(circle at 9% 18%, rgb(244 199 92 / .75) 0 2px, transparent 3px), radial-gradient(circle at 23% 8%, rgb(244 199 92 / .65) 0 2px, transparent 3px), radial-gradient(circle at 78% 13%, rgb(244 199 92 / .7) 0 2px, transparent 3px), radial-gradient(circle at 91% 32%, rgb(244 199 92 / .65) 0 2px, transparent 3px), radial-gradient(circle at 15% 72%, rgb(255 255 255 / .6) 0 1.5px, transparent 2.5px), radial-gradient(circle at 86% 82%, rgb(255 255 255 / .55) 0 1.5px, transparent 2.5px), linear-gradient(135deg, #0c3a31, #041d1a 72%);
 }
 .christmas-pine-scene {
-  background: url("/christmas-pine-scene.svg") bottom center / min(100%, 1600px) auto no-repeat;
+  background: url("/christmas-pine-scene.svg") center center / cover no-repeat;
   opacity: .92;
+}
+.dark .christmas-pine-scene {
+  filter: brightness(.72) saturate(.9);
+}
+.christmas-home-shell > header,
+.christmas-home-shell > div:not(.christmas-pine-scene) {
+  position: relative;
+  z-index: 10;
 }
 .christmas-snow {
   background-image: radial-gradient(circle, rgb(255 255 255 / .95) 0 2px, transparent 2.5px), radial-gradient(circle, rgb(255 255 255 / .75) 0 1.5px, transparent 2px), radial-gradient(circle, rgb(255 255 255 / .9) 0 1px, transparent 1.5px);

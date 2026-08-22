@@ -215,7 +215,7 @@ export default function ChristmasWishlistPage() {
               {kids.map((kid) => {
                 const selected = kid.id === selectedKid.id;
                 const count = wishlists[kid.id]?.length ?? 0;
-                return <button key={kid.id} onClick={() => setSelectedKidId(kid.id)} className={`flex items-center gap-3 rounded-2xl p-3 text-left transition ${selected ? "bg-violet-600 text-white shadow-md" : "text-slate-600 hover:bg-rose-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><span className="grid size-10 shrink-0 place-items-center rounded-xl text-xl" style={{ backgroundColor: selected ? "rgb(255 255 255 / .16)" : `${kid.color}22` }}>{kid.emoji}</span><span className="min-w-0 flex-1"><span className="block truncate font-black">{kid.name}</span><span className={`text-xs font-semibold ${selected ? "text-violet-100" : "text-slate-400"}`}>{count} {count === 1 ? "wish" : "wishes"}</span></span></button>;
+                return <button key={kid.id} onClick={() => setSelectedKidId(kid.id)} className={`flex items-center gap-3 rounded-2xl p-3 text-left transition ${selected ? "bg-emerald-700 text-white shadow-md shadow-emerald-900/20" : "text-slate-600 hover:bg-rose-50 dark:text-slate-300 dark:hover:bg-white/10"}`}><span className="grid size-10 shrink-0 place-items-center rounded-xl text-xl" style={{ backgroundColor: selected ? "rgb(255 255 255 / .16)" : `${kid.color}22` }}>{kid.emoji}</span><span className="min-w-0 flex-1"><span className="block truncate font-black">{kid.name}</span><span className={`text-xs font-semibold ${selected ? "text-emerald-100" : "text-slate-400"}`}>{count} {count === 1 ? "wish" : "wishes"}</span></span></button>;
               })}
             </div>
           </aside>
