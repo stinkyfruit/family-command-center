@@ -3,40 +3,23 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
-import { AppIcon } from "@/components/home/shared-ui";
+import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
 import { christmasAnimations } from "@/generated/animation-manifest";
 
 type Kid = { id: string; name: string; color: string; emoji: string };
 type WishItem = { id: string; title: string; note: string; category: string; priority: boolean; createdAt: string };
 type WishlistByKid = Record<string, WishItem[]>;
 
-const fallbackKids: Kid[] = [
-  { id: "maya", name: "Maya", color: "#e85d75", emoji: "🦌" },
-  { id: "owen", name: "Owen", color: "#2d9a79", emoji: "⛄" },
-];
-
-const fallbackWishlist: WishlistByKid = {
-  maya: [
-    { id: "maya-1", title: "A cozy reading nook", note: "With twinkle lights!", category: "Cozy", priority: true, createdAt: "2026-08-01" },
-    { id: "maya-2", title: "Roller skates", note: "Pink or purple would be perfect", category: "Play", priority: false, createdAt: "2026-08-02" },
-  ],
-  owen: [
-    { id: "owen-1", title: "A remote control car", note: "One that can go really fast", category: "Play", priority: true, createdAt: "2026-08-04" },
-    { id: "owen-2", title: "Dinosaur encyclopedia", note: "With lots of T. rex facts", category: "Learn", priority: false, createdAt: "2026-08-05" },
-  ],
-};
-
 const categories = ["Play", "Create", "Learn", "Cozy", "Surprise"] as const;
-const storageKey = "family-christmas-wishlist-v1";
 const christmasTreeAnimation = christmasAnimations.find((src) => src.includes("Christmas%20Tree")) ?? "/animations/holidays/christmas/Christmas%20Tree%20Animation.json";
 const gingerbreadAnimation = christmasAnimations.find((src) => src.includes("Ginger%20bread")) ?? "/animations/holidays/christmas/Ginger%20bread%20socks%20Christmas.json";
 const snowmanAnimation = christmasAnimations.find((src) => src.includes("snowman")) ?? "/animations/holidays/christmas/Happy%20snowman%20jumping%20and%20waving%20his%20hand.json";
 const santaSleighAnimation = christmasAnimations.find((src) => src.includes("santa%20sleigh")) ?? "/animations/holidays/christmas/santa%20sleigh.json";
 
 export default function ChristmasWishlistPage() {
-  const [kids, setKids] = useState<Kid[]>(fallbackKids);
-  const [wishlists, setWishlists] = useState<WishlistByKid>(fallbackWishlist);
-  const [selectedKidId, setSelectedKidId] = useState(fallbackKids[0].id);
+  const [kids, setKids] = useState<Kid[]>([]);
+  const [wishlists, setWishlists] = useState<WishlistByKid>({});
+  const [selectedKidId, setSelectedKidId] = useState<string | null>(null);
   const [newWish, setNewWish] = useState("");
   const [newNote, setNewNote] = useState("");
   const [category, setCategory] = useState<(typeof categories)[number]>("Play");
@@ -44,8 +27,6 @@ export default function ChristmasWishlistPage() {
   const [celebrating, setCelebrating] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [householdId, setHouseholdId] = useState<string | null>(null);
-  const [deletedWishIds, setDeletedWishIds] = useState<string[]>([]);
-  const [storageHydrated, setStorageHydrated] = useState(false);
   const [backgroundSleighVisible, setBackgroundSleighVisible] = useState(false);
 
   const selectedKid = kids.find((kid) => kid.id === selectedKidId) ?? kids[0];
@@ -53,62 +34,33 @@ export default function ChristmasWishlistPage() {
   const totalWishes = Object.values(wishlists).reduce((total, list) => total + list.length, 0);
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (!saved) {
-        // Browser storage hydration is intentionally a one-time external-state sync.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setStorageHydrated(true);
-        return;
-      }
-      const parsed = JSON.parse(saved) as { kids?: Kid[]; wishlists?: WishlistByKid; deletedWishIds?: string[] };
-      if (parsed.kids?.length && parsed.wishlists) {
-        // Hydrate from browser storage after the static shell renders.
-        setKids(parsed.kids);
-        setWishlists(parsed.wishlists);
-        setSelectedKidId(parsed.kids[0].id);
-        setDeletedWishIds(parsed.deletedWishIds ?? []);
-      }
-      setStorageHydrated(true);
-    } catch {
-      // Keep the starter list if local storage is unavailable or malformed.
-      setStorageHydrated(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!storageHydrated) return;
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ kids, wishlists, deletedWishIds }));
-    } catch {
-      // The page remains usable without local storage.
-    }
-  }, [kids, wishlists, deletedWishIds, storageHydrated]);
-
-  useEffect(() => {
-    if (!supabase || !storageHydrated) return;
+    if (!supabase) return;
     let cancelled = false;
 
     async function loadFamilyWishlist() {
       const { data: userResult } = await supabase!.auth.getUser();
-      if (!userResult.user) return;
-      let locallyDeletedWishIds: string[] = [];
-      try {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) locallyDeletedWishIds = (JSON.parse(saved) as { deletedWishIds?: string[] }).deletedWishIds ?? [];
-      } catch {
-        // Continue with the server list if local storage is unavailable.
+      if (!userResult.user) {
+        setKids([]);
+        setWishlists({});
+        setSelectedKidId(null);
+        return;
       }
       const { data: membership } = await supabase!.from("members").select("household_id").eq("user_id", userResult.user.id).limit(1).maybeSingle();
-      if (!membership?.household_id) return;
+      if (!membership?.household_id) {
+        setHouseholdId(null);
+        setKids([]);
+        setWishlists({});
+        setSelectedKidId(null);
+        return;
+      }
 
       const [{ data: memberRows }, { data: wishRows }] = await Promise.all([
         supabase!.from("members").select("id, display_name, role, color").eq("household_id", membership.household_id).eq("role", "child").order("created_at"),
         supabase!.from("christmas_wishlist_items").select("id, member_id, title, note, category, priority, created_at").eq("household_id", membership.household_id).order("created_at"),
       ]);
-      if (cancelled || !memberRows?.length) return;
+      if (cancelled) return;
 
-      const loadedKids = memberRows.map((member, index) => ({
+      const loadedKids = (memberRows ?? []).map((member, index) => ({
         id: String(member.id),
         name: member.display_name,
         color: member.color ?? ["#e85d75", "#2d9a79", "#7c65d8", "#e39b3d"][index % 4],
@@ -116,22 +68,34 @@ export default function ChristmasWishlistPage() {
       }));
       const loadedWishlists = Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid;
       for (const wish of wishRows ?? []) {
-        if (locallyDeletedWishIds.includes(String(wish.id))) continue;
         const memberId = String(wish.member_id);
-        if (!loadedWishlists[memberId]) loadedWishlists[memberId] = [];
-        loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
+        if (loadedWishlists[memberId]) loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
       }
       setHouseholdId(membership.household_id);
       setKids(loadedKids);
       setWishlists(loadedWishlists);
-      setDeletedWishIds(locallyDeletedWishIds);
-      setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0].id);
-      setSyncMessage("Synced with your family home");
+      setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0]?.id ?? null);
+      setSyncMessage(loadedKids.length ? "Synced with your family home" : "Add a child in Settings to start a wish list");
     }
 
     void loadFamilyWishlist();
     return () => { cancelled = true; };
-  }, [storageHydrated]);
+  }, []);
+
+  useEffect(() => {
+    const handleMemberRemoved = (event: Event) => {
+      const removedMemberId = String((event as CustomEvent<string>).detail);
+      setKids((current) => current.filter((kid) => kid.id !== removedMemberId));
+      setWishlists((current) => {
+        const next = { ...current };
+        delete next[removedMemberId];
+        return next;
+      });
+      setSelectedKidId((current) => current === removedMemberId ? null : current);
+    };
+    window.addEventListener("family-member-removed", handleMemberRemoved);
+    return () => window.removeEventListener("family-member-removed", handleMemberRemoved);
+  }, []);
 
   useEffect(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -186,7 +150,6 @@ export default function ChristmasWishlistPage() {
   function removeWish(wish: WishItem) {
     if (!selectedKid) return;
     setWishlists((current) => ({ ...current, [selectedKid.id]: (current[selectedKid.id] ?? []).filter((item) => item.id !== wish.id) }));
-    setDeletedWishIds((current) => current.includes(wish.id) ? current : [...current, wish.id]);
     if (supabase && householdId && !wish.id.startsWith("local-")) {
       void supabase.from("christmas_wishlist_items").delete().eq("id", wish.id).then(({ error }) => {
         if (error) setSyncMessage("Removed here · the family copy could not be deleted yet");
@@ -194,7 +157,9 @@ export default function ChristmasWishlistPage() {
     }
   }
 
-  if (!selectedKid) return null;
+  if (!selectedKid) {
+    return <section className="relative mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="christmas-wishlist-shell relative z-10 rounded-[1.75rem] bg-white/85 p-5 shadow-sm ring-1 ring-white/80 backdrop-blur-sm dark:bg-slate-950/55 dark:ring-white/10 md:p-7"><div className="rounded-[1.5rem] bg-gradient-to-r from-[#1d6658] to-[#2f806e] p-6 text-white shadow-sm"><p className="text-xs font-black uppercase tracking-[0.2em] text-[#d6f0dd]">Christmas wishes</p><h1 className="mt-1 font-serif text-3xl font-black sm:text-4xl">What&apos;s on your list?</h1><p className="mt-2 text-sm font-semibold text-white/80">Your family wish lists will appear here.</p></div><div className="mt-6 rounded-2xl border-2 border-dashed border-slate-200 px-5 py-10 text-center dark:border-white/10"><p className="font-black text-slate-700 dark:text-slate-200">No children added yet</p><p className="mt-1 text-sm font-semibold text-slate-400">Add a child in Settings to start a Christmas wish list.</p></div></div></section>;
+  }
 
   return (
     <section className="relative mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8">
@@ -223,7 +188,7 @@ export default function ChristmasWishlistPage() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl text-2xl" style={{ backgroundColor: `${selectedKid.color}22` }}>{selectedKid.emoji}</span><div><p className="text-xs font-black uppercase tracking-[0.2em] text-rose-500">{selectedKid.name}&apos;s list</p><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Christmas wishes</h2></div></div><button onClick={() => setShowForm((current) => !current)} className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-rose-600">{showForm ? "Close" : "+ Add a wish"}</button></div>
 
-            {showForm && <form onSubmit={addWish} className="mt-5 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-300/20"><div className="grid gap-3 sm:grid-cols-[1.4fr_0.8fr]"><label className="text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">I would love…<input autoFocus required value={newWish} onChange={(event) => setNewWish(event.target.value)} placeholder="A telescope, a puppy book…" className="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 shadow-sm ring-1 ring-emerald-100" /></label><label className="text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">It&apos;s a…<select value={category} onChange={(event) => setCategory(event.target.value as (typeof categories)[number])} className="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 shadow-sm ring-1 ring-emerald-100">{categories.map((item) => <option key={item}>{item}</option>)}</select></label></div><label className="mt-3 block text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">A little more detail <span className="font-semibold normal-case tracking-normal text-emerald-600/70">(optional)</span><input value={newNote} onChange={(event) => setNewNote(event.target.value)} placeholder="Color, size, or why I like it…" className="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 shadow-sm ring-1 ring-emerald-100" /></label><div className="mt-3 flex items-center justify-between gap-3"><ChristmasLottie src={gingerbreadAnimation} fallback="🍪" className="size-12" label="Animated gingerbread socks" /><button className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-800">Put it on my list</button></div></form>}
+            {showForm && <form onSubmit={addWish} className="mt-5 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-300/20"><div className="grid gap-3 sm:grid-cols-[1.4fr_0.8fr]"><label className="text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">I would love…<input autoFocus required value={newWish} onChange={(event) => setNewWish(event.target.value)} placeholder="A telescope, a puppy book…" className="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 shadow-sm ring-1 ring-emerald-100" /></label><label className="text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">It&apos;s a…<StyledSelect value={category} onChange={(event) => setCategory(event.target.value as (typeof categories)[number])} className="mt-1 text-base">{categories.map((item) => <option key={item}>{item}</option>)}</StyledSelect></label></div><label className="mt-3 block text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-100">A little more detail <span className="font-semibold normal-case tracking-normal text-emerald-600/70">(optional)</span><input value={newNote} onChange={(event) => setNewNote(event.target.value)} placeholder="Color, size, or why I like it…" className="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 shadow-sm ring-1 ring-emerald-100" /></label><div className="mt-3 flex items-center justify-between gap-3"><ChristmasLottie src={gingerbreadAnimation} fallback="🍪" className="size-12" label="Animated gingerbread socks" /><button className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-800">Put it on my list</button></div></form>}
 
             <div className="mt-5 space-y-3">
               {selectedWishes.map((wish, index) => <WishRow key={wish.id} wish={wish} index={index} onTogglePriority={() => togglePriority(wish)} onRemove={() => removeWish(wish)} />)}

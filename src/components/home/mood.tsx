@@ -3,7 +3,7 @@ import { Lottie } from "lottie-react";
 import type { Member, MoodCheckin, MoodKey } from "@/features/home/model";
 import { moodOption, moodOptions } from "@/features/home/model";
 import { memberCalendarColor } from "@/components/home/calendar";
-import { AppIcon } from "@/components/home/shared-ui";
+import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
 
 export function MoodAnimation({ mood, className = "size-full" }: { mood: MoodKey; className?: string }) {
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -64,7 +64,7 @@ export function FamilyMoodCard({
             <div className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl ${mood ? "" : "border border-dashed border-violet-300/80 text-xl text-violet-400 dark:border-violet-300/30"}`}>
               {mood ? <MoodAnimation mood={mood.key} /> : <span aria-hidden="true">?</span>}
             </div>
-            <div className="min-w-0"><p className="truncate text-xs font-black">{member.name}</p><p className="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-300">{mood?.label ?? "Not checked in"}</p></div>
+            <div className="min-w-0"><p className="truncate text-xs font-black">{member.name}</p><p className={`truncate text-[11px] font-semibold ${mood ? "text-white/90" : "text-slate-500 dark:text-slate-300"}`}>{mood?.label ?? "Not checked in"}</p></div>
           </div>;
         })}
       </div>
@@ -77,9 +77,9 @@ export function FamilyMoodCard({
           <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black tracking-wide text-violet-600 dark:text-violet-200">FAMILY CHECK-IN</p><h2 id="mood-dialog-title" className="mt-1 text-2xl font-black">How are you feeling?</h2><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">Choose who you are and check in for today.</p></div><button type="button" onClick={() => setShowMoodModal(false)} aria-label="Close mood check-in" className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>
           <div className="mt-5 space-y-4">
             <label className="block text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">Who are you checking in for?
-              <select value={selectedMemberId} onChange={(event) => onMemberChange(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-base font-bold text-slate-800 outline-violet-500 dark:border-white/10 dark:bg-white/10 dark:text-slate-100">
+              <StyledSelect value={selectedMemberId} onChange={(event) => onMemberChange(event.target.value)} className="mt-1.5 text-base">
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-              </select>
+              </StyledSelect>
             </label>
             <div><p id="mood-options-label" className="text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">How are you feeling?</p><div role="group" aria-labelledby="mood-options-label" className="mt-2 grid grid-cols-5 gap-2">
               {moodOptions.map((mood) => <button key={mood.key} type="button" aria-pressed={selectedMood === mood.key} onClick={() => onMoodChange(mood.key)} className={`grid min-w-0 place-items-center gap-1 rounded-2xl px-1 py-3 text-center transition ${selectedMood === mood.key ? `${mood.color} ring-2` : "bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"}`}><span className="text-2xl leading-none">{mood.emoji}</span><span className="truncate text-[11px] font-black">{mood.label}</span></button>)}
@@ -92,5 +92,3 @@ export function FamilyMoodCard({
     </>}
   </article>;
 }
-
-
