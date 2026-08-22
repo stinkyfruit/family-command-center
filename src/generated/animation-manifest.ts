@@ -44,3 +44,10 @@ export const halloweenCompletionAnimations = [
   "/animations/holidays/halloween/completions/spider-walking.json",
   "/animations/holidays/halloween/completions/spooky-hand.json"
 ] as const;
+
+export const christmasAnimations = [
+  "/animations/holidays/christmas/Christmas%20Tree%20Animation.json",
+  "/animations/holidays/christmas/Ginger%20bread%20socks%20Christmas.json",
+  "/animations/holidays/christmas/Happy%20snowman%20jumping%20and%20waving%20his%20hand.json",
+  "/animations/holidays/christmas/santa%20sleigh.json"
+] as const;

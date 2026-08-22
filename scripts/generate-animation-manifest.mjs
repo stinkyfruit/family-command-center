@@ -4,6 +4,7 @@ import path from "node:path";
 const folders = {
   generalCompletionAnimations: "public/animations/general/completions",
   halloweenCompletionAnimations: "public/animations/holidays/halloween/completions",
+  christmasAnimations: "public/animations/holidays/christmas",
 };
 
 async function animationUrls(folder) {

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 700" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#709898"/>
+      <stop offset="1" stop-color="#4f8583"/>
+    </linearGradient>
+    <path id="pine" d="M0 0-14 48l16-7-25 53 22-8-36 67 29-10-47 82 40-12-59 98 48-12-70 112h192l-70-112 48 12-59-98 40 12-47-82 29 10-36-67 22 8-25-53 16 7L0 0Z"/>
+    <path id="slim-pine" d="M0 0-11 42l13-5-21 48 18-7-30 57 24-8-38 68 31-9-48 80h124l-48-80 31 9-38-68 24 8-30-57 18 7-21-48 13 5L0 0Z"/>
+  </defs>
+
+  <rect width="1600" height="700" fill="url(#sky)"/>
+
+  <!-- The pale, distant tree line reaches up into the sky. -->
+  <g fill="#5e8f8e">
+    <use href="#slim-pine" transform="translate(28 194) scale(.88)"/>
+    <use href="#slim-pine" transform="translate(150 138) scale(1.14)"/>
+    <use href="#slim-pine" transform="translate(284 202) scale(.82)"/>
+    <use href="#slim-pine" transform="translate(416 118) scale(1.28)"/>
+    <use href="#slim-pine" transform="translate(570 172) scale(.98)"/>
+    <use href="#slim-pine" transform="translate(718 102) scale(1.32)"/>
+    <use href="#slim-pine" transform="translate(866 176) scale(.96)"/>
+    <use href="#slim-pine" transform="translate(1008 116) scale(1.2)"/>
+    <use href="#slim-pine" transform="translate(1148 182) scale(.92)"/>
+    <use href="#slim-pine" transform="translate(1294 96) scale(1.36)"/>
+    <use href="#slim-pine" transform="translate(1452 165) scale(1.02)"/>
+    <use href="#slim-pine" transform="translate(1582 116) scale(1.26)"/>
+  </g>
+
+  <g fill="#467b79">
+    <use href="#pine" transform="translate(-36 332) scale(.92)"/>
+    <use href="#pine" transform="translate(96 294) scale(.84)"/>
+    <use href="#pine" transform="translate(228 354) scale(.72)"/>
+    <use href="#pine" transform="translate(365 250) scale(1.02)"/>
+    <use href="#pine" transform="translate(505 322) scale(.82)"/>
+    <use href="#pine" transform="translate(648 236) scale(1.04)"/>
+    <use href="#pine" transform="translate(798 326) scale(.8)"/>
+    <use href="#pine" transform="translate(944 250) scale(1.04)"/>
+    <use href="#pine" transform="translate(1092 312) scale(.82)"/>
+    <use href="#pine" transform="translate(1234 222) scale(1.08)"/>
+    <use href="#pine" transform="translate(1386 318) scale(.82)"/>
+    <use href="#pine" transform="translate(1538 242) scale(1.04)"/>
+    <use href="#pine" transform="translate(1652 314) scale(.8)"/>
+  </g>
+
+  <!-- Midground trees overlap the distant layer instead of forming a flat row. -->
+  <g fill="#28615d">
+    <use href="#pine" transform="translate(28 502) scale(1.12)"/>
+    <use href="#pine" transform="translate(168 464) scale(1.02)"/>
+    <use href="#pine" transform="translate(314 536) scale(.92)"/>
+    <use href="#pine" transform="translate(468 420) scale(1.2)"/>
+    <use href="#pine" transform="translate(624 500) scale(1.02)"/>
+    <use href="#pine" transform="translate(790 408) scale(1.2)"/>
+    <use href="#pine" transform="translate(952 500) scale(.98)"/>
+    <use href="#pine" transform="translate(1110 422) scale(1.18)"/>
+    <use href="#pine" transform="translate(1268 506) scale(1.02)"/>
+    <use href="#pine" transform="translate(1436 412) scale(1.2)"/>
+    <use href="#pine" transform="translate(1588 500) scale(1.02)"/>
+  </g>
+
+  <g fill="#07452f">
+    <use href="#pine" transform="translate(-18 694) scale(1.28)"/>
+    <use href="#pine" transform="translate(154 666) scale(1.16)"/>
+    <use href="#pine" transform="translate(340 718) scale(1.36)"/>
+    <use href="#pine" transform="translate(548 650) scale(1.18)"/>
+    <use href="#pine" transform="translate(746 718) scale(1.42)"/>
+    <use href="#pine" transform="translate(960 652) scale(1.18)"/>
+    <use href="#pine" transform="translate(1160 722) scale(1.4)"/>
+    <use href="#pine" transform="translate(1370 646) scale(1.2)"/>
+    <use href="#pine" transform="translate(1598 712) scale(1.34)"/>
+  </g>
+
+  <!-- Foreground silhouettes create the deep stacked edge from the reference. -->
+  <g fill="#00351f">
+    <use href="#pine" transform="translate(70 720) scale(1.62)"/>
+    <use href="#pine" transform="translate(290 714) scale(1.46)"/>
+    <use href="#pine" transform="translate(520 734) scale(1.7)"/>
+    <use href="#pine" transform="translate(820 720) scale(1.54)"/>
+    <use href="#pine" transform="translate(1060 738) scale(1.72)"/>
+    <use href="#pine" transform="translate(1320 714) scale(1.5)"/>
+    <use href="#pine" transform="translate(1535 730) scale(1.64)"/>
+  </g>
+
+  <g fill="#fff">
+    <circle cx="76" cy="82" r="5"/><circle cx="176" cy="38" r="3"/><circle cx="286" cy="128" r="6"/>
+    <circle cx="420" cy="66" r="3"/><circle cx="544" cy="146" r="4"/><circle cx="666" cy="54" r="6"/>
+    <circle cx="796" cy="118" r="3"/><circle cx="924" cy="42" r="4"/><circle cx="1048" cy="132" r="6"/>
+    <circle cx="1184" cy="70" r="3"/><circle cx="1308" cy="154" r="5"/><circle cx="1438" cy="52" r="3"/>
+    <circle cx="1532" cy="116" r="6"/><circle cx="130" cy="244" r="3"/><circle cx="344" cy="226" r="4"/>
+    <circle cx="566" cy="278" r="6"/><circle cx="742" cy="220" r="4"/><circle cx="886" cy="288" r="3"/>
+    <circle cx="1018" cy="218" r="5"/><circle cx="1214" cy="272" r="4"/><circle cx="1494" cy="242" r="5"/>
+    <circle cx="82" cy="382" r="4"/><circle cx="302" cy="368" r="3"/><circle cx="520" cy="430" r="5"/>
+    <circle cx="826" cy="380" r="4"/><circle cx="1002" cy="448" r="5"/><circle cx="1296" cy="378" r="3"/>
+    <circle cx="1514" cy="432" r="4"/><circle cx="238" cy="526" r="5"/><circle cx="708" cy="522" r="3"/>
+    <circle cx="1186" cy="548" r="5"/><circle cx="1426" cy="506" r="3"/>
+  </g>
+</svg>
