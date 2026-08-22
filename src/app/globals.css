@@ -74,8 +74,8 @@ button[aria-label^="Complete"]::after {
 }
 
 button[aria-label^="Complete"].task-checking {
-  background: #f43f5e;
-  border-color: #f43f5e;
+  background: #8b5cf6;
+  border-color: #8b5cf6;
   color: white !important;
   animation: task-check-pop 520ms ease-out;
 }
