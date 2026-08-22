@@ -10,6 +10,21 @@ button { cursor: pointer; transition: background-color 160ms ease, border-color 
 button:not(:disabled):active { transform: scale(.98); }
 button:disabled { cursor: not-allowed; }
 
+/* Christmas wishlist accents */
+.christmas-snow {
+  background-image: radial-gradient(circle, rgb(255 255 255 / .95) 0 2px, transparent 2.5px), radial-gradient(circle, rgb(255 255 255 / .75) 0 1.5px, transparent 2px), radial-gradient(circle, rgb(255 255 255 / .9) 0 1px, transparent 1.5px);
+  background-position: 0 0, 38px 56px, 90px 18px;
+  background-size: 170px 170px, 130px 130px, 95px 95px;
+  opacity: .68;
+  animation: christmas-snowfall 18s linear infinite;
+}
+.christmas-float { display: inline-block; animation: christmas-float 3.2s ease-in-out infinite; }
+@keyframes christmas-snowfall { from { background-position: 0 0, 38px 56px, 90px 18px; } to { background-position: 70px 340px, -30px 310px, 140px 260px; } }
+@keyframes christmas-float { 0%, 100% { transform: translateY(3px) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(2deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .christmas-snow, .christmas-float { animation: none; }
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

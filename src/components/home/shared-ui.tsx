@@ -1,7 +1,7 @@
-import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
+import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, GiftIcon, HouseIcon, ListBulletsIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { notoIconPath } from "@/features/home/model";
 
-export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "sun" | "moon";
+export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "sun" | "moon";
 
 export function AppIcon({ name, className = "size-5" }: { name: IconName; className?: string }) {
   const Icon = {
@@ -11,6 +11,7 @@ export function AppIcon({ name, className = "size-5" }: { name: IconName; classN
     chores: ClipboardTextIcon,
     lists: ListBulletsIcon,
     settings: SlidersHorizontalIcon,
+    wishlist: GiftIcon,
     plus: PlusIcon,
     close: XIcon,
     trash: TrashIcon,
@@ -28,5 +29,4 @@ export function NotoEmoji({ emoji, className = "size-4", alt = "" }: { emoji: st
   const source = notoIconPath(emoji);
   return source ? <img src={source} alt={alt} className={`inline-block shrink-0 object-contain ${className}`} /> : <span aria-hidden={alt ? undefined : "true"}>{emoji}</span>;
 }
-
 

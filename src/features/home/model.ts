@@ -66,7 +66,7 @@ export const choreRoutines = [
   { id: "To-do", label: "Anytime to-dos", icon: "✨" },
 ] as const;
 export const fixedRoutineChoreKeys = new Set([
-  "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
+  "before school|potty", "before school|eat breakfast", "before school|put on clothes", "before school|brush hair", "before school|put on shoes", "before school|pack backpack", "before school|pack snacks", "before school|pack water", "before school|pack lunch", "before school|give mama a hug and/or kiss",
   "after school|change clothes and put school clothes in laundry basket", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
 ]);
 export function isVisibleRoutineChore(chore: ChoreEntry, today: string) {
@@ -125,6 +125,7 @@ export function listVisualIcon(icon: string) {
 export function choreIcon(title: string) {
   const text = title.toLowerCase();
   if (/bed|pillow|blanket/.test(text)) return "🛏️";
+  if (/potty|toilet/.test(text)) return "🚽";
   if (/hair|comb/.test(text)) return "🪮";
   if (/teeth|brush|tooth/.test(text)) return "🪥";
   if (/dish|plate|kitchen|table/.test(text)) return "🍽️";
