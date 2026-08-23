@@ -20,13 +20,22 @@ export function SettingsNavigation({ showChores, showAccount }: { showChores: bo
 
   useEffect(() => {
     const sections = visibleSections.map((section) => document.getElementById(section.id)).filter((section): section is HTMLElement => Boolean(section));
-    if (!sections.length || !("IntersectionObserver" in window)) return;
-    const observer = new IntersectionObserver((entries) => {
-      const visibleEntry = entries.filter((entry) => entry.isIntersecting).sort((first, second) => first.boundingClientRect.top - second.boundingClientRect.top)[0];
-      if (visibleEntry) setActiveSection(visibleEntry.target.id as SettingsSectionId);
-    }, { rootMargin: "-112px 0px -55%", threshold: [0, 0.15] });
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    const scrollRoot = document.querySelector("main");
+    if (!sections.length || !scrollRoot) return;
+    const updateActiveSection = () => {
+      const rootRect = scrollRoot.getBoundingClientRect();
+      const atBottom = scrollRoot.scrollTop + scrollRoot.clientHeight >= scrollRoot.scrollHeight - 8;
+      const sectionAtAnchor = sections.filter((section) => section.getBoundingClientRect().top <= rootRect.top + 144).at(-1);
+      const activeElement = atBottom ? sections.at(-1) : sectionAtAnchor;
+      if (activeElement) setActiveSection(activeElement.id as SettingsSectionId);
+    };
+    updateActiveSection();
+    scrollRoot.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      scrollRoot.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
   }, [visibleSections]);
 
   return <>
