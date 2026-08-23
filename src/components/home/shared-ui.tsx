@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
+import Image from "next/image";
 import { CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, GiftIcon, HouseIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { notoIconPath } from "@/features/home/model";
 
@@ -208,5 +209,5 @@ export function SpeechInputButton({ value, onChange, onComplete, buttonLabel = "
 
 export function NotoEmoji({ emoji, className = "size-4", alt = "" }: { emoji: string; className?: string; alt?: string }) {
   const source = notoIconPath(emoji);
-  return source ? <img src={source} alt={alt} className={`inline-block shrink-0 object-contain ${className}`} /> : <span aria-hidden={alt ? undefined : "true"}>{emoji}</span>;
+  return source ? <Image src={source} alt={alt} width={32} height={32} className={`inline-block shrink-0 object-contain ${className}`} /> : <span aria-hidden={alt ? undefined : "true"}>{emoji}</span>;
 }

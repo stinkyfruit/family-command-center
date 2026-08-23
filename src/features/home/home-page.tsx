@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
@@ -76,6 +76,11 @@ type HomeTab = typeof navigationTabs[number][0];
 type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
 type VoiceChoreDraft = { title: string; memberId: string; routine: string; scheduledFor: string };
 type VoiceListDraft = { title: string; listId: string };
+type ListKind = "shared" | "private";
+
+function listPreferenceKey(kind: ListKind, listId: string | number) {
+  return `${kind}:${String(listId)}`;
+}
 
 export default function Home() {
   const [events, setEvents] = useState(starterEvents);
@@ -131,6 +136,7 @@ export default function Home() {
   const [todoAssigneeMemberId, setTodoAssigneeMemberId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const syncingGoogleRef = useRef(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [chores, setChores] = useState<ChoreEntry[]>([]);
   const [sharedLists, setSharedLists] = useState<SharedList[]>([]);
@@ -147,6 +153,7 @@ export default function Home() {
   const [voiceWishlistDraft, setVoiceWishlistDraft] = useState<VoiceWishlistDraft | null>(null);
   const [voiceChoreDraft, setVoiceChoreDraft] = useState<VoiceChoreDraft | null>(null);
   const [voiceListDraft, setVoiceListDraft] = useState<VoiceListDraft | null>(null);
+  const [expandedListKeys, setExpandedListKeys] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
@@ -197,21 +204,6 @@ export default function Home() {
     setInviteToken(token);
     setInviteReady(true);
   }, []);
-
-  useEffect(() => {
-    if (!supabase || !householdId) return;
-    async function checkAndRefreshGoogleCalendar() {
-      const { data } = await supabase!.auth.getSession();
-      const accessToken = data.session?.access_token;
-      if (!accessToken) return;
-      const response = await fetch(`/api/google-calendar/sync?householdId=${encodeURIComponent(householdId!)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-      const status = await response.json();
-      if (!response.ok) return;
-      setGoogleConnected(Boolean(status.connected));
-      if (status.connected && (!status.lastSyncedAt || Date.now() - new Date(status.lastSyncedAt).getTime() > 10 * 60_000)) await syncGoogleCalendar(false);
-    }
-    void checkAndRefreshGoogleCalendar();
-  }, [householdId]);
 
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("calendar");
@@ -332,6 +324,16 @@ export default function Home() {
       }
     });
   }, [householdId, todayKey, user?.id]);
+
+  useEffect(() => {
+    if (!supabase || !user?.id) return;
+    let cancelled = false;
+    void supabase.from("user_list_preferences").select("list_key, expanded").eq("user_id", user.id).then(({ data }) => {
+      if (cancelled) return;
+      setExpandedListKeys(Object.fromEntries((data ?? []).map((preference) => [preference.list_key, preference.expanded === true])));
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTodayKey((current) => {
@@ -589,7 +591,7 @@ export default function Home() {
     window.location.assign(result.url);
   }
 
-  async function refreshCalendarEvents() {
+  const refreshCalendarEvents = useCallback(async () => {
     if (!supabase || !householdId) return;
     const [{ data }, { data: assignments }] = await Promise.all([
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source").eq("household_id", householdId).order("starts_at"),
@@ -600,29 +602,49 @@ export default function Home() {
       id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source,
       time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     }))));
-  }
+  }, [householdId]);
 
-  async function syncGoogleCalendar(force = true) {
-    if (!supabase || !householdId || syncingGoogle) return;
+  const syncGoogleCalendar = useCallback(async (force = true) => {
+    if (!supabase || !householdId || syncingGoogleRef.current) return;
     const { data } = await supabase.auth.getSession();
     const accessToken = data.session?.access_token;
     if (!accessToken) { setCalendarMessage("Your session has expired. Please sign in again."); return; }
+    syncingGoogleRef.current = true;
     setSyncingGoogle(true);
-    const response = await fetch("/api/google-calendar/sync", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, force }) });
-    const result = await response.json();
-    setSyncingGoogle(false);
-    if (!response.ok) {
-      if (result.error === "Google Calendar credentials were not found.") {
-        setGoogleConnected(false);
-        setCalendarMessage("Google Calendar needs to be reconnected. Tap Connect Google to finish setup.");
-      } else setCalendarMessage(result.error ?? "Could not sync Google Calendar.");
-      return;
+    try {
+      const response = await fetch("/api/google-calendar/sync", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, force }) });
+      const result = await response.json();
+      if (!response.ok) {
+        if (result.error === "Google Calendar credentials were not found.") {
+          setGoogleConnected(false);
+          setCalendarMessage("Google Calendar needs to be reconnected. Tap Connect Google to finish setup.");
+        } else setCalendarMessage(result.error ?? "Could not sync Google Calendar.");
+        return;
+      }
+      if (result.needsConnection) { setGoogleConnected(false); setCalendarMessage("Connect Google Calendar first."); return; }
+      setGoogleConnected(true);
+      await refreshCalendarEvents();
+      setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
+    } finally {
+      syncingGoogleRef.current = false;
+      setSyncingGoogle(false);
     }
-    if (result.needsConnection) { setGoogleConnected(false); setCalendarMessage("Connect Google Calendar first."); return; }
-    setGoogleConnected(true);
-    await refreshCalendarEvents();
-    setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
-  }
+  }, [householdId, refreshCalendarEvents]);
+
+  useEffect(() => {
+    if (!supabase || !householdId) return;
+    async function checkAndRefreshGoogleCalendar() {
+      const { data } = await supabase!.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      const response = await fetch(`/api/google-calendar/sync?householdId=${encodeURIComponent(householdId!)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const status = await response.json();
+      if (!response.ok) return;
+      setGoogleConnected(Boolean(status.connected));
+      if (status.connected && (!status.lastSyncedAt || Date.now() - new Date(status.lastSyncedAt).getTime() > 10 * 60_000)) await syncGoogleCalendar(false);
+    }
+    void checkAndRefreshGoogleCalendar();
+  }, [householdId, syncGoogleCalendar]);
 
   async function toggleGoogleCalendar(connection: GoogleConnection) {
     if (connection.enabled) {
@@ -709,7 +731,7 @@ export default function Home() {
     finish();
   }
 
-  async function deleteTodo(id: string | number) {
+  const deleteTodo = useCallback(async (id: string | number) => {
     const target = todos.find((todo) => todo.id === id);
     if (!target || !window.confirm(`Permanently delete “${target.title}”?`)) return;
     setTodos((items) => items.filter((todo) => todo.id !== id));
@@ -720,7 +742,7 @@ export default function Home() {
         window.alert(`Could not delete this task: ${error.message}`);
       }
     }
-  }
+  }, [householdId, todos]);
 
   useEffect(() => {
     const handleTaskDeletion: EventListener = (event) => {
@@ -728,17 +750,7 @@ export default function Home() {
     };
     window.addEventListener("family-delete-todo", handleTaskDeletion);
     return () => window.removeEventListener("family-delete-todo", handleTaskDeletion);
-  }, [todos, householdId]);
-
-  useEffect(() => {
-    const handleChoreEdit: EventListener = (event) => {
-      const choreId = (event as unknown as CustomEvent<string | number>).detail;
-      const chore = chores.find((item) => item.id === choreId);
-      if (chore) void editChore(chore);
-    };
-    window.addEventListener("family-edit-chore", handleChoreEdit);
-    return () => window.removeEventListener("family-edit-chore", handleChoreEdit);
-  }, [chores, householdId]);
+  }, [deleteTodo]);
 
   async function addMember(name: string, role: Member["role"]) {
     const trimmedName = name.trim();
@@ -839,7 +851,7 @@ export default function Home() {
     } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed: false, scheduledFor }]);
   }
 
-  async function editChore(chore: ChoreEntry) {
+  const editChore = useCallback(async (chore: ChoreEntry) => {
     if (chore.isFixed) return;
     const title = window.prompt("Update this chore", chore.title)?.trim();
     if (!title || title === chore.title) return;
@@ -849,7 +861,17 @@ export default function Home() {
       const { error } = await supabase.from("chores").update({ title, emoji }).eq("id", chore.id).eq("household_id", householdId);
       if (error) { window.alert(`Could not update this chore: ${error.message}`); }
     }
-  }
+  }, [householdId]);
+
+  useEffect(() => {
+    const handleChoreEdit: EventListener = (event) => {
+      const choreId = (event as unknown as CustomEvent<string | number>).detail;
+      const chore = chores.find((item) => item.id === choreId);
+      if (chore) void editChore(chore);
+    };
+    window.addEventListener("family-edit-chore", handleChoreEdit);
+    return () => window.removeEventListener("family-edit-chore", handleChoreEdit);
+  }, [chores, editChore]);
 
   async function reorderChores(memberId: string | number, routine: string, movedId: string | number, targetId: string | number) {
     if (movedId === targetId) return;
@@ -976,6 +998,22 @@ export default function Home() {
     if (supabase) {
       const { error } = await supabase.from("lists").delete().eq("id", list.id);
       if (error) { setSharedLists((items) => [...items, list]); window.alert(`Could not delete this list: ${error.message}`); }
+    }
+  }
+
+  async function toggleListExpanded(kind: ListKind, listId: string | number) {
+    const key = listPreferenceKey(kind, listId);
+    const previous = expandedListKeys[key] ?? true;
+    const expanded = !previous;
+    setExpandedListKeys((current) => ({ ...current, [key]: expanded }));
+    if (!supabase || !user) return;
+    const { error } = await supabase.from("user_list_preferences").upsert(
+      { user_id: user.id, list_key: key, expanded, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,list_key" },
+    );
+    if (error) {
+      setExpandedListKeys((current) => ({ ...current, [key]: previous }));
+      window.alert(`Could not save this list preference: ${error.message}`);
     }
   }
 
@@ -1175,7 +1213,7 @@ export default function Home() {
             {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><div className="mt-3"><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => setEventCategory(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"/></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onApplySeries={applySeriesMembers} onDelete={deleteEvent} />}
@@ -1403,38 +1441,40 @@ function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAd
   return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl space-y-5"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><p className="text-sm font-bold text-violet-600">SETTINGS</p><h2 className="text-3xl font-bold">Calendar connections</h2><article className="mt-6 rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><p className="font-bold">Appearance</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Auto follows local sunrise and sunset using the weather location.</p><div className="mt-4 flex flex-wrap gap-2">{([ ["auto", "◐ Auto"], ["light", "☀ Light"], ["dark", "☾ Dark"] ] as const).map(([mode, label]) => <button key={mode} onClick={() => onThemeModeChange(mode)} className={`rounded-xl px-4 py-2 text-sm font-bold ${themeMode === mode ? "bg-sky-600 text-white shadow-sm" : "bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100 dark:bg-white/10 dark:text-sky-100 dark:ring-white/10"}`}>{label}</button>)}</div></article><article className="mt-5 rounded-2xl bg-violet-50 p-5 dark:bg-violet-400/10"><p className="font-bold">Your nickname</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">This is the name your family sees for your account.</p><form key={currentMember.id} onSubmit={saveNickname} className="mt-4 flex flex-wrap items-end gap-3"><label htmlFor="current-member-nickname" className="min-w-0 flex-1 text-sm font-bold">Nickname<input id="current-member-nickname" name="nickname" required maxLength={60} defaultValue={currentMember.name} onChange={() => setNicknameMessage("")} placeholder="e.g. Kristen" className="mt-1 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><button type="submit" disabled={savingNickname} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60">{savingNickname ? "Saving…" : "Save nickname"}</button></form>{nicknameMessage && <p className="mt-3 text-sm font-semibold text-violet-700 dark:text-violet-200">{nicknameMessage}</p>}</article><article className="mt-5 rounded-2xl bg-violet-50 p-5 dark:bg-violet-400/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold">Person colors</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Choose a color for each person. It appears on their calendar events and assigned tasks.</p></div><button type="button" onClick={() => { setShowAddPerson((value) => !value); setPersonMessage(""); }} className="shrink-0 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700">+ Add person</button></div>{showAddPerson && <form onSubmit={submitNewPerson} className="mt-4 grid gap-3 rounded-2xl bg-white/70 p-3 ring-1 ring-violet-100 dark:bg-white/10 dark:ring-white/10 sm:grid-cols-[1fr_9rem_auto]"><label className="text-sm font-bold">Name<input required autoFocus value={newPersonName} onChange={(event) => { setNewPersonName(event.target.value); setPersonMessage(""); }} placeholder="e.g. Grandma" className="mt-1 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-sm font-bold">Type<StyledSelect value={newPersonRole} onChange={(event) => setNewPersonRole(event.target.value as Member["role"])}><option value="child">Child</option><option value="adult">Adult</option></StyledSelect></label><div className="flex items-end gap-2"><button type="button" onClick={() => { setShowAddPerson(false); setNewPersonName(""); setPersonMessage(""); }} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700">Add</button></div>{personMessage && <p className="sm:col-span-3 text-sm font-semibold text-rose-600">{personMessage}</p>}</form>}<div className="mt-4 grid gap-3 sm:grid-cols-2">{members.map((member, index) => { const currentColor = isHexColor(member.color ?? "") && member.color !== defaultMemberColor ? member.color! : memberCalendarColor(member, index); return <div key={member.id} className="relative rounded-2xl bg-white/80 p-3 ring-1 ring-violet-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center gap-3 pr-10"><span className="size-8 shrink-0 rounded-full ring-2 ring-white" style={{ backgroundColor: currentColor }} /><div className="min-w-0"><p className="truncate font-bold">{member.name}</p><p className="text-xs text-slate-500 dark:text-slate-300">{member.role === "adult" ? "Adult" : "Child"}</p></div></div>{currentUserId && String(member.userId) === currentUserId ? <span className="absolute right-3 top-3 text-xs font-bold text-slate-400">Current</span> : <button type="button" onClick={() => void handleRemoveMember(member)} disabled={String(removingMemberId) === String(member.id)} aria-label={"Remove " + member.name} className="absolute right-3 top-3 grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 disabled:cursor-wait disabled:opacity-50"><AppIcon name="trash" className="size-4" /></button>}<div className="mt-3 flex flex-wrap items-center gap-2">{memberColorOptions.map((color) => <button key={color} type="button" aria-label={`Set ${member.name}'s color`} onClick={() => void onMemberColorChange(member.id, color)} className={`size-7 rounded-full border-2 ${currentColor.toLowerCase() === color ? "border-slate-900 ring-2 ring-white" : "border-white/80 dark:border-white/20"}`} style={{ backgroundColor: color }} />)}<label className="relative grid size-7 cursor-pointer place-items-center overflow-hidden rounded-full border-2 border-dashed border-violet-300 text-xs font-black text-violet-600 dark:border-violet-200 dark:text-violet-200" title={`Choose ${member.name}'s custom color`}><span aria-hidden="true">+</span><input type="color" aria-label={`Choose ${member.name}'s custom color`} value={currentColor} onChange={(event) => void onMemberColorChange(member.id, event.target.value)} className="absolute inset-0 size-full cursor-pointer opacity-0" /></label></div></div>; })}</div>{members.length === 0 && <p className="mt-4 text-sm text-slate-500">No people have been added yet.</p>}{memberMessage && <p className="mt-3 text-sm font-semibold text-rose-600">{memberMessage}</p>}</article><article className="mt-5 rounded-2xl bg-emerald-50 p-5 dark:bg-emerald-400/10"><p className="font-bold">Invite an adult</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">They&apos;ll get their own login and see this same family home.</p><form onSubmit={inviteAdult} className="mt-4 grid gap-3 sm:grid-cols-2"><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Adult&apos;s email address" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Name (optional)" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Create private invite</button></form>{inviteStatus && <p className="mt-3 text-sm font-semibold text-emerald-700 dark:text-emerald-200">{inviteStatus}</p>}</article><article className="mt-5 rounded-2xl bg-slate-50 p-5 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold">Google Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose which Google calendars appear in your family calendar.</p></div><button onClick={onConnect} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{googleConnections.length ? "+ Add Google account" : "Connect Google"}</button></div>{googleConnections.length > 0 && <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">{googleConnections.map((connection) => <label key={connection.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5"><input type="checkbox" checked={connection.enabled} onChange={() => onToggleConnection(connection)} className="size-4 accent-violet-600"/><span className="flex-1">{connection.name}</span><span className={connection.enabled ? "text-emerald-600" : "text-slate-400"}>{connection.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article><article className="mt-5 rounded-2xl bg-rose-50 p-5 dark:bg-rose-400/10"><div><p className="font-bold">Apple / iCloud Calendar</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Paste a public iCloud calendar link for read-only import.</p></div><form onSubmit={addApple} className="mt-4 grid gap-3 sm:grid-cols-[10rem_1fr_auto]"><input value={appleName} onChange={(event) => setAppleName(event.target.value)} placeholder="Calendar name" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><input required value={appleUrl} onChange={(event) => setAppleUrl(event.target.value)} placeholder="Paste public iCloud link" className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-bold text-white">Add</button></form>{appleFeeds.length > 0 && <div className="mt-5 space-y-2 border-t border-rose-200 pt-4">{appleFeeds.map((feed) => <label key={feed.id} className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm"><input type="checkbox" checked={feed.enabled} onChange={() => onToggleApple(feed)} className="size-4 accent-rose-500"/><span className="flex-1">{feed.name}</span><span className={feed.enabled ? "text-emerald-600" : "text-slate-400"}>{feed.enabled ? "Included" : "Hidden"}</span></label>)}</div>}</article></div></div></section>;
 }
 
-function ListsPage({ lists, onAddList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { lists: SharedList[]; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
+function ListsPage({ lists, expandedListKeys, onToggleListExpanded, onAddList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { lists: SharedList[]; expandedListKeys: Record<string, boolean>; onToggleListExpanded: (kind: ListKind, listId: string | number) => void; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
   const [pin, setPin] = useState(""); const [privateLists, setPrivateLists] = useState<SharedList[] | null>(null); const [message, setMessage] = useState("");
   async function unlock() { if (!supabase) return; const { data, error } = await supabase.rpc("get_private_lists", { p_pin: pin }); if (error) { setMessage(error.message); return; } setPrivateLists(data ?? []); setMessage(""); }
   async function addPrivate() { const title = window.prompt("Name this private list"); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list", { p_pin: pin, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
   async function addPrivateItem(listId: string | number) { const title = window.prompt("Add an item"); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list_item", { p_pin: pin, p_list_id: listId, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
   async function deletePrivate(list: SharedList) { if (!window.confirm(`Delete “${list.title}” and all of its items?`) || !supabase) return; const { error } = await supabase.rpc("delete_private_list", { p_pin: pin, p_list_id: list.id }); if (error) { setMessage(error.message); return; } await unlock(); }
   async function updatePrivateItem(item: SharedListItem, remove = false) { if (!supabase) return; const { error } = await supabase.rpc("update_private_list_item", { p_pin: pin, p_item_id: item.id, p_completed: remove ? item.done : !item.done, p_delete: remove }); if (error) { setMessage(error.message); return; } await unlock(); }
-  return <section className="mx-auto max-w-[1800px] space-y-8 px-5 pb-24 md:px-9 lg:pb-8"><div><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list, index) => <ListCard key={list.id} list={list} colorIndex={index} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteItem={onDeleteItem} onDeleteList={onDeleteList} />)}</div> : <p className="text-slate-500">No family lists yet.</p>}</div><div className="rounded-[2rem] border border-violet-200 bg-violet-50 p-6 dark:border-violet-400/25 dark:bg-violet-500/10"><p className="text-sm font-bold text-violet-600">PRIVATE LISTS</p><h2 className="mt-1 text-2xl font-bold">🔒 Surprises stay private</h2>{privateLists === null ? <form onSubmit={(e) => { e.preventDefault(); void unlock(); }} className="mt-4 flex max-w-sm gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} inputMode="numeric" type="password" placeholder="Enter family PIN" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-slate-800"/><button className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">Unlock</button></form> : <><div className="mt-4 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{privateLists.map((list, index) => <PrivateListCard key={list.id} list={list} colorIndex={index} onAddItem={addPrivateItem} onDelete={deletePrivate} onToggleItem={(item) => void updatePrivateItem(item)} onDeleteItem={(item) => { if (window.confirm(`Delete “${item.title}”?`)) void updatePrivateItem(item, true); }} />)}</div><div className="mt-4 flex gap-3"><button onClick={() => void addPrivate()} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">+ New private list</button><button onClick={() => { setPrivateLists(null); setPin(""); }} className="rounded-xl px-4 py-2 font-bold text-violet-700">Lock</button></div></>}{message && <p className="mt-3 text-sm font-bold text-rose-600">{message}</p>}</div></section>;
+  return <section className="mx-auto max-w-[1800px] space-y-8 px-5 pb-24 md:px-9 lg:pb-8"><div><div className="mb-5 flex items-center justify-between"><div><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list, index) => <ListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("shared", list.id)] ?? true} onToggleExpanded={() => onToggleListExpanded("shared", list.id)} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteItem={onDeleteItem} onDeleteList={onDeleteList} />)}</div> : <p className="text-slate-500">No family lists yet.</p>}</div><div className="rounded-[2rem] border border-violet-200 bg-violet-50 p-6 dark:border-violet-400/25 dark:bg-violet-500/10"><p className="text-sm font-bold text-violet-600">PRIVATE LISTS</p><h2 className="mt-1 text-2xl font-bold">🔒 Surprises stay private</h2>{privateLists === null ? <form onSubmit={(e) => { e.preventDefault(); void unlock(); }} className="mt-4 flex max-w-sm gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} inputMode="numeric" type="password" placeholder="Enter family PIN" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-slate-800"/><button className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">Unlock</button></form> : <><div className="mt-4 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{privateLists.map((list, index) => <PrivateListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("private", list.id)] ?? true} onToggleExpanded={() => onToggleListExpanded("private", list.id)} onAddItem={addPrivateItem} onDelete={deletePrivate} onToggleItem={(item) => void updatePrivateItem(item)} onDeleteItem={(item) => { if (window.confirm(`Delete “${item.title}”?`)) void updatePrivateItem(item, true); }} />)}</div><div className="mt-4 flex gap-3"><button onClick={() => void addPrivate()} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">+ New private list</button><button onClick={() => { setPrivateLists(null); setPin(""); }} className="rounded-xl px-4 py-2 font-bold text-violet-700">Lock</button></div></>}{message && <p className="mt-3 text-sm font-bold text-rose-600">{message}</p>}</div></section>;
 }
 
-function PrivateListCard({ list, colorIndex, onAddItem, onDelete, onToggleItem, onDeleteItem }: { list: SharedList; colorIndex: number; onAddItem: (id: string | number) => void; onDelete: (list: SharedList) => void; onToggleItem: (item: SharedListItem) => void; onDeleteItem: (item: SharedListItem) => void }) {
+function PrivateListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onDelete, onToggleItem, onDeleteItem }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (id: string | number) => void; onDelete: (list: SharedList) => void; onToggleItem: (item: SharedListItem) => void; onDeleteItem: (item: SharedListItem) => void }) {
   const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
-  return <article className={`rounded-[2rem] p-6 text-slate-800 shadow-sm ring-1 ring-white/70 dark:text-white dark:ring-white/10 ${colors[colorIndex % colors.length]}`}><div className="flex items-start justify-between"><div><p className="text-3xl">🎁</p><h3 className="mt-3 text-xl font-bold">{list.title}</h3></div><div className="flex gap-2"><button onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700">+</button><button onClick={() => onDelete(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600"><AppIcon name="trash" className="size-4"/></button></div></div><div className="mt-5 space-y-2">{list.items.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700"><button type="button" onClick={() => onToggleItem(item)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button><span className={item.done ? "min-w-0 flex-1 line-through opacity-60" : "min-w-0 flex-1"}>{item.title}</span><button type="button" onClick={() => onDeleteItem(item)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button></div>)}{list.items.length === 0 && <p className="text-sm text-slate-600">Tap + to add an item.</p>}</div></article>;
+  const contentId = `private-list-content-${String(list.id)}`;
+  return <article className={`rounded-[2rem] p-6 text-slate-800 shadow-sm ring-1 ring-white/70 dark:text-white dark:ring-white/10 ${colors[colorIndex % colors.length]}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-3xl">🎁</p><h3 className="mt-3 text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h3></div><div className="flex shrink-0 gap-2"><button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700">+</button><button type="button" onClick={() => onDelete(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600"><AppIcon name="trash" className="size-4"/></button></div></div>{expanded && <div id={contentId} className="mt-5 space-y-2">{list.items.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700"><button type="button" onClick={() => onToggleItem(item)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button><span className={item.done ? "min-w-0 flex-1 line-through opacity-60" : "min-w-0 flex-1"}>{item.title}</span><button type="button" onClick={() => onDeleteItem(item)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button></div>)}{list.items.length === 0 && <p className="text-sm text-slate-600">Tap + to add an item.</p>}</div>}</article>;
 }
 
-function ListCard({ list, colorIndex, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { list: SharedList; colorIndex: number; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
+function ListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
   const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
+  const contentId = `shared-list-content-${String(list.id)}`;
   return (
     <article className={`rounded-[2rem] p-6 shadow-sm ring-1 ring-white/70 dark:ring-white/10 ${colors[colorIndex % colors.length]}`}>
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="flex size-9 items-center justify-center"><NotoEmoji emoji={listVisualIcon(list.icon)} className="size-9" alt="" /></p>
-          <h2 className="mt-3 text-xl font-bold">{list.title}</h2>
+          <h2 className="mt-3 text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h2>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700 hover:bg-white">+</button>
-          <button onClick={() => onDeleteList(list)} title={`Delete ${list.title}`} aria-label={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600 hover:bg-rose-50">
+        <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700 hover:bg-white">+</button>
+          <button type="button" onClick={() => onDeleteList(list)} title={`Delete ${list.title}`} aria-label={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600 hover:bg-rose-50">
             <AppIcon name="trash" className="size-4" />
           </button>
         </div>
       </div>
-      <div className="mt-5 space-y-2">
+      {expanded && <div id={contentId} className="mt-5 space-y-2">
         {list.items.map((item) => (
           <div key={item.id} className="flex w-full items-center gap-3 rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700">
             <button type="button" onClick={() => onToggleItem(list.id, item.id)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button>
@@ -1443,7 +1483,7 @@ function ListCard({ list, colorIndex, onAddItem, onToggleItem, onDeleteItem, onD
           </div>
         ))}
         {list.items.length === 0 && <p className="text-sm text-slate-500">Tap + to add an item.</p>}
-      </div>
+      </div>}
     </article>
   );
 }
