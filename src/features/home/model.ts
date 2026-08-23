@@ -40,6 +40,8 @@ export type MoonPhaseKey = "new" | "waxing-crescent" | "first-quarter" | "waxing
 export type MoonPhase = { key: MoonPhaseKey; name: string; illumination: number };
 export type MeteorShower = { name: string; peakDate: Date; activeStart: Date; activeEnd: Date };
 export type AuroraActivity = { probability: number; forecastTime: string | null };
+export type CometCloseApproach = { name: string; date: Date; distanceAu: number | null };
+export type NotableSkyEvent = { title: string; date: Date; detail: string };
 
 const synodicMonth = 29.530588853;
 const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
@@ -89,7 +91,56 @@ export function nextMeteorShower(date = new Date()): MeteorShower {
     activeEnd.setDate(activeEnd.getDate() + shower.endDays);
     return { name: shower.name, peakDate, activeStart, activeEnd };
   }));
-  return candidates.sort((first, second) => first.activeStart.getTime() - second.activeStart.getTime()).find((shower) => shower.activeEnd >= date) ?? candidates[0];
+  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return candidates.sort((first, second) => first.peakDate.getTime() - second.peakDate.getTime()).find((shower) => shower.peakDate >= today) ?? candidates[0];
+}
+
+const notableEclipses = [
+  { year: 2026, month: 1, day: 17, title: "Annular solar eclipse", detail: "Visible mainly from Antarctica" },
+  { year: 2026, month: 2, day: 3, title: "Total lunar eclipse", detail: "Visible across much of Asia, Australia, the Pacific, and the Americas" },
+  { year: 2026, month: 7, day: 12, title: "Total solar eclipse", detail: "Totality crosses Greenland, Iceland, Spain, and northern Russia" },
+  { year: 2026, month: 7, day: 28, title: "Partial lunar eclipse", detail: "Visible from the Americas, Europe, Africa, and the Pacific" },
+  { year: 2027, month: 1, day: 6, title: "Annular solar eclipse", detail: "Visible from parts of South America and Africa" },
+  { year: 2027, month: 1, day: 20, title: "Penumbral lunar eclipse", detail: "Visible across much of the world" },
+  { year: 2027, month: 7, day: 2, title: "Total solar eclipse", detail: "Totality crosses southern Spain, North Africa, and the Middle East" },
+] as const;
+
+function eclipseForDate(date = new Date()): NotableSkyEvent | null {
+  return notableEclipses.map((eclipse) => ({ ...eclipse, date: new Date(eclipse.year, eclipse.month, eclipse.day) })).find((eclipse) => isSameCalendarDate(eclipse.date, date)) ?? null;
+}
+
+export function cometCloseApproachForPayload(payload: unknown): CometCloseApproach | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as { fields?: unknown; data?: unknown };
+  if (!Array.isArray(data.fields) || !Array.isArray(data.data)) return null;
+  const fields = data.fields.filter((field): field is string => typeof field === "string");
+  const fieldIndex = (field: string) => fields.indexOf(field);
+  const nameIndex = fieldIndex("fullname");
+  const dateIndex = fieldIndex("cd");
+  const distanceIndex = fieldIndex("dist");
+  const record = data.data.find((item) => Array.isArray(item) && typeof item[dateIndex] === "string");
+  if (!Array.isArray(record)) return null;
+  const dateText = record[dateIndex] as string;
+  const match = dateText.match(/^(\d{4})-([A-Za-z]{3})-(\d{2})/);
+  if (!match) return null;
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(match[2]);
+  if (month < 0) return null;
+  const distance = Number(record[distanceIndex]);
+  return { name: typeof record[nameIndex] === "string" ? record[nameIndex].trim() : "Comet close approach", date: new Date(Number(match[1]), month, Number(match[3])), distanceAu: Number.isFinite(distance) ? distance : null };
+}
+
+function isSameCalendarDate(first: Date, second: Date) {
+  return first.getFullYear() === second.getFullYear() && first.getMonth() === second.getMonth() && first.getDate() === second.getDate();
+}
+
+export function notableSkyEventForDate(date = new Date(), comet: CometCloseApproach | null = null): NotableSkyEvent | null {
+  const meteorShower = nextMeteorShower(date);
+  const candidates: NotableSkyEvent[] = [];
+  if (isSameCalendarDate(meteorShower.peakDate, date)) candidates.push({ title: `${meteorShower.name} meteor shower`, date: meteorShower.peakDate, detail: "Peak viewing night" });
+  const eclipse = eclipseForDate(date);
+  if (eclipse && isSameCalendarDate(eclipse.date, date)) candidates.push(eclipse);
+  if (comet && isSameCalendarDate(comet.date, date)) candidates.push({ title: comet.name, date: comet.date, detail: comet.distanceAu === null ? "Comet close approach" : `Close approach at ${comet.distanceAu.toFixed(3)} AU` });
+  return candidates[0] ?? null;
 }
 
 export function auroraActivityForLocation(payload: unknown, latitude: number, longitude: number): AuroraActivity | null {
