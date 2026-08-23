@@ -24,6 +24,7 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 - Keep route handlers lean: delegate Google Calendar OAuth/sync logic to `src/lib/google-calendar.ts`.
 - External calendar events are a replaceable local projection: Google/iCloud are authoritative for imported event existence, local deletion must not block re-import, and family assignments must be persisted separately by source plus external event identity (with a separate recurring-series assignment for series-wide rules).
 - Match existing import style, validation, and error-handling patterns in touched files.
+- When reverting or abandoning a feature, remove all introduced code and configuration that will no longer be used. For database objects or rows introduced by the feature, add a separate, explicit cleanup migration rather than rewriting or deleting an already-applied migration; document destructive cleanup clearly.
 
 ## UI consistency and interaction conventions
 
