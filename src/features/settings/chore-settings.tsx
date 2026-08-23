@@ -1,0 +1,118 @@
+"use client";
+
+import { useRef, useState, type KeyboardEvent } from "react";
+import type { ChoreEntry, ChoreRewardMode, Member } from "@/features/home/model";
+import { AppIcon, useAppNotifications } from "@/components/home/shared-ui";
+
+export type ChoreSettingsTab = "rewards" | "weekend" | "earnings";
+
+function formatReward(cents: number, stars: number, mode: ChoreRewardMode) {
+  return mode === "money" ? `$${(cents / 100).toFixed(2)}` : `${stars} ${stars === 1 ? "star" : "stars"}`;
+}
+
+function ChoreRewardSettings({ members, chores, mode, targetCents, targetStars, onEditReward }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; onEditReward: (chore: ChoreEntry) => void }) {
+  const routineOrder = { "Before school": 0, "After school": 1 } as const;
+  const routineChores = chores.filter((chore) => chore.isDaily && chore.isFixed && (chore.routine === "Before school" || chore.routine === "After school")).sort((first, second) => routineOrder[first.routine as keyof typeof routineOrder] - routineOrder[second.routine as keyof typeof routineOrder] || first.sortOrder - second.sortOrder || String(first.id).localeCompare(String(second.id)));
+  const children = members.filter((member) => member.role === "child");
+  const target = mode === "money" ? targetCents : targetStars;
+  if (!routineChores.length) return null;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-black uppercase tracking-wide text-violet-600">DAILY TEMPLATE</p><h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Routine reward values</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Set these once. The same morning and nighttime values repeat every day.</p></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">{mode === "money" ? "Cents" : "Stars"}</span></div><div className="mt-4 space-y-4">{children.map((child) => { const childChores = routineChores.filter((chore) => chore.assigneeMemberId === child.id); const dailyCents = childChores.reduce((sum, chore) => sum + chore.rewardCents, 0); const dailyStars = childChores.reduce((sum, chore) => sum + chore.rewardStars, 0); const total = mode === "money" ? dailyCents : dailyStars; const difference = target - total; return <div key={child.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black text-slate-800 dark:text-slate-100">{child.name}</h3><div className="text-right"><p className={`text-xs font-black ${difference === 0 ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}`}>{mode === "money" ? `Daily total: $${(dailyCents / 100).toFixed(2)} / $${(targetCents / 100).toFixed(2)}` : `Daily total: ${dailyStars} / ${targetStars} stars`}</p>{difference !== 0 && <p className="text-[10px] font-bold text-slate-500 dark:text-slate-300">{difference > 0 ? `${mode === "money" ? `$${(difference / 100).toFixed(2)}` : difference} remaining` : `${mode === "money" ? `$${(Math.abs(difference) / 100).toFixed(2)}` : Math.abs(difference)} over target`}</p>}</div></div><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{childChores.map((chore) => <div key={chore.id} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 dark:bg-white/5"><span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-700 dark:text-slate-100">{chore.title}</span><span className="shrink-0 text-sm font-black text-emerald-600 dark:text-emerald-300">{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><button type="button" onClick={() => onEditReward(chore)} aria-label={`Edit reward for ${chore.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4" /></button></div>)}</div></div>; })}</div></div></section>;
+}
+
+function ChorePayoutSettings({ members, earnedCentsByMember, paidOutCents: paidOutCentsByMember, onPayOut }: { members: Member[]; earnedCentsByMember: Record<string, number>; paidOutCents: Record<string, number>; onPayOut: (childMemberId: string | number, amountCents: number) => Promise<{ error?: string }> }) {
+  const { notify, prompt } = useAppNotifications();
+  const children = members.filter((member) => member.role === "child");
+  async function payOut(child: Member) {
+    const childKey = String(child.id);
+    const earnedCents = earnedCentsByMember[childKey] ?? 0;
+    const paidOutCents = paidOutCentsByMember[childKey] ?? 0;
+    const availableCents = earnedCents - paidOutCents;
+    if (availableCents <= 0) {
+      notify(`${child.name} has no unpaid earnings yet.`, "warning");
+      return;
+    }
+    const entered = await prompt(`How much would you like to pay ${child.name}? Enter dollars, such as 2.00.`, (availableCents / 100).toFixed(2), { title: `Pay ${child.name}`, confirmLabel: "Record payout" });
+    if (entered === null) return;
+    const amountCents = Math.round(Number(entered.replace(/[$,]/g, "").trim()) * 100);
+    if (!Number.isFinite(amountCents) || amountCents <= 0 || amountCents % 5 !== 0) {
+      notify("Enter a positive dollar amount ending in 0 or 5 cents.", "warning");
+      return;
+    }
+    const result = await onPayOut(child.id, amountCents);
+    if (result.error) notify(result.error, "warning");
+  }
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-emerald-50 p-5 shadow-sm ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-300/20"><div><p className="text-sm font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-200">PAYOUTS</p><h2 className="mt-1 text-2xl font-black">Pay children</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Record money paid to a child. Available equals Earned minus Paid out.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{children.map((child) => { const earnedCents = earnedCentsByMember[String(child.id)] ?? 0; const paidOutCents = paidOutCentsByMember[String(child.id)] ?? 0; const availableCents = earnedCents - paidOutCents; return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-white/10"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-800 dark:text-white">{child.name}</h3><p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">Available</p><p className="text-3xl font-black leading-none text-emerald-700 dark:text-emerald-200">${Math.max(0, availableCents / 100).toFixed(2)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">Earned: ${(earnedCents / 100).toFixed(2)} · Paid out: ${(paidOutCents / 100).toFixed(2)}</p></div><button type="button" onClick={() => void payOut(child)} disabled={availableCents <= 0} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45">Pay out</button></div></article>; })}</div></div></section>;
+}
+
+function ChoreResetSettings({ onResetToday, onClearAll }: { onResetToday: () => Promise<{ error?: string; deleted?: number }>; onClearAll: () => Promise<{ error?: string; deleted?: number }> }) {
+  const { confirm, notify } = useAppNotifications();
+  async function resetToday() {
+    if (!await confirm("Clear today's completed daily chores and remove only today's earnings? Older earnings will stay saved.", { title: "Reset today's chores?", destructive: true })) return;
+    const result = await onResetToday();
+    if (result.error) {
+      notify(result.error, "warning");
+      return;
+    }
+    notify(result.deleted ? `Reset ${result.deleted} chore${result.deleted === 1 ? "" : "s"} from today.` : "There were no completed chores to reset.", "success");
+  }
+  async function clearAll() {
+    if (!await confirm("Permanently remove every chore completion and payout record for this household? This is only for clearing test data and cannot be undone.", { title: "Clear all test totals?", destructive: true, confirmLabel: "Clear all totals" })) return;
+    const result = await onClearAll();
+    if (result.error) {
+      notify(result.error, "warning");
+      return;
+    }
+    notify("All chore test totals have been cleared.", "success");
+  }
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-rose-50 p-5 shadow-sm ring-1 ring-rose-100 dark:bg-rose-400/10 dark:ring-rose-300/20"><p className="text-sm font-black uppercase tracking-wide text-rose-700 dark:text-rose-200">TESTING &amp; CLEANUP</p><h2 className="mt-1 text-2xl font-black">Reset today&apos;s chores</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Clear today&apos;s daily checks and today&apos;s earned amount. Previous days and payout history remain unchanged.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void resetToday()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-black text-white hover:bg-rose-700">Reset today</button><button type="button" onClick={() => void clearAll()} className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-100 dark:border-rose-300/40 dark:text-rose-200 dark:hover:bg-rose-400/10">Clear all test totals</button></div></div></section>;
+}
+
+export function ChoreSettingsSection({ activeTab, onTabChange, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onClearAll, onAddChore, onDeleteChore, onRewardModeChange, chores, onEditReward, members, currentMember }: { activeTab: ChoreSettingsTab; onTabChange: (tab: ChoreSettingsTab) => void; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; onPayOut: (childMemberId: string | number, amountCents: number) => Promise<{ error?: string }>; onResetToday: () => Promise<{ error?: string; deleted?: number }>; onClearAll: () => Promise<{ error?: string; deleted?: number }>; onAddChore: (memberId: string | number, routine: string) => void; onDeleteChore: (chore: ChoreEntry) => void; onRewardModeChange: (mode: ChoreRewardMode) => void; chores: ChoreEntry[]; onEditReward: (chore: ChoreEntry) => void; members: Member[]; currentMember?: Member }) {
+  const tabs: Array<[ChoreSettingsTab, string, string]> = [["rewards", "Rewards", "Daily values and Money/Stars"], ["weekend", "Weekend chores", "Add one-off weekend chores"], ["earnings", "Earnings", "Payouts and testing"]];
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const currentIndex = tabs.findIndex(([tab]) => `chore-settings-tab-${tab}` === target.id);
+    if (currentIndex < 0) return;
+    const nextIndex = event.key === "ArrowRight" || event.key === "ArrowDown" ? (currentIndex + 1) % tabs.length : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (currentIndex - 1 + tabs.length) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const nextTab = tabs[nextIndex][0];
+    onTabChange(nextTab);
+    tabRefs.current[nextIndex]?.focus();
+  }
+  return <section id="settings-chores" aria-labelledby="settings-chores-title" className="scroll-mt-32 mx-auto max-w-6xl px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-amber-50 p-5 shadow-sm ring-1 ring-amber-100 dark:bg-amber-400/10 dark:ring-amber-300/20"><p className="text-sm font-black uppercase tracking-wide text-amber-700 dark:text-amber-200">CHORE SETTINGS</p><h2 id="settings-chores-title" className="mt-1 text-2xl font-black">Chores</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Choose a chore setting to expand it.</p><div className="mt-5 grid gap-5 md:grid-cols-[14rem_minmax(0,1fr)]"><div role="tablist" aria-label="Chore settings" onKeyDown={handleTabKeyDown} className="flex gap-2 overflow-x-auto md:block md:space-y-2">{tabs.map(([tab, label, description], index) => <button key={tab} id={`chore-settings-tab-${tab}`} ref={(element) => { tabRefs.current[index] = element; }} role="tab" type="button" tabIndex={activeTab === tab ? 0 : -1} onClick={() => onTabChange(tab)} aria-selected={activeTab === tab} aria-controls={`chore-settings-panel-${tab}`} className={`w-52 shrink-0 rounded-2xl p-3 text-left transition md:w-full ${activeTab === tab ? "bg-amber-500 text-white shadow-md" : "bg-white/70 text-slate-700 hover:bg-white dark:bg-white/10 dark:text-slate-100"}`}><span className="block text-sm font-black">{label}</span><span className={`mt-1 block text-xs font-semibold ${activeTab === tab ? "text-white/80" : "text-slate-500 dark:text-slate-300"}`}>{description}</span></button>)}</div><div id={`chore-settings-panel-${activeTab}`} role="tabpanel" aria-labelledby={`chore-settings-tab-${activeTab}`} tabIndex={0} className="min-w-0">{activeTab === "rewards" && <><ChoreRewardModeSettings mode={choreRewardMode} onModeChange={onRewardModeChange} /><ChoreRewardSettings members={members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} onEditReward={onEditReward} /></>}{activeTab === "weekend" && <WeekendChoresSettings members={members} chores={chores} mode={choreRewardMode} onAddChore={onAddChore} onDeleteChore={onDeleteChore} />}{activeTab === "earnings" && currentMember?.role === "adult" && <><ChorePayoutSettings members={members} earnedCentsByMember={earnedCentsByMember} paidOutCents={paidOutCentsByMember} onPayOut={onPayOut} /><ChoreResetSettings onResetToday={onResetToday} onClearAll={onClearAll} /></>}{activeTab === "earnings" && currentMember?.role !== "adult" && <p className="rounded-2xl bg-white/70 p-5 text-sm font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Earnings and testing controls are available to adults only.</p>}</div></div></div></section>;
+}
+
+function WeekendChoresSettings({ members, chores, mode, onAddChore, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; onAddChore: (memberId: string | number, routine: string) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
+  const isWeekend = [0, 6].includes(new Date().getDay());
+  const today = new Date().toLocaleDateString("en-CA");
+  const children = members.filter((member) => member.role === "child");
+  const weekendChores = chores.filter((chore) => !chore.isFixed && chore.routine === "Weekend" && chore.scheduledFor === today);
+  return <div className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-violet-50 p-5 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:ring-violet-400/20"><h3 className="text-xl font-black">Weekend chores</h3><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Add one-off chores for the weekend. They use one shared list per child—no morning or after-school split.</p>{!isWeekend ? <p className="mt-4 rounded-xl bg-white/70 px-3 py-3 text-sm font-bold text-violet-700 dark:bg-white/10 dark:text-violet-200">Weekend chore setup is available Saturday and Sunday.</p> : <div className="mt-4 grid gap-3 md:grid-cols-2">{children.map((child) => { const childChores = weekendChores.filter((chore) => chore.assigneeMemberId === child.id); return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-[#242435]/80"><div className="flex items-center justify-between gap-3"><h4 className="font-black">{child.name}</h4><button type="button" onClick={() => onAddChore(child.id, "Weekend")} className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10"><AppIcon name="plus" className="size-4" />Add chore</button></div><div className="mt-3 space-y-2">{childChores.length ? childChores.map((chore) => <div key={chore.id} className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-white/5"><span className="text-lg">{chore.emoji}</span><span className="min-w-0 flex-1 text-sm font-bold">{chore.title}</span><span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200">{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("family-edit-chore", { detail: chore.id }))} aria-label={`Edit ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4" /></button><button type="button" onClick={() => onDeleteChore(chore)} aria-label={`Delete ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 dark:hover:bg-white/10"><AppIcon name="trash" className="size-4" /></button></div>) : <p className="rounded-xl border border-dashed border-violet-200 px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:border-violet-300/25 dark:text-slate-300">No weekend chores yet.</p>}</div></article>; })}</div>}</div></div>;
+}
+
+function ChoreRewardModeSettings({ mode, onModeChange }: { mode: ChoreRewardMode; onModeChange: (mode: ChoreRewardMode) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="max-w-2xl rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-100 dark:bg-amber-400/10 dark:ring-amber-300/20"><p className="text-sm font-black uppercase tracking-wide text-amber-700 dark:text-amber-200">CHORE REWARDS</p><h2 className="mt-1 text-2xl font-black">Choose the incentive style</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">This choice controls what the chores board shows. The other reward values stay saved, so you can switch back anytime.</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => onModeChange("money")} aria-pressed={mode === "money"} className={`rounded-2xl p-4 text-left ring-1 transition ${mode === "money" ? "bg-emerald-500 text-white ring-emerald-600 shadow-md" : "bg-white/80 text-slate-700 ring-amber-200 hover:bg-white dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><span className="text-lg font-black">Money</span><span className={`mt-1 block text-sm font-semibold ${mode === "money" ? "text-white/85" : "text-slate-500 dark:text-slate-300"}`}>Show cents like $0.10 for each completed chore.</span></button><button type="button" onClick={() => onModeChange("stars")} aria-pressed={mode === "stars"} className={`rounded-2xl p-4 text-left ring-1 transition ${mode === "stars" ? "bg-violet-500 text-white ring-violet-600 shadow-md" : "bg-white/80 text-slate-700 ring-amber-200 hover:bg-white dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><span className="text-lg font-black">Stars</span><span className={`mt-1 block text-sm font-semibold ${mode === "stars" ? "text-white/85" : "text-slate-500 dark:text-slate-300"}`}>Show star rewards instead of money.</span></button></div></div></section>;
+}
+
+export function AccountSettings({ onSignOut }: { onSignOut: () => Promise<{ error?: string }> }) {
+  const [signOutMessage, setSignOutMessage] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutMessage("Signing out…");
+    try {
+      const result = await onSignOut();
+      if (result.error) setSignOutMessage(result.error);
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
+  return <section id="settings-account" aria-labelledby="settings-account-title" className="scroll-mt-32 mx-auto max-w-6xl px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-600">ACCOUNT</p><h2 id="settings-account-title" className="mt-1 text-2xl font-bold">Sign out</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Sign out of this family command center on this device.</p></div><button type="button" onClick={() => void handleSignOut()} className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"><AppIcon name="signOut" className="size-4" />Log out</button></div>{signOutMessage && <p className="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-200">{signOutMessage}</p>}</div></section>;
+}

@@ -25,3 +25,14 @@ See `.clinerules/coding-rules.md` for the full, stack-aware rule set.
 ## Notification UI
 
 Use the shared `useAppNotifications` API from `src/components/home/shared-ui.tsx` for all app feedback and dialogs. Do not add native `window.alert`, `window.confirm`, or `window.prompt` calls. Use branded Tailwind/Phosphor toasts for status/errors and the shared accessible modal for confirmations and short text entry.
+
+## Incremental Feature Workflow
+
+For every new feature, work in small, verifiable slices:
+
+- Start by identifying the user-facing outcome, the nearest existing UI or code pattern, and the smallest useful first slice.
+- Inspect the relevant files and authoritative library guidance before making changes. Preserve unrelated work already present in the working tree.
+- Implement one focused slice at a time, keeping the feature usable after each slice. Avoid bundling unrelated cleanup into the same change.
+- After each slice, run proportionate checks: targeted linting, TypeScript, `git diff --check`, and a production build when routing, rendering, or integration risk warrants it. Use visual QA when a browser is available.
+- Report progress after each slice: identify the current slice, how many slices are complete, the estimated number remaining, what changed, and what was verified. Include the recommended next slice. Continue iteratively when the user says “next.”
+- Before considering a feature complete, check loading, empty, error, permission, responsive, keyboard, and reduced-motion states where they apply.
