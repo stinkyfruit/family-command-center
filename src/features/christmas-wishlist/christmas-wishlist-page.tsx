@@ -19,6 +19,7 @@ const santaSleighAnimation = christmasAnimations.find((src) => src.includes("san
 
 export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraft?: WishlistVoiceDraft | null } = {}) {
   const [kids, setKids] = useState<Kid[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [wishlists, setWishlists] = useState<WishlistByKid>({});
   const [selectedKidId, setSelectedKidId] = useState<string | null>(null);
   const [newWish, setNewWish] = useState("");
@@ -46,48 +47,52 @@ export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraf
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (!supabase) return;
     let cancelled = false;
 
     async function loadFamilyWishlist() {
-      const { data: userResult } = await supabase!.auth.getUser();
-      if (!userResult.user) {
-        setKids([]);
-        setWishlists({});
-        setSelectedKidId(null);
-        return;
-      }
-      const { data: membership } = await supabase!.from("members").select("household_id").eq("user_id", userResult.user.id).limit(1).maybeSingle();
-      if (!membership?.household_id) {
-        setHouseholdId(null);
-        setKids([]);
-        setWishlists({});
-        setSelectedKidId(null);
-        return;
-      }
+      try {
+        if (!supabase) return;
+        const { data: userResult } = await supabase.auth.getUser();
+        if (!userResult.user) {
+          setKids([]);
+          setWishlists({});
+          setSelectedKidId(null);
+          return;
+        }
+        const { data: membership } = await supabase.from("members").select("household_id").eq("user_id", userResult.user.id).limit(1).maybeSingle();
+        if (!membership?.household_id) {
+          setHouseholdId(null);
+          setKids([]);
+          setWishlists({});
+          setSelectedKidId(null);
+          return;
+        }
 
-      const [{ data: memberRows }, { data: wishRows }] = await Promise.all([
-        supabase!.from("members").select("id, display_name, role, color").eq("household_id", membership.household_id).eq("role", "child").order("created_at"),
-        supabase!.from("christmas_wishlist_items").select("id, member_id, title, note, category, priority, created_at").eq("household_id", membership.household_id).order("created_at"),
-      ]);
-      if (cancelled) return;
+        const [{ data: memberRows }, { data: wishRows }] = await Promise.all([
+          supabase.from("members").select("id, display_name, role, color").eq("household_id", membership.household_id).eq("role", "child").order("created_at"),
+          supabase.from("christmas_wishlist_items").select("id, member_id, title, note, category, priority, created_at").eq("household_id", membership.household_id).order("created_at"),
+        ]);
+        if (cancelled) return;
 
-      const loadedKids = (memberRows ?? []).map((member, index) => ({
-        id: String(member.id),
-        name: member.display_name,
-        color: member.color ?? ["#e85d75", "#2d9a79", "#7c65d8", "#e39b3d"][index % 4],
-        emoji: ["🦌", "⛄", "🧸", "🛷"][index % 4],
-      }));
-      const loadedWishlists = Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid;
-      for (const wish of wishRows ?? []) {
-        const memberId = String(wish.member_id);
-        if (loadedWishlists[memberId]) loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
+        const loadedKids = (memberRows ?? []).map((member, index) => ({
+          id: String(member.id),
+          name: member.display_name,
+          color: member.color ?? ["#e85d75", "#2d9a79", "#7c65d8", "#e39b3d"][index % 4],
+          emoji: ["🦌", "⛄", "🧸", "🛷"][index % 4],
+        }));
+        const loadedWishlists = Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid;
+        for (const wish of wishRows ?? []) {
+          const memberId = String(wish.member_id);
+          if (loadedWishlists[memberId]) loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
+        }
+        setHouseholdId(membership.household_id);
+        setKids(loadedKids);
+        setWishlists(loadedWishlists);
+        setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0]?.id ?? null);
+        setSyncMessage(loadedKids.length ? "Synced with your family home" : "Add a child in Settings to start a wish list");
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-      setHouseholdId(membership.household_id);
-      setKids(loadedKids);
-      setWishlists(loadedWishlists);
-      setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0]?.id ?? null);
-      setSyncMessage(loadedKids.length ? "Synced with your family home" : "Add a child in Settings to start a wish list");
     }
 
     void loadFamilyWishlist();
@@ -167,6 +172,10 @@ export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraf
         if (error) setSyncMessage("Removed here · the family copy could not be deleted yet");
       });
     }
+  }
+
+  if (isLoading) {
+    return <section className="relative mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="christmas-wishlist-shell relative z-10 rounded-[1.75rem] bg-white/85 p-5 shadow-sm ring-1 ring-white/80 backdrop-blur-sm dark:bg-slate-950/55 dark:ring-white/10 md:p-7"><div className="rounded-[1.5rem] bg-gradient-to-r from-[#1d6658] to-[#2f806e] p-6 text-white shadow-sm"><p className="text-xs font-black uppercase tracking-[0.2em] text-[#d6f0dd]">Christmas wishes</p><h1 className="mt-1 font-serif text-3xl font-black sm:text-4xl">What&apos;s on your list?</h1><p className="mt-2 text-sm font-semibold text-white/80">Your family wish lists will appear here.</p></div><div className="mt-6 rounded-2xl border-2 border-dashed border-slate-200 px-5 py-10 text-center dark:border-white/10" role="status" aria-live="polite"><p className="font-black text-slate-700 dark:text-slate-200">Loading your family wish lists…</p><p className="mt-1 text-sm font-semibold text-slate-400">Checking for children and saved wishes.</p></div></div></section>;
   }
 
   if (!selectedKid) {

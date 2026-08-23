@@ -69,6 +69,7 @@ type SpeechRecognitionLike = {
   lang: string;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
   onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
@@ -89,23 +90,62 @@ export function SpeechInputButton({ value, onChange, onComplete, buttonLabel = "
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const prefixRef = useRef("");
   const spokenTextRef = useRef("");
+  const stopTimerRef = useRef<number | null>(null);
+  const finishedRef = useRef(false);
   const [listening, setListening] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => () => {
+    if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
     const recognition = recognitionRef.current;
     if (recognition) {
       recognition.onresult = null;
       recognition.onerror = null;
       recognition.onend = null;
-      recognition.stop();
+      try { recognition.abort?.(); } catch { /* The browser may already have ended recognition. */ }
     }
     recognitionRef.current = null;
   }, []);
 
-  function stopListening() {
-    recognitionRef.current?.stop();
+  function finishListening(completeCommand: boolean) {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (stopTimerRef.current !== null) {
+      window.clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+    }
+    if (completeCommand) {
+      const completedValue = [prefixRef.current, spokenTextRef.current].filter(Boolean).join(" ");
+      if (completedValue) {
+        onChange(completedValue);
+        onComplete?.(completedValue);
+      }
+    }
     setListening(false);
+  }
+
+  function stopListening() {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setListening(false);
+      return;
+    }
+    try {
+      recognition.stop();
+      stopTimerRef.current = window.setTimeout(() => {
+        try { recognition.abort?.(); } catch { /* The browser may already have ended recognition. */ }
+        finishListening(true);
+      }, 1200);
+    } catch {
+      finishListening(true);
+    }
   }
 
   function startListening() {
@@ -118,6 +158,7 @@ export function SpeechInputButton({ value, onChange, onComplete, buttonLabel = "
     const recognition = new Recognition();
     prefixRef.current = value.trim();
     spokenTextRef.current = "";
+    finishedRef.current = false;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = navigator.language || "en-US";
@@ -132,19 +173,15 @@ export function SpeechInputButton({ value, onChange, onComplete, buttonLabel = "
       onChange([prefixRef.current, spokenTextRef.current, interimText].filter(Boolean).join(" "));
     };
     recognition.onerror = (event) => {
-      if (event.error === "aborted") return;
+      if (event.error === "aborted") {
+        finishListening(false);
+        return;
+      }
       setMessage(event.error === "not-allowed" ? "Allow microphone access to dictate here." : "I couldn’t hear that. Try again.");
-      setListening(false);
-      recognitionRef.current = null;
+      finishListening(false);
     };
     recognition.onend = () => {
-      const completedValue = [prefixRef.current, spokenTextRef.current].filter(Boolean).join(" ");
-      if (completedValue) {
-        onChange(completedValue);
-        onComplete?.(completedValue);
-      }
-      setListening(false);
-      recognitionRef.current = null;
+      finishListening(true);
     };
 
     try {
@@ -153,6 +190,8 @@ export function SpeechInputButton({ value, onChange, onComplete, buttonLabel = "
       setMessage("");
       setListening(true);
     } catch {
+      finishedRef.current = true;
+      recognitionRef.current = null;
       setMessage("Voice input could not start. Try again.");
     }
   }
