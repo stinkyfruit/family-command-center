@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type SelectHTMLAttributes } from "react";
 import Image from "next/image";
-import { CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckSquareIcon, ClipboardTextIcon, GiftIcon, HouseIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
+import { CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, ClipboardTextIcon, GiftIcon, HouseIcon, InfoIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { notoIconPath } from "@/features/home/model";
 
-export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop";
+export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop" | "check" | "info" | "warning";
 
 const navigationIconStyles: Record<Extract<IconName, "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist">, { tile: string; icon: string; activeIcon: string }> = {
   home: { tile: "bg-amber-100 dark:bg-amber-400/20", icon: "text-amber-600 dark:text-amber-200", activeIcon: "text-amber-700" },
@@ -36,6 +38,9 @@ export function AppIcon({ name, className = "size-5", variant = "default", activ
     signOut: SignOutIcon,
     microphone: MicrophoneIcon,
     stop: StopCircleIcon,
+    check: CheckIcon,
+    info: InfoIcon,
+    warning: WarningCircleIcon,
   }[name];
 
   if (variant === "nav" && name in navigationIconStyles) {
@@ -46,6 +51,116 @@ export function AppIcon({ name, className = "size-5", variant = "default", activ
   }
 
   return <Icon className={className} weight="bold" aria-hidden="true" />;
+}
+
+export type NotificationTone = "info" | "success" | "error" | "warning";
+
+type NotificationOptions = {
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+};
+
+type ToastNotice = { id: number; message: string; tone: NotificationTone };
+type DialogRequest =
+  | { kind: "confirm"; message: string; options: NotificationOptions; resolve: (value: boolean) => void }
+  | { kind: "prompt"; message: string; defaultValue: string; options: NotificationOptions; resolve: (value: string | null) => void };
+
+type NotificationApi = {
+  notify: (message: string, tone?: NotificationTone) => void;
+  confirm: (message: string, options?: NotificationOptions) => Promise<boolean>;
+  prompt: (message: string, defaultValue?: string, options?: NotificationOptions) => Promise<string | null>;
+};
+
+const NotificationContext = createContext<NotificationApi | null>(null);
+
+export function useAppNotifications() {
+  const context = useContext(NotificationContext);
+  if (!context) throw new Error("useAppNotifications must be used inside NotificationProvider");
+  return context;
+}
+
+export function NotificationProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastNotice[]>([]);
+  const [dialog, setDialog] = useState<DialogRequest | null>(null);
+  const nextToastId = useRef(0);
+
+  const notify = useCallback((message: string, tone: NotificationTone = "error") => {
+    const id = nextToastId.current++;
+    setToasts((current) => [...current, { id, message, tone }].slice(-4));
+  }, []);
+
+  const confirm = useCallback((message: string, options: NotificationOptions = {}) => new Promise<boolean>((resolve) => {
+    setDialog({ kind: "confirm", message, options, resolve });
+  }), []);
+
+  const prompt = useCallback((message: string, defaultValue = "", options: NotificationOptions = {}) => new Promise<string | null>((resolve) => {
+    setDialog({ kind: "prompt", message, defaultValue, options, resolve });
+  }), []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
+  const resolveDialog = useCallback((value: boolean | string | null) => {
+    if (!dialog) return;
+    if (dialog.kind === "confirm" && typeof value === "boolean") dialog.resolve(value);
+    if (dialog.kind === "prompt" && (typeof value === "string" || value === null)) dialog.resolve(value);
+    setDialog(null);
+  }, [dialog]);
+
+  return <NotificationContext.Provider value={{ notify, confirm, prompt }}>
+    {children}
+    <NotificationCenter toasts={toasts} dialog={dialog} onDismissToast={dismissToast} onResolveDialog={resolveDialog} />
+  </NotificationContext.Provider>;
+}
+
+function NotificationCenter({ toasts, dialog, onDismissToast, onResolveDialog }: { toasts: ToastNotice[]; dialog: DialogRequest | null; onDismissToast: (id: number) => void; onResolveDialog: (value: boolean | string | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (dialog?.kind === "prompt") inputRef.current?.focus();
+  }, [dialog]);
+
+  useEffect(() => {
+    if (!dialog) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onResolveDialog(dialog.kind === "confirm" ? false : null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [dialog, onResolveDialog]);
+
+  return <>
+    <div className="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-stretch gap-3 sm:left-auto sm:right-6 sm:w-full sm:max-w-md">
+      {toasts.map((toast) => <AppToast key={toast.id} toast={toast} onDismiss={() => onDismissToast(toast.id)} />)}
+    </div>
+    {dialog && <div className="fixed inset-0 z-[110] grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onResolveDialog(dialog.kind === "confirm" ? false : null); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="app-dialog-title" className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl ring-1 ring-slate-200 dark:bg-[#242435] dark:ring-white/10">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">FAMILY HOME</p><h2 id="app-dialog-title" className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{dialog.options.title ?? (dialog.kind === "prompt" ? "Add something new" : "Are you sure?")}</h2></div><button type="button" onClick={() => onResolveDialog(dialog.kind === "confirm" ? false : null)} aria-label="Close dialog" className="grid size-9 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>
+        <p className="mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">{dialog.message}</p>
+        {dialog.kind === "prompt" ? <form onSubmit={(event) => { event.preventDefault(); onResolveDialog(inputRef.current?.value ?? dialog.defaultValue); }}><input ref={inputRef} defaultValue={dialog.defaultValue} aria-label={dialog.message} className="mt-4 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-slate-800 shadow-sm outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 dark:border-white/10 dark:bg-white/10 dark:text-white" /><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => onResolveDialog(null)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">{dialog.options.cancelLabel ?? "Cancel"}</button><button type="submit" className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">{dialog.options.confirmLabel ?? "Save"}</button></div></form> : <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => onResolveDialog(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">{dialog.options.cancelLabel ?? "Cancel"}</button><button type="button" onClick={() => onResolveDialog(true)} className={`rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm ${dialog.options.destructive ? "bg-rose-600 hover:bg-rose-700" : "bg-violet-600 hover:bg-violet-700"}`}>{dialog.options.confirmLabel ?? (dialog.options.destructive ? "Delete" : "Continue")}</button></div>}
+      </div>
+    </div>}
+  </>;
+}
+
+function AppToast({ toast, onDismiss }: { toast: ToastNotice; onDismiss: () => void }) {
+  const tone = {
+    info: { icon: "info" as const, label: "Notice", className: "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-400/30 dark:bg-sky-950/80 dark:text-sky-100" },
+    success: { icon: "check" as const, label: "Saved", className: "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-950/80 dark:text-emerald-100" },
+    warning: { icon: "warning" as const, label: "Heads up", className: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-400/30 dark:bg-amber-950/80 dark:text-amber-100" },
+    error: { icon: "warning" as const, label: "Something went wrong", className: "border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-400/30 dark:bg-rose-950/80 dark:text-rose-100" },
+  }[toast.tone];
+  useEffect(() => {
+    const timeout = window.setTimeout(onDismiss, toast.tone === "error" ? 7000 : 4500);
+    return () => window.clearTimeout(timeout);
+  }, [onDismiss, toast.tone]);
+  return <div role={toast.tone === "error" ? "alert" : "status"} className={`pointer-events-auto flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl backdrop-blur ${tone.className}`}><AppIcon name={tone.icon} className="mt-0.5 size-5 shrink-0" /><div className="min-w-0 flex-1"><p className="text-xs font-black uppercase tracking-wide opacity-70">{tone.label}</p><p className="mt-0.5 break-words text-sm font-bold leading-snug">{toast.message}</p></div><button type="button" onClick={onDismiss} aria-label="Dismiss notification" className="grid size-7 shrink-0 place-items-center rounded-lg opacity-60 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"><AppIcon name="close" className="size-4" /></button></div>;
 }
 
 export function StyledSelect({ children, className = "", ...props }: SelectHTMLAttributes<HTMLSelectElement>) {

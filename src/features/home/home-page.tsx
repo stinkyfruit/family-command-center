@@ -8,6 +8,7 @@ import {
   type AppleFeed,
   type AuroraActivity,
   type ChoreEntry,
+  type ChoreRewardMode,
   type Event,
   type GoogleConnection,
   type Member,
@@ -46,7 +47,7 @@ import {
   weatherOrbClass,
   weatherSummary,
 } from "@/features/home/model";
-import { AppIcon, SpeechInputButton, StyledSelect } from "@/components/home/shared-ui";
+import { AppIcon, SpeechInputButton, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
 import { eventOccursOn as calendarEventOccursOn, isBirthdayEvent, memberCalendarColor, shiftCalendar } from "@/components/home/calendar";
 import {
   CalendarPersonFilter,
@@ -82,6 +83,7 @@ function listPreferenceKey(kind: ListKind, listId: string | number) {
 }
 
 export default function Home() {
+  const { notify, confirm, prompt } = useAppNotifications();
   const [events, setEvents] = useState(starterEvents);
   const [todos, setTodos] = useState<Todo[]>([
     { id: 1, title: "Order birthday present", due: "Today", done: false },
@@ -138,6 +140,11 @@ export default function Home() {
   const syncingGoogleRef = useRef(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [chores, setChores] = useState<ChoreEntry[]>([]);
+  const [choreRewardMode, setChoreRewardMode] = useState<ChoreRewardMode>("money");
+  const [choreRewardTargetCents, setChoreRewardTargetCents] = useState(200);
+  const [choreRewardTargetStars, setChoreRewardTargetStars] = useState(20);
+  const [choreEarnedCentsByMember, setChoreEarnedCentsByMember] = useState<Record<string, number>>({});
+  const [chorePaidOutCentsByMember, setChorePaidOutCentsByMember] = useState<Record<string, number>>({});
   const [sharedLists, setSharedLists] = useState<SharedList[]>([]);
   const [googleConnections, setGoogleConnections] = useState<GoogleConnection[]>([]);
   const [appleFeeds, setAppleFeeds] = useState<AppleFeed[]>([]);
@@ -153,6 +160,7 @@ export default function Home() {
   const [voiceChoreDraft, setVoiceChoreDraft] = useState<VoiceChoreDraft | null>(null);
   const [voiceListDraft, setVoiceListDraft] = useState<VoiceListDraft | null>(null);
   const [expandedListKeys, setExpandedListKeys] = useState<Record<string, boolean>>({});
+  const completingChoreIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
@@ -246,12 +254,17 @@ export default function Home() {
       const id = data?.[0]?.household_id ?? null;
       setHouseholdId(id);
       if (id) {
-        const { data: household } = await supabase!.from("households").select("name, theme_mode, show_chores_tab, show_wishlist_tab").eq("id", id).single();
+        const { data: household } = await supabase!.from("households").select("name, theme_mode, show_chores_tab, show_wishlist_tab, chore_reward_mode, chore_reward_target_cents, chore_reward_target_stars").eq("id", id).single();
         if (household) {
           setHouseholdName(household.name);
           if (household.theme_mode === "light" || household.theme_mode === "dark" || household.theme_mode === "auto") setThemeMode(household.theme_mode);
           if (typeof household.show_chores_tab === "boolean") setShowChoresTab(household.show_chores_tab);
           if (typeof household.show_wishlist_tab === "boolean") setShowWishlistTab(household.show_wishlist_tab);
+          if (household.chore_reward_mode === "money" || household.chore_reward_mode === "stars") setChoreRewardMode(household.chore_reward_mode);
+          // Older households may still have the previous $2.50/$10 target
+          // until the latest reward migration is applied.
+          if (typeof household.chore_reward_target_cents === "number") setChoreRewardTargetCents(200);
+          if (typeof household.chore_reward_target_stars === "number") setChoreRewardTargetStars(household.chore_reward_target_stars);
         }
       }
       setDataReady(true);
@@ -261,21 +274,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !householdId) return;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const today = localDateInputValue(new Date());
     Promise.all([
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source").eq("household_id", householdId).order("starts_at"),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
-      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active").eq("household_id", householdId).order("sort_order").order("created_at"),
-      supabase.from("chore_completions").select("id, chore_id, completed_at").order("completed_at", { ascending: false }),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active, reward_cents, reward_stars").eq("household_id", householdId).order("sort_order").order("created_at"),
+      supabase.from("chore_completions").select("id, chore_id, member_id, completed_at, completed_on, reward_cents, reward_stars").order("completed_at", { ascending: false }),
+      supabase.from("chore_payouts").select("id, child_member_id, amount_cents, paid_at").eq("household_id", householdId).order("paid_at", { ascending: false }),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
       supabase.from("list_items").select("id, list_id, title, completed").order("created_at"),
       supabase.from("google_calendar_connections").select("id, display_name, enabled").eq("household_id", householdId).order("created_at"),
       supabase.from("calendar_feeds").select("id, display_name, enabled").eq("household_id", householdId).eq("provider", "apple").order("created_at"),
       supabase.from("mood_checkins").select("id, member_id, mood, checked_in_at").eq("household_id", householdId).eq("checkin_date", localDateInputValue(new Date())).order("checked_in_at", { ascending: false }),
       supabase.from("calendar_event_member_assignments").select("source, external_id, member_ids").eq("household_id", householdId),
-    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, listResult, listItemResult, connectionResult, appleFeedResult, moodResult, eventAssignmentResult]) => {
+    ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, payoutResult, listResult, listItemResult, connectionResult, appleFeedResult, moodResult, eventAssignmentResult]) => {
       const assignmentByEvent = new Map((eventAssignmentResult.data ?? []).map((assignment) => [`${assignment.source}:${assignment.external_id}`, assignment.member_ids]));
       if (eventResult.data) setEvents(displayEventsOnce(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source,
@@ -295,17 +308,27 @@ export default function Home() {
       }
       if (choreResult.data) {
         const choreById = new Map(choreResult.data.map((chore) => [chore.id, chore]));
-        const completionByChore = new Map<string, string>();
+        const completionByChore = new Map<string, { id: string; rewardCents: number; rewardStars: number }>();
+        const earnedByMember: Record<string, number> = {};
         for (const completion of completionResult.data ?? []) {
           const chore = choreById.get(completion.chore_id);
+          const childMemberId = chore?.assignee_member_id ?? completion.member_id;
+          if (childMemberId) earnedByMember[String(childMemberId)] = (earnedByMember[String(childMemberId)] ?? 0) + (completion.reward_cents ?? 0);
           const isDaily = chore?.is_daily ?? chore?.routine !== "To-do";
-          if (isDaily && new Date(completion.completed_at) < todayStart) continue;
-          if (!completionByChore.has(completion.chore_id)) completionByChore.set(completion.chore_id, completion.id);
+          if (isDaily && completion.completed_on !== today) continue;
+          if (!completionByChore.has(completion.chore_id)) completionByChore.set(completion.chore_id, { id: completion.id, rewardCents: completion.reward_cents ?? 0, rewardStars: completion.reward_stars ?? 0 });
         }
+        setChoreEarnedCentsByMember(earnedByMember);
         setChores(choreResult.data.map((chore) => {
           const isDaily = chore.is_daily ?? chore.routine !== "To-do";
-          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, completionId: completionByChore.get(chore.id) ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined) };
+          const completion = completionByChore.get(chore.id);
+          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, rewardCents: chore.reward_cents ?? 50, rewardStars: chore.reward_stars ?? 1, completionId: completion?.id ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined), completedRewardCents: completion?.rewardCents, completedRewardStars: completion?.rewardStars };
         }));
+      }
+      if (payoutResult.data) {
+        const paidOutByMember: Record<string, number> = {};
+        for (const payout of payoutResult.data) paidOutByMember[String(payout.child_member_id)] = (paidOutByMember[String(payout.child_member_id)] ?? 0) + payout.amount_cents;
+        setChorePaidOutCentsByMember(paidOutByMember);
       }
       if (listResult.data) {
         const itemsByList = new Map<string, SharedListItem[]>();
@@ -563,13 +586,13 @@ export default function Home() {
     const dueAt = todoDueDate ? `${todoDueDate}T12:00:00.000Z` : null;
     if (editingTodo && supabase && householdId) {
       const { error } = await supabase.from("todos").update({ title, assignee_member_id: assigneeMemberId, due_at: dueAt }).eq("id", editingTodo.id).eq("household_id", householdId);
-      if (error) { window.alert(`Could not update this task: ${error.message}`); return; }
+      if (error) { notify(`Could not update this task: ${error.message}`); return; }
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (editingTodo) {
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (supabase && user && householdId) {
       const { data, error } = await supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title, due_at: dueAt, assignee_member_id: assigneeMemberId }).select("id, assignee_member_id, due_at").single();
-      if (error) { window.alert(`Could not add this task: ${error.message}`); return; }
+      if (error) { notify(`Could not add this task: ${error.message}`); return; }
       if (data) setTodos((items) => [...items, { id: data.id, title, due: data.due_at ? new Date(data.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: data.due_at, done: false, assigneeMemberId: data.assignee_member_id }]);
     } else {
       setTodos((items) => [...items, { id: Date.now().toString(), title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, done: false, assigneeMemberId }]);
@@ -647,15 +670,15 @@ export default function Home() {
 
   async function toggleGoogleCalendar(connection: GoogleConnection) {
     if (connection.enabled) {
-      if (!window.confirm(`Remove “${connection.name}” and all of its imported events from this family calendar? This will not change anything in Google.`)) return;
+      if (!await confirm(`Remove “${connection.name}” and all of its imported events from this family calendar? This will not change anything in Google.`, { title: "Remove calendar?", destructive: true })) return;
       if (!supabase || !householdId) return;
       const { data } = await supabase.auth.getSession();
       const accessToken = data.session?.access_token;
-      if (!accessToken) { window.alert("Your session has expired. Please sign in again."); return; }
+      if (!accessToken) { notify("Your session has expired. Please sign in again."); return; }
       setGoogleConnections((items) => items.filter((item) => item.id !== connection.id));
       const response = await fetch("/api/google-calendar/remove", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, connectionId: connection.id }) });
       const result = await response.json();
-      if (!response.ok) { setGoogleConnections((items) => [...items, connection]); window.alert(result.error ?? "Could not remove Google Calendar."); return; }
+      if (!response.ok) { setGoogleConnections((items) => [...items, connection]); notify(result.error ?? "Could not remove Google Calendar."); return; }
       await refreshCalendarEvents();
       setCalendarMessage(`${connection.name} and its imported events were removed.`);
       return;
@@ -664,7 +687,7 @@ export default function Home() {
     setGoogleConnections((items) => items.map((item) => item.id === connection.id ? { ...item, enabled } : item));
     if (supabase) {
       const { error } = await supabase.from("google_calendar_connections").update({ enabled }).eq("id", connection.id);
-      if (error) { setGoogleConnections((items) => items.map((item) => item.id === connection.id ? connection : item)); window.alert(error.message); }
+      if (error) { setGoogleConnections((items) => items.map((item) => item.id === connection.id ? connection : item)); notify(error.message); }
     }
   }
 
@@ -675,7 +698,7 @@ export default function Home() {
     if (!accessToken) { setCalendarMessage("Your session has expired. Please sign in again."); return; }
     const response = await fetch("/api/calendar-feeds/sync", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, feedId }) });
     const result = await response.json();
-    if (!response.ok) { window.alert(result.error ?? "Could not sync Apple Calendar."); return; }
+    if (!response.ok) { notify(result.error ?? "Could not sync Apple Calendar."); return; }
     await refreshCalendarEvents();
     setCalendarMessage(`Apple Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
   }
@@ -690,7 +713,7 @@ export default function Home() {
   async function addAppleCalendar(name: string, url: string) {
     if (!supabase || !householdId || !user) return;
     const { data, error } = await supabase.from("calendar_feeds").insert({ household_id: householdId, created_by: user.id, display_name: name, feed_url: url, provider: "apple" }).select("id, display_name, enabled").single();
-    if (error) { window.alert(error.message); return; }
+    if (error) { notify(error.message); return; }
     if (data) {
       setAppleFeeds((feeds) => [...feeds, { id: data.id, name: data.display_name, enabled: data.enabled }]);
       await syncAppleCalendar(data.id);
@@ -702,7 +725,7 @@ export default function Home() {
     setAppleFeeds((feeds) => feeds.map((item) => item.id === feed.id ? { ...item, enabled } : item));
     if (supabase) {
       const { error } = await supabase.from("calendar_feeds").update({ enabled }).eq("id", feed.id);
-      if (error) { setAppleFeeds((feeds) => feeds.map((item) => item.id === feed.id ? feed : item)); window.alert(error.message); }
+      if (error) { setAppleFeeds((feeds) => feeds.map((item) => item.id === feed.id ? feed : item)); notify(error.message); }
     }
   }
 
@@ -732,16 +755,16 @@ export default function Home() {
 
   const deleteTodo = useCallback(async (id: string | number) => {
     const target = todos.find((todo) => todo.id === id);
-    if (!target || !window.confirm(`Permanently delete “${target.title}”?`)) return;
+    if (!target || !await confirm(`Permanently delete “${target.title}”?`, { title: "Delete task?", destructive: true })) return;
     setTodos((items) => items.filter((todo) => todo.id !== id));
     if (supabase && householdId) {
       const { error } = await supabase.from("todos").delete().eq("id", id).eq("household_id", householdId);
       if (error) {
         setTodos((items) => [...items, target]);
-        window.alert(`Could not delete this task: ${error.message}`);
+        notify(`Could not delete this task: ${error.message}`);
       }
     }
-  }, [householdId, todos]);
+  }, [confirm, householdId, notify, todos]);
 
   useEffect(() => {
     const handleTaskDeletion: EventListener = (event) => {
@@ -751,7 +774,7 @@ export default function Home() {
     return () => window.removeEventListener("family-delete-todo", handleTaskDeletion);
   }, [deleteTodo]);
 
-  async function addMember(name: string, role: Member["role"]) {
+  async function addMember(name: string, role: Member["role"]): Promise<{ error?: string; member?: Member }> {
     const trimmedName = name.trim();
     if (!trimmedName) return { error: "Enter a name." };
     if (!householdId) return { error: "Open your family home before adding someone." };
@@ -759,8 +782,16 @@ export default function Home() {
     if (supabase) {
       const { data, error } = await supabase.from("members").insert({ household_id: householdId, display_name: trimmedName, role, color }).select("id, user_id, display_name, role, color").single();
       if (error) return { error: error.message };
-      if (data) setMembers((items) => [...items, { id: data.id, userId: data.user_id, name: data.display_name, role: data.role, color: data.color }]);
-    } else setMembers((items) => [...items, { id: Date.now().toString(), name: trimmedName, role, color }]);
+      if (data) {
+        const member = { id: data.id, userId: data.user_id, name: data.display_name, role: data.role, color: data.color };
+        setMembers((items) => [...items, member]);
+        return { member };
+      }
+    } else {
+      const member = { id: Date.now().toString(), name: trimmedName, role, color };
+      setMembers((items) => [...items, member]);
+      return { member };
+    }
     return {};
   }
 
@@ -830,37 +861,79 @@ export default function Home() {
   }
 
   async function addChild() {
-    const name = window.prompt("Child's name?");
+    const name = await prompt("What is your child’s name?", "", { title: "Add a child", confirmLabel: "Add child" });
     if (!name?.trim()) return;
     const result = await addMember(name, "child");
-    if (result.error) window.alert(result.error);
+    if (result.error) notify(result.error);
+    if (result.member && supabase) {
+      const { data } = await supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active, reward_cents, reward_stars").eq("assignee_member_id", result.member.id).order("sort_order");
+      if (data) setChores((items) => [...items, ...data.map((chore) => ({ id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily: chore.is_daily ?? true, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, rewardCents: chore.reward_cents ?? 50, rewardStars: chore.reward_stars ?? 1 }))]);
+    }
   }
 
   async function addChore(memberId: string | number, routine: string, titleOverride?: string, scheduledForOverride?: string | null) {
-    const title = titleOverride ?? window.prompt("What is the chore?");
+    const title = titleOverride ?? await prompt("What should this chore be called?", "", { title: "Add a chore", confirmLabel: "Add chore" });
     if (!title?.trim() || !householdId) return;
     const emoji = choreIcon(title);
     const isDaily = false;
     const scheduledFor = routine === "To-do" ? null : scheduledForOverride ?? new Date().toLocaleDateString("en-CA");
     const sortOrder = Math.max(0, ...chores.filter((chore) => String(chore.assigneeMemberId) === String(memberId) && chore.routine === routine).map((chore) => chore.sortOrder)) + 1;
     if (supabase) {
-      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, scheduled_for: scheduledFor }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, scheduled_for").single();
-      if (error) { window.alert(error.message); return; }
-      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: false, scheduledFor: data.scheduled_for }]);
-    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed: false, scheduledFor }]);
+      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, scheduled_for: scheduledFor, reward_cents: 50, reward_stars: 1 }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, scheduled_for, reward_cents, reward_stars").single();
+      if (error) { notify(error.message); return; }
+      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: false, scheduledFor: data.scheduled_for, rewardCents: data.reward_cents ?? 50, rewardStars: data.reward_stars ?? 1 }]);
+    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed: false, scheduledFor, rewardCents: 50, rewardStars: 1 }]);
   }
 
   const editChore = useCallback(async (chore: ChoreEntry) => {
     if (chore.isFixed) return;
-    const title = window.prompt("Update this chore", chore.title)?.trim();
+    const title = (await prompt("Update this chore’s name.", chore.title, { title: "Edit chore", confirmLabel: "Save" }))?.trim();
     if (!title || title === chore.title) return;
     const emoji = choreIcon(title);
     setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title, emoji } : item));
     if (supabase) {
       const { error } = await supabase.from("chores").update({ title, emoji }).eq("id", chore.id).eq("household_id", householdId);
-      if (error) { window.alert(`Could not update this chore: ${error.message}`); }
+      if (error) { notify(`Could not update this chore: ${error.message}`); }
     }
-  }, [householdId]);
+  }, [householdId, notify, prompt]);
+
+  async function editChoreReward(chore: ChoreEntry) {
+    const currentValue = choreRewardMode === "money" ? chore.rewardCents : chore.rewardStars;
+    const unit = choreRewardMode === "money" ? "cents" : "stars";
+    const entered = await prompt(`How many ${unit} is “${chore.title}” worth?`, String(currentValue), { title: "Set chore reward", confirmLabel: "Save" });
+    if (entered === null) return;
+    const value = Number(entered);
+    const maximum = choreRewardMode === "money" ? 1000 : 100;
+    if (!Number.isInteger(value) || value < 0 || value > maximum) {
+      notify(`Enter a whole number from 0 to ${maximum}.`, "warning");
+      return;
+    }
+    if (choreRewardMode === "money" && value % 5 !== 0) {
+      notify("Money rewards must end in 0 or 5 cents, such as 10 or 15.", "warning");
+      return;
+    }
+    setChores((items) => items.map((item) => item.id === chore.id
+      ? { ...item, rewardCents: choreRewardMode === "money" ? value : item.rewardCents, rewardStars: choreRewardMode === "stars" ? value : item.rewardStars }
+      : item));
+    if (supabase) {
+      const { error } = await supabase.from("chores").update(choreRewardMode === "money" ? { reward_cents: value } : { reward_stars: value }).eq("id", chore.id).eq("household_id", householdId);
+      if (error) {
+        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, rewardCents: chore.rewardCents, rewardStars: chore.rewardStars } : item));
+        notify(`Could not update this reward: ${error.message}`);
+      }
+    }
+  }
+
+  async function updateChoreRewardMode(mode: ChoreRewardMode) {
+    const previous = choreRewardMode;
+    setChoreRewardMode(mode);
+    if (!supabase || !householdId) return;
+    const { error } = await supabase.from("households").update({ chore_reward_mode: mode }).eq("id", householdId);
+    if (error) {
+      setChoreRewardMode(previous);
+      notify(`Could not switch the incentive pool: ${error.message}`);
+    }
+  }
 
   useEffect(() => {
     const handleChoreEdit: EventListener = (event) => {
@@ -887,85 +960,102 @@ export default function Home() {
     if (client) {
       const results = await Promise.all(reordered.map((chore, index) => client.from("chores").update({ sort_order: index + 1 }).eq("id", chore.id)));
       const error = results.find((result) => result.error)?.error;
-      if (error) { window.alert(`Could not save chore order: ${error.message}`); }
+      if (error) { notify(`Could not save chore order: ${error.message}`); }
     }
   }
 
   async function toggleChore(chore: ChoreEntry) {
-    if (chore.completionId) {
-      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: undefined } : item));
-      if (supabase) {
-        if (String(chore.completionId).startsWith("legacy-completed-")) await supabase.from("chores").update({ active: true }).eq("id", chore.id);
-        else await supabase.from("chore_completions").delete().eq("id", chore.completionId);
-      }
-      return;
-    }
-    const today = new Date().toLocaleDateString("en-CA");
-    const completesRoutine = chores
-      .filter((item) => String(item.assigneeMemberId) === String(chore.assigneeMemberId) && item.routine === chore.routine && isVisibleRoutineChore(item, today))
-      .every((item) => item.id === chore.id || Boolean(item.completionId));
+    const choreKey = String(chore.id);
+    if (chore.completionId || completingChoreIdsRef.current.has(choreKey)) return;
+    completingChoreIdsRef.current.add(choreKey);
     const choreCard = document.querySelector<HTMLElement>(`[data-chore-id="${String(chore.id)}"]`);
     choreCard?.setAttribute("data-completing", "true");
     const finishCheckboxAnimation = () => new Promise<void>((resolve) => window.setTimeout(() => {
       choreCard?.removeAttribute("data-completing");
       resolve();
     }, 700));
-    if (!chore.isDaily) {
-      const client = supabase;
-      if (client) {
-        const { data, error } = await client.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id").single();
-        if (error) { choreCard?.removeAttribute("data-completing"); window.alert(error.message); return; }
-        await finishCheckboxAnimation();
-        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
-      } else {
-        await finishCheckboxAnimation();
-        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
-      }
-      if (completesRoutine) setCelebratingChoreId(chore.id);
-      if (completesRoutine) window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
-      return;
-    }
+    let earnedRewardCents = chore.rewardCents;
     if (supabase) {
-      const { data, error } = await supabase.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id").single();
-      if (error) { choreCard?.removeAttribute("data-completing"); window.alert(error.message); return; }
+      const { data, error } = await supabase.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id, reward_cents, reward_stars").single();
+      if (error) { choreCard?.removeAttribute("data-completing"); completingChoreIdsRef.current.delete(choreKey); notify(error.message); return; }
+      earnedRewardCents = data?.reward_cents ?? chore.rewardCents;
       await finishCheckboxAnimation();
-      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id } : item));
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id, completedRewardCents: data?.reward_cents ?? chore.rewardCents, completedRewardStars: data?.reward_stars ?? chore.rewardStars } : item));
     } else {
       await finishCheckboxAnimation();
-      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString() } : item));
+      setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: Date.now().toString(), completedRewardCents: chore.rewardCents, completedRewardStars: chore.rewardStars } : item));
     }
-    if (completesRoutine) {
-      setCelebratingChoreId(chore.id);
-      window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 3000);
+    if (chore.assigneeMemberId !== null) {
+      const childKey = String(chore.assigneeMemberId);
+      setChoreEarnedCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + earnedRewardCents }));
     }
+    completingChoreIdsRef.current.delete(choreKey);
+    setCelebratingChoreId(chore.id);
+    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 2200);
+  }
+
+  async function recordChorePayout(childMemberId: string | number, amountCents: number): Promise<{ error?: string }> {
+    const childKey = String(childMemberId);
+    const earnedCents = choreEarnedCentsByMember[childKey] ?? 0;
+    const paidOutCents = chorePaidOutCentsByMember[childKey] ?? 0;
+    if (amountCents <= 0 || amountCents % 5 !== 0) return { error: "Payouts must be a positive amount ending in 0 or 5 cents." };
+    if (amountCents > earnedCents - paidOutCents) return { error: "The payout cannot be greater than the child’s available balance." };
+    if (!supabase || !householdId) {
+      setChorePaidOutCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + amountCents }));
+      return {};
+    }
+    const { error } = await supabase.from("chore_payouts").insert({ household_id: householdId, child_member_id: childMemberId, amount_cents: amountCents });
+    if (error) return { error: error.message };
+    setChorePaidOutCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + amountCents }));
+    return {};
+  }
+
+  async function resetTodayChoreCompletions(): Promise<{ error?: string; deleted?: number }> {
+    let deleted = chores.filter((chore) => chore.isDaily && Boolean(chore.completionId)).length;
+    if (supabase && householdId) {
+      const { data, error } = await supabase.rpc("reset_today_chore_completions", { target_household_id: householdId });
+      if (error) return { error: error.message };
+      deleted = typeof data === "number" ? data : deleted;
+    }
+
+    const todayEarnedByMember: Record<string, number> = {};
+    for (const chore of chores) {
+      if (chore.isDaily && chore.completionId && chore.assigneeMemberId !== null) {
+        const childKey = String(chore.assigneeMemberId);
+        todayEarnedByMember[childKey] = (todayEarnedByMember[childKey] ?? 0) + (chore.completedRewardCents ?? chore.rewardCents);
+      }
+    }
+    setChores((items) => items.map((chore) => chore.isDaily ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
+    setChoreEarnedCentsByMember((items) => Object.fromEntries(Object.entries(items).map(([memberId, amount]) => [memberId, Math.max(0, amount - (todayEarnedByMember[memberId] ?? 0))])));
+    return { deleted };
   }
 
   async function deleteChore(chore: ChoreEntry) {
-    if (!window.confirm(`Delete “${chore.title}”?`)) return;
+    if (!await confirm(`Delete “${chore.title}”?`, { title: "Delete chore?", destructive: true })) return;
     setChores((items) => items.filter((item) => item.id !== chore.id));
     if (supabase) {
       const { error } = await supabase.from("chores").delete().eq("id", chore.id);
-      if (error) { setChores((items) => [...items, chore]); window.alert(`Could not delete this chore: ${error.message}`); }
+      if (error) { setChores((items) => [...items, chore]); notify(`Could not delete this chore: ${error.message}`); }
     }
   }
 
   async function addSharedList() {
-    const title = window.prompt("Name this list");
+    const title = await prompt("What should this shared list be called?", "", { title: "Add a shared list", confirmLabel: "Add list" });
     if (!title?.trim() || !householdId || !user) return;
     const icon = listIcon(title);
     if (supabase) {
       const { data, error } = await supabase.from("lists").insert({ household_id: householdId, created_by: user.id, title: title.trim(), icon }).select("id, title, icon").single();
-      if (error) { window.alert(error.message); return; }
+      if (error) { notify(error.message); return; }
       if (data) setSharedLists((items) => [...items, { ...data, items: [] }]);
     } else setSharedLists((items) => [...items, { id: Date.now().toString(), title: title.trim(), icon, items: [] }]);
   }
 
   async function addListItem(listId: string | number, titleOverride?: string) {
-    const title = titleOverride ?? window.prompt("Add an item");
+    const title = titleOverride ?? await prompt("What should this list item say?", "", { title: "Add a list item", confirmLabel: "Add item" });
     if (!title?.trim()) return;
     if (supabase) {
       const { data, error } = await supabase.from("list_items").insert({ list_id: listId, title: title.trim() }).select("id, title, completed").single();
-      if (error) { window.alert(error.message); return; }
+      if (error) { notify(error.message); return; }
       if (data) setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: data.id, title: data.title, done: data.completed }] } : list));
     } else setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: Date.now().toString(), title: title.trim(), done: false }] } : list));
   }
@@ -980,23 +1070,23 @@ export default function Home() {
 
   async function deleteListItem(listId: string | number, itemId: string | number) {
     const item = sharedLists.find((list) => list.id === listId)?.items.find((entry) => entry.id === itemId);
-    if (!item || !window.confirm(`Delete “${item.title}”?`)) return;
+    if (!item || !await confirm(`Delete “${item.title}”?`, { title: "Delete list item?", destructive: true })) return;
     setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.filter((entry) => entry.id !== itemId) } : list));
     if (supabase) {
       const { error } = await supabase.from("list_items").delete().eq("id", itemId);
       if (error) {
         setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, item] } : list));
-        window.alert(`Could not delete this item: ${error.message}`);
+        notify(`Could not delete this item: ${error.message}`);
       }
     }
   }
 
   async function deleteSharedList(list: SharedList) {
-    if (!window.confirm(`Delete “${list.title}” and all of its items?`)) return;
+    if (!await confirm(`Delete “${list.title}” and all of its items?`, { title: "Delete list?", destructive: true })) return;
     setSharedLists((items) => items.filter((item) => item.id !== list.id));
     if (supabase) {
       const { error } = await supabase.from("lists").delete().eq("id", list.id);
-      if (error) { setSharedLists((items) => [...items, list]); window.alert(`Could not delete this list: ${error.message}`); }
+      if (error) { setSharedLists((items) => [...items, list]); notify(`Could not delete this list: ${error.message}`); }
     }
   }
 
@@ -1012,7 +1102,7 @@ export default function Home() {
     );
     if (error) {
       setExpandedListKeys((current) => ({ ...current, [key]: previous }));
-      window.alert(`Could not save this list preference: ${error.message}`);
+      notify(`Could not save this list preference: ${error.message}`);
     }
   }
 
@@ -1022,12 +1112,12 @@ export default function Home() {
     if (supabase && householdId) {
       if (event.externalId && (event.source === "google" || event.source === "apple") && user) {
         const { error: assignmentError } = await supabase.from("calendar_event_member_assignments").upsert({ household_id: householdId, created_by: user.id, source: event.source, external_id: event.externalId, member_ids: event.memberIds ?? [] }, { onConflict: "household_id,source,external_id" });
-        if (assignmentError) window.alert(`The event was saved, but its sync-proof assignment could not be stored. Run the calendar assignment migration, then save it again. Details: ${assignmentError.message}`);
+        if (assignmentError) notify(`The event was saved, but its sync-proof assignment could not be stored. Run the calendar assignment migration, then save it again. Details: ${assignmentError.message}`);
       }
       const { error } = await supabase.from("events").update({ title: event.title, starts_at: event.startsAt, ends_at: event.endsAt ?? null, all_day: event.allDay ?? false, location: event.location ?? null, category: event.category ?? "General", category_override: true, member_ids: event.memberIds ?? [], member_ids_override: Boolean(event.seriesExternalId) }).eq("id", event.id).eq("household_id", householdId);
       if (error) {
         if (previous) setEvents((items) => items.map((item) => item.id === previous.id ? previous : item));
-        window.alert(`Could not save this event: ${error.message}`);
+        notify(`Could not save this event: ${error.message}`);
         return;
       }
     }
@@ -1039,29 +1129,29 @@ export default function Home() {
     setEvents((items) => items.map((item) => item.source === event.source && item.seriesExternalId === event.seriesExternalId ? { ...item, memberIds } : item));
     setEditingEvent(null);
     const { data: seriesEvents, error: seriesEventsError } = await supabase.from("events").select("external_id").eq("household_id", householdId).eq("source", event.source).eq("series_external_id", event.seriesExternalId).not("external_id", "is", null);
-    if (seriesEventsError) { window.alert(`Could not update the recurring event: ${seriesEventsError.message}`); await refreshCalendarEvents(); return; }
+    if (seriesEventsError) { notify(`Could not update the recurring event: ${seriesEventsError.message}`); await refreshCalendarEvents(); return; }
     const externalIds = (seriesEvents ?? []).map((seriesEvent) => seriesEvent.external_id).filter((externalId): externalId is string => Boolean(externalId));
     if (externalIds.length) {
       const { error: clearEventAssignmentsError } = await supabase.from("calendar_event_member_assignments").delete().eq("household_id", householdId).eq("source", event.source).in("external_id", externalIds);
-      if (clearEventAssignmentsError) { window.alert(`Could not update the recurring event: ${clearEventAssignmentsError.message}`); await refreshCalendarEvents(); return; }
+      if (clearEventAssignmentsError) { notify(`Could not update the recurring event: ${clearEventAssignmentsError.message}`); await refreshCalendarEvents(); return; }
     }
     const { error: assignmentError } = await supabase.from("calendar_series_member_assignments").upsert({ household_id: householdId, created_by: user.id, source: event.source, series_external_id: event.seriesExternalId, member_ids: memberIds }, { onConflict: "household_id,source,series_external_id" });
-    if (assignmentError) { window.alert(`Could not update the recurring event: ${assignmentError.message}`); await refreshCalendarEvents(); return; }
+    if (assignmentError) { notify(`Could not update the recurring event: ${assignmentError.message}`); await refreshCalendarEvents(); return; }
     const { error: eventError } = await supabase.from("events").update({ member_ids: memberIds, member_ids_override: false }).eq("household_id", householdId).eq("source", event.source).eq("series_external_id", event.seriesExternalId);
-    if (eventError) { window.alert(`The recurring assignment was saved, but some current events could not be updated: ${eventError.message}`); }
+    if (eventError) { notify(`The recurring assignment was saved, but some current events could not be updated: ${eventError.message}`); }
     await refreshCalendarEvents();
   }
 
   async function deleteEvent(event: Event) {
     const imported = event.source === "google" || event.source === "apple";
-    if (!window.confirm(imported ? `Remove “${event.title}” from this app? It will return on a later calendar sync while it still exists in ${event.source === "google" ? "Google" : "iCloud"}.` : `Delete “${event.title}”? This can’t be undone.`)) return;
+    if (!await confirm(imported ? `Remove “${event.title}” from this app? It will return on a later calendar sync while it still exists in ${event.source === "google" ? "Google" : "iCloud"}.` : `Delete “${event.title}”? This can’t be undone.`, { title: imported ? "Remove calendar event?" : "Delete event?", destructive: true })) return;
     setEvents((items) => items.filter((item) => item.id !== event.id));
     setEditingEvent(null);
     if (supabase && householdId) {
       const { error } = await supabase.from("events").delete().eq("id", event.id).eq("household_id", householdId);
       if (error) {
         setEvents((items) => [...items, event].sort((first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime()));
-        window.alert(`Could not delete this event: ${error.message}`);
+        notify(`Could not delete this event: ${error.message}`);
       }
     }
   }
@@ -1118,7 +1208,7 @@ export default function Home() {
     if (error) {
       if (tab === "chores") setShowChoresTab(previous);
       else setShowWishlistTab(previous);
-      window.alert(`Could not update the ${tab} tab: ${error.message}`);
+      notify(`Could not update the ${tab} tab: ${error.message}`);
     }
   }
 
@@ -1130,16 +1220,16 @@ export default function Home() {
     const { error } = await supabase.from("members").update({ color }).eq("id", memberId).eq("household_id", householdId);
     if (error) {
       setMembers((items) => items.map((member) => String(member.id) === String(memberId) ? { ...member, color: previousColor } : member));
-      window.alert(`Could not save this color: ${error.message}`);
+      notify(`Could not save this color: ${error.message}`);
     }
   }
 
   async function createHousehold() {
     if (!supabase || !user) return;
-    const name = window.prompt("What should we call your household?", "The Vulpetti Family");
+    const name = await prompt("What should we call your household?", "The Vulpetti Family", { title: "Create your family home", confirmLabel: "Create home" });
     if (!name?.trim()) return;
     const { error } = await supabase.from("households").insert({ name: name.trim(), created_by: user.id });
-    if (error) { window.alert(error.message); return; }
+    if (error) { notify(error.message); return; }
     const { data: membership, error: membershipError } = await supabase
       .from("members")
       .select("household_id")
@@ -1148,7 +1238,7 @@ export default function Home() {
       .limit(1)
       .single();
     if (membershipError || !membership) {
-      window.alert("Your household was created, but could not be loaded. Refresh the page once.");
+      notify("Your household was created, but could not be loaded. Refresh the page once.");
       return;
     }
     setHouseholdId(membership.household_id);
@@ -1212,7 +1302,7 @@ export default function Home() {
             {showEventForm ? <form onSubmit={addEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={() => setShowEventForm(false)} className="text-lg font-bold text-violet-500">×</button></div><div className="mt-3"><input required autoFocus value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="What&apos;s happening?" className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={(event) => setEventTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => setEventCategory(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={(event) => setEventLocation(event.target.value)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800"/></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => setEventMemberIds((ids) => selected ? ids.filter((item) => item !== id) : [...ids, id])}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => setEventAllDay(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={() => setShowEventForm(true)} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
             </div>
           </section>}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onAddChild={addChild} onAddChore={addChore} onToggle={toggleChore} onDeleteChore={deleteChore} onReorder={reorderChores} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={recordChorePayout} onResetToday={resetTodayChoreCompletions} onRewardModeChange={updateChoreRewardMode} chores={chores} onEditReward={editChoreReward} members={members} currentUserId={user?.id ?? null} onMemberColorChange={updateMemberColor} onAddMember={addMember} onRemoveMember={removeMember} onUpdateCurrentMemberName={updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={inviteAdult} onSignOut={signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={() => setSelectedEvent(null)} onEdit={() => { setEditingEvent(selectedEvent); setSelectedEvent(null); }} />}
       {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={() => setEditingEvent(null)} onSave={saveEvent} onApplySeries={applySeriesMembers} onDelete={deleteEvent} />}
@@ -1250,7 +1340,7 @@ function WeatherSkyDetails({ sunTimes, notableSkyEvent, auroraActivity }: { sunT
   return <div className="weather-sky-details mt-4 grid gap-2 border-t border-white/20 pt-3 text-white/90 sm:grid-cols-2"><div className="grid grid-cols-2 gap-2"><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunrise</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunrise) : "—"}</p></div><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunset</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunset) : "—"}</p></div></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sky watch</p><p className="mt-0.5 break-words text-sm font-black leading-snug" title={notableLabel}>{notableLabel}</p><p className="break-words text-[10px] font-semibold leading-snug text-white/65" title={notableDetail}>{notableDetail}</p><p className="mt-1 break-words text-[10px] font-semibold leading-snug text-white/65" title={auroraLabel}>{auroraLabel}</p></div></div>;
 }
 
-function ChoreCelebration({ animationSrc }: { animationSrc?: string }) {
+function ChoreCelebration({ animationSrc, label = "Chore complete" }: { animationSrc?: string; label?: string }) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [animation] = useState(() => animationSrc ?? pickCelebrationAnimation());
   useEffect(() => {
@@ -1260,7 +1350,7 @@ function ChoreCelebration({ animationSrc }: { animationSrc?: string }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label="Routine complete"><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={animation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
+  return <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label={label}><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={animation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
 }
 
 function VoiceChoreEditor({ draft, members, onClose, onSave }: { draft: VoiceChoreDraft; members: Member[]; onClose: () => void; onSave: (draft: VoiceChoreDraft) => Promise<void> }) {
@@ -1277,28 +1367,96 @@ function VoiceListEditor({ draft, lists, onClose, onSave }: { draft: VoiceListDr
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={(event) => { event.preventDefault(); void onSave({ title, listId }); }} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">VOICE ADD</p><h2 className="text-2xl font-bold">Review list item</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Item<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><label className="mt-4 block text-sm font-bold">Add to<StyledSelect value={listId} onChange={(event) => setListId(event.target.value)}>{lists.map((list) => <option key={list.id} value={String(list.id)}>{list.title}</option>)}</StyledSelect></label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Save item</button></div></form></div>;
 }
 
-function ChoresPage({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
-  return <><WeekdayChoresBoard members={members} chores={chores} celebratingChoreId={celebratingChoreId} onAddChild={onAddChild} onAddChore={onAddChore} onToggle={onToggle} onDeleteChore={onDeleteChore} onReorder={onReorder} /><TemporaryRoutineChores members={members} chores={chores} onAddChore={onAddChore} onDeleteChore={onDeleteChore} /></>;
+function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
+  return <><WeekdayChoresBoard members={members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} celebratingChoreId={celebratingChoreId} onAddChild={onAddChild} onAddChore={onAddChore} onToggle={onToggle} onDeleteChore={onDeleteChore} onReorder={onReorder} /><TemporaryRoutineChores members={members} chores={chores} mode={choreRewardMode} onAddChore={onAddChore} onDeleteChore={onDeleteChore} /> </>;
 }
 
-function TemporaryRoutineChores({ members, chores, onAddChore, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; onAddChore: (memberId: string | number, routine: string) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
+function formatReward(cents: number, stars: number, mode: ChoreRewardMode) {
+  return mode === "money" ? `$${(cents / 100).toFixed(2)}` : `${stars} ${stars === 1 ? "star" : "stars"}`;
+}
+
+function ChoreRewardSettings({ members, chores, mode, targetCents, targetStars, onEditReward }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; onEditReward: (chore: ChoreEntry) => void }) {
+  const routineOrder = { "Before school": 0, "After school": 1 } as const;
+  const routineChores = chores.filter((chore) => chore.isDaily && chore.isFixed && (chore.routine === "Before school" || chore.routine === "After school")).sort((first, second) => routineOrder[first.routine as keyof typeof routineOrder] - routineOrder[second.routine as keyof typeof routineOrder] || first.sortOrder - second.sortOrder || String(first.id).localeCompare(String(second.id)));
+  const children = members.filter((member) => member.role === "child");
+  const target = mode === "money" ? targetCents : targetStars;
+  if (!routineChores.length) return null;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-black uppercase tracking-wide text-violet-600">DAILY TEMPLATE</p><h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Routine reward values</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Set these once. The same morning and nighttime values repeat every day.</p></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">{mode === "money" ? "Cents" : "Stars"}</span></div><div className="mt-4 space-y-4">{children.map((child) => { const childChores = routineChores.filter((chore) => chore.assigneeMemberId === child.id); const dailyCents = childChores.reduce((sum, chore) => sum + chore.rewardCents, 0); const dailyStars = childChores.reduce((sum, chore) => sum + chore.rewardStars, 0); const total = mode === "money" ? dailyCents : dailyStars; const difference = target - total; return <div key={child.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black text-slate-800 dark:text-slate-100">{child.name}</h3><div className="text-right"><p className={`text-xs font-black ${difference === 0 ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}`}>{mode === "money" ? `Daily total: $${(dailyCents / 100).toFixed(2)} / $${(targetCents / 100).toFixed(2)}` : `Daily total: ${dailyStars} / ${targetStars} stars`}</p>{difference !== 0 && <p className="text-[10px] font-bold text-slate-500 dark:text-slate-300">{difference > 0 ? `${mode === "money" ? `$${(difference / 100).toFixed(2)}` : difference} remaining` : `${mode === "money" ? `$${(Math.abs(difference) / 100).toFixed(2)}` : Math.abs(difference)} over target`}</p>}</div></div><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{childChores.map((chore) => <div key={chore.id} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 dark:bg-white/5"><span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-700 dark:text-slate-100">{chore.title}</span><span className="shrink-0 text-sm font-black text-emerald-600 dark:text-emerald-300">{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><button type="button" onClick={() => onEditReward(chore)} aria-label={`Edit reward for ${chore.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4" /></button></div>)}</div></div>; })}</div></div></section>;
+}
+
+function ChorePayoutSettings({ members, earnedCentsByMember, paidOutCentsByMember, onPayOut }: { members: Member[]; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; onPayOut: (childMemberId: string | number, amountCents: number) => Promise<{ error?: string }> }) {
+  const { notify, prompt } = useAppNotifications();
+  const children = members.filter((member) => member.role === "child");
+  async function payOut(child: Member) {
+    const childKey = String(child.id);
+    const earnedCents = earnedCentsByMember[childKey] ?? 0;
+    const paidOutCents = paidOutCentsByMember[childKey] ?? 0;
+    const availableCents = earnedCents - paidOutCents;
+    if (availableCents <= 0) {
+      notify(`${child.name} has no unpaid earnings yet.`, "warning");
+      return;
+    }
+    const entered = await prompt(`How much would you like to pay ${child.name}? Enter dollars, such as 2.00.`, (availableCents / 100).toFixed(2), { title: `Pay ${child.name}`, confirmLabel: "Record payout" });
+    if (entered === null) return;
+    const amountCents = Math.round(Number(entered.replace(/[$,]/g, "").trim()) * 100);
+    if (!Number.isFinite(amountCents) || amountCents <= 0 || amountCents % 5 !== 0) {
+      notify("Enter a positive dollar amount ending in 0 or 5 cents.", "warning");
+      return;
+    }
+    const result = await onPayOut(child.id, amountCents);
+    if (result.error) notify(result.error, "warning");
+  }
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-emerald-50 p-5 shadow-sm ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-300/20"><div><p className="text-sm font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-200">PAYOUTS</p><h2 className="mt-1 text-2xl font-black">Pay children</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Record money paid to a child. Available equals Earned minus Paid out.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{children.map((child) => { const earnedCents = earnedCentsByMember[String(child.id)] ?? 0; const paidOutCents = paidOutCentsByMember[String(child.id)] ?? 0; const availableCents = earnedCents - paidOutCents; return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-white/10"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-800 dark:text-white">{child.name}</h3><p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">Available</p><p className="text-3xl font-black leading-none text-emerald-700 dark:text-emerald-200">${Math.max(0, availableCents / 100).toFixed(2)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">Earned: ${(earnedCents / 100).toFixed(2)} · Paid out: ${(paidOutCents / 100).toFixed(2)}</p></div><button type="button" onClick={() => void payOut(child)} disabled={availableCents <= 0} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45">Pay out</button></div></article>; })}</div></div></section>;
+}
+
+function ChoreResetSettings({ onResetToday }: { onResetToday: () => Promise<{ error?: string; deleted?: number }> }) {
+  const { confirm, notify } = useAppNotifications();
+  async function resetToday() {
+    if (!await confirm("Clear today's completed daily chores and remove only today's earnings? Older earnings will stay saved.", { title: "Reset today's chores?", destructive: true })) return;
+    const result = await onResetToday();
+    if (result.error) {
+      notify(result.error, "warning");
+      return;
+    }
+    notify(result.deleted ? `Reset ${result.deleted} chore${result.deleted === 1 ? "" : "s"} from today.` : "There were no completed chores to reset.", "success");
+  }
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="rounded-[2rem] bg-rose-50 p-5 shadow-sm ring-1 ring-rose-100 dark:bg-rose-400/10 dark:ring-rose-300/20"><p className="text-sm font-black uppercase tracking-wide text-rose-700 dark:text-rose-200">TESTING &amp; CLEANUP</p><h2 className="mt-1 text-2xl font-black">Reset today&apos;s chores</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">Clear today&apos;s daily checks and today&apos;s earned amount. Previous days and payout history remain unchanged.</p><button type="button" onClick={() => void resetToday()} className="mt-4 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-black text-white hover:bg-rose-700">Reset today</button></div></section>;
+}
+
+function ChildIncentiveProgress({ child, chores, mode, targetCents, targetStars, earnedCentsByMember, paidOutCentsByMember }: { child: Member; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number> }) {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const target = mode === "money" ? targetCents : targetStars;
+  const dailyEarned = chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine !== "To-do" && chore.isDaily).reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0);
+  const runningEarnedCents = earnedCentsByMember[String(child.id)] ?? 0;
+  const paidOutCents = paidOutCentsByMember[String(child.id)] ?? 0;
+  const availableCents = runningEarnedCents - paidOutCents;
+  const progress = Math.min(100, target ? dailyEarned / target * 100 : 0);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return <article className="relative overflow-hidden rounded-2xl bg-white/75 p-4 dark:bg-white/10"><div className="flex items-start justify-between gap-2"><div>{mode === "money" ? <><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">Available</p><p className="mt-0.5 text-3xl font-black leading-none text-emerald-700 dark:text-emerald-200">${Math.max(0, availableCents / 100).toFixed(2)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">Earned: ${(runningEarnedCents / 100).toFixed(2)} · Paid out: ${(paidOutCents / 100).toFixed(2)}</p></> : <span className="text-sm font-black text-slate-700 dark:text-slate-100">Progress</span>}</div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200">{mode === "money" ? `Today: $${(dailyEarned / 100).toFixed(2)} / $${(target / 100).toFixed(2)}` : `${dailyEarned} / ${target} stars`}</span></div><div className="mt-3 flex items-end gap-4"><div className="relative grid size-28 shrink-0 place-items-end overflow-hidden rounded-[1.75rem] bg-gradient-to-b from-amber-50 to-amber-100 p-1 dark:from-amber-300/10 dark:to-amber-400/20"><div className="absolute inset-x-0 bottom-0 rounded-t-[1.5rem] bg-gradient-to-t from-amber-300/70 to-yellow-200/60 transition-[height] motion-reduce:transition-none" style={{ height: `${Math.max(12, progress)}%` }} />{reduceMotion ? <span className="relative z-10 grid size-28 place-items-center text-7xl" aria-label={`${child.name}'s piggy bank`}>🐷</span> : <Lottie src="/chores/piggy%20bank.json" autoplay loop className="relative z-10 size-28 object-contain drop-shadow-sm" aria-label={`${child.name}'s piggy bank`} />}</div><div className="min-w-0 flex-1"><p className="text-sm font-black text-slate-700 dark:text-slate-100">{progress >= 100 ? "Pool complete!" : `${Math.round(progress)}% of the pool`}</p><div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-500 transition-[width] motion-reduce:transition-none" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-300">{mode === "money" ? "Complete chores to grow the Earned total." : `Every completed chore adds to ${child.name}&apos;s bank.`}</p></div></div></article>;
+}
+
+function TemporaryRoutineChores({ members, chores, mode, onAddChore, onDeleteChore }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; onAddChore: (memberId: string | number, routine: string) => void; onDeleteChore: (chore: ChoreEntry) => void }) {
   const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
   const today = new Date().toLocaleDateString("en-CA");
   const children = members.filter((member) => member.role === "child");
   const temporary = chores.filter((chore) => !chore.isFixed && chore.scheduledFor === today && (chore.routine === "Before school" || chore.routine === "After school"));
   if (!isWeekday || !children.length) return null;
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-violet-50 p-5 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:ring-violet-400/20"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">For today only</p><h2 className="mt-1 text-xl font-black">One-time routine chores</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Add a different task for this morning or afternoon. It will disappear from the routine tomorrow.</p></div><div className="mt-4 grid gap-3 md:grid-cols-2">{children.map((child) => { const childChores = temporary.filter((chore) => chore.assigneeMemberId === child.id); return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-[#242435]/80"><div className="flex items-center justify-between gap-3"><h3 className="font-black">{child.name}</h3><div className="flex gap-2"><button onClick={() => onAddChore(child.id, "Before school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ Morning</button><button onClick={() => onAddChore(child.id, "After school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ After school</button></div></div><div className="mt-3 space-y-2">{childChores.length ? childChores.map((chore) => <div key={chore.id} className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-white/5"><span className="text-lg">{chore.emoji}</span><span className="min-w-0 flex-1 text-sm font-bold">{chore.title}</span><span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-600 dark:bg-white/10 dark:text-violet-200">{chore.routine === "Before school" ? "Morning" : "After school"}</span><button onClick={() => window.dispatchEvent(new CustomEvent("family-edit-chore", { detail: chore.id }))} title={`Edit ${chore.title}`} aria-label={`Edit ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4"/></button><button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} aria-label={`Delete ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 dark:hover:bg-white/10"><AppIcon name="trash" className="size-4"/></button></div>) : <p className="rounded-xl border border-dashed border-violet-200 px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:border-violet-300/25 dark:text-slate-300">Nothing extra today.</p>}</div></article>; })}</div></div></section>;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-violet-50 p-5 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:ring-violet-400/20"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">For today only</p><h2 className="mt-1 text-xl font-black">One-time routine chores</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Add a different task for this morning or afternoon. It will disappear from the routine tomorrow.</p></div><div className="mt-4 grid gap-3 md:grid-cols-2">{children.map((child) => { const childChores = temporary.filter((chore) => chore.assigneeMemberId === child.id); return <article key={child.id} className="rounded-2xl bg-white/80 p-4 dark:bg-[#242435]/80"><div className="flex items-center justify-between gap-3"><h3 className="font-black">{child.name}</h3><div className="flex gap-2"><button onClick={() => onAddChore(child.id, "Before school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ Morning</button><button onClick={() => onAddChore(child.id, "After school")} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 hover:bg-violet-50 dark:bg-white/10 dark:text-violet-200 dark:ring-white/10">+ After school</button></div></div><div className="mt-3 space-y-2">{childChores.length ? childChores.map((chore) => <div key={chore.id} className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-white/5"><span className="text-lg">{chore.emoji}</span><span className="min-w-0 flex-1 text-sm font-bold">{chore.title}</span><span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200">{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-600 dark:bg-white/10 dark:text-violet-200">{chore.routine === "Before school" ? "Morning" : "After school"}</span><button onClick={() => window.dispatchEvent(new CustomEvent("family-edit-chore", { detail: chore.id }))} title={`Edit ${chore.title}`} aria-label={`Edit ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-violet-600 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-white/10"><AppIcon name="edit" className="size-4"/></button><button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} aria-label={`Delete ${chore.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 dark:hover:bg-white/10"><AppIcon name="trash" className="size-4"/></button></div>) : <p className="rounded-xl border border-dashed border-violet-200 px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:border-violet-300/25 dark:text-slate-300">Nothing extra today.</p>}</div></article>; })}</div></div></section>;
 }
 
-function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
+function WeekdayChoresBoard({ members, chores, mode, targetCents, targetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onAddChild, onAddChore, onToggle, onDeleteChore, onReorder }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onAddChild: () => void; onAddChore: (memberId: string | number, routine: string) => void; onToggle: (chore: ChoreEntry) => void; onDeleteChore: (chore: ChoreEntry) => void; onReorder: (memberId: string | number, routine: string, movedId: string | number, targetId: string | number) => void }) {
   const [draggedChoreId, setDraggedChoreId] = useState<string | number | null>(null);
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
   const [expandedRoutines, setExpandedRoutines] = useState<Record<string, boolean>>({});
-  const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
   const children = members.filter((member) => member.role === "child");
   const routineOrder = currentHour >= 12 ? ["After school", "Before school", "To-do"] : ["Before school", "After school", "To-do"];
-  const routines = choreRoutines
-    .filter((routine) => isWeekday || routine.id === "To-do")
+  const routines = [...choreRoutines]
     .sort((first, second) => routineOrder.indexOf(first.id) - routineOrder.indexOf(second.id));
   const today = new Date().toLocaleDateString("en-CA");
   const sortedChores = chores.filter((chore) => isVisibleRoutineChore(chore, today)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
@@ -1329,7 +1487,7 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [chores, expandedRoutines, isWeekday]);
+  }, [chores, expandedRoutines]);
 
   function finishTouchDrag(event: PointerEvent<HTMLSpanElement>, childId: string | number, routine: string) {
     if (event.pointerType === "mouse" || draggedChoreId === null) return;
@@ -1339,10 +1497,12 @@ function WeekdayChoresBoard({ members, chores, celebratingChoreId, onAddChild, o
     if (target?.dataset.childId === String(childId) && target.dataset.routine === routine && target.dataset.choreId) onReorder(childId, routine, draggedChoreId, target.dataset.choreId);
     setDraggedChoreId(null);
   }
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Weekday routines</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">After-school routines move to the top in the afternoon. Tap a routine to collapse or expand it.</p></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2">{children.map((child) => { const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-5 space-y-5">{routines.map((routine) => { const routineKey = `${child.id}-${routine.id}`; const isExpanded = expandedRoutines[routineKey] ?? (routine.id !== "Before school" || currentHour < 12); const contentId = `routine-${routineKey.toLowerCase().replaceAll(" ", "-")}`; const routineChores = sortedChores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === routine.id); return <section key={routine.id} className="rounded-2xl bg-white/45 p-3"><div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setExpandedRoutines((current) => ({ ...current, [routineKey]: !isExpanded }))} aria-controls={contentId} aria-expanded={isExpanded} className="flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl text-left text-sm font-black text-slate-700 hover:bg-white/40"><AppIcon name="chevronRight" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${isExpanded ? "rotate-90" : ""}`}/><span className="mr-1.5">{routine.icon}</span>{routine.label}</button>{routine.id === "To-do" && <button onClick={() => onAddChore(child.id, routine.id)} aria-label={`Add ${routine.label} chore for ${child.name}`} className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600 shadow-sm">+</button>}</div>{isExpanded && <div id={contentId} className="mt-3 grid gap-3">{routineChores.map((chore) => <div key={chore.id} data-chore-id={String(chore.id)} data-child-id={String(child.id)} data-routine={routine.id} draggable={!chore.completionId && !chore.isFixed} onDragStart={() => !chore.isFixed && setDraggedChoreId(chore.id)} onDragEnd={() => setDraggedChoreId(null)} onDragOver={(event) => { if (!chore.completionId && !chore.isFixed) event.preventDefault(); }} onDrop={() => { if (draggedChoreId !== null && !chore.completionId && !chore.isFixed) onReorder(child.id, routine.id, draggedChoreId, chore.id); setDraggedChoreId(null); }} className={`relative min-w-0 transition ${draggedChoreId === chore.id ? "opacity-45" : ""}`}><button onClick={() => onToggle(chore)} className={`flex min-h-20 w-full items-center gap-2 rounded-2xl bg-white/90 p-3 text-left shadow-sm transition-transform active:scale-[.98] ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span onPointerDown={(event) => { if (event.pointerType !== "mouse" && !chore.isFixed) { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDraggedChoreId(chore.id); } }} onPointerUp={(event) => finishTouchDrag(event, child.id, routine.id)} onPointerCancel={() => setDraggedChoreId(null)} onClick={(event) => event.stopPropagation()} className={`shrink-0 select-none touch-none text-base leading-none ${chore.isFixed ? "text-transparent" : "cursor-grab text-slate-400 active:cursor-grabbing"}`}>⠿</span><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-3xl shadow-sm">{!chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji}</span><span className={`min-w-0 flex-1 text-base font-black leading-tight ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className={`grid size-9 shrink-0 place-items-center rounded-lg border-2 text-xl font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>{celebratingChoreId === chore.id && <ChoreCelebration/>}{!chore.isFixed && <button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} className="absolute right-1 top-1 rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-rose-600"><AppIcon name="trash" className="size-3.5"/></button>}</div>)}{routineChores.length === 0 && <p className="rounded-xl bg-white/50 px-3 py-4 text-center text-xs font-semibold text-slate-600">{routine.id === "To-do" ? "Add an anytime to-do." : isWeekday ? "Routine is ready for the weekday." : "Back on Monday."}</p>}</div>}</section>; })}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add a child to create a chore board.</div>}</div></section>;
+  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">Daily routines</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Morning and nighttime routines are available every day. After-school routines move to the top in the afternoon.</p></div><button onClick={onAddChild} className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50">+ Add child</button></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2">{children.map((child) => { const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-5 space-y-5"><ChildIncentiveProgress child={child} chores={chores} mode={mode} targetCents={targetCents} targetStars={targetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} />{routines.map((routine) => { const routineKey = `${child.id}-${routine.id}`; const isExpanded = expandedRoutines[routineKey] ?? (routine.id !== "Before school" || currentHour < 12); const contentId = `routine-${routineKey.toLowerCase().replaceAll(" ", "-")}`; const routineChores = sortedChores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === routine.id); return <section key={routine.id} className="rounded-2xl bg-white/45 p-3"><div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setExpandedRoutines((current) => ({ ...current, [routineKey]: !isExpanded }))} aria-controls={contentId} aria-expanded={isExpanded} className="flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl text-left text-sm font-black text-slate-700 hover:bg-white/40"><AppIcon name="chevronRight" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${isExpanded ? "rotate-90" : ""}`}/><span className="mr-1.5">{routine.icon}</span>{routine.label}</button>{routine.id === "To-do" && <button onClick={() => onAddChore(child.id, routine.id)} aria-label={`Add ${routine.label} chore for ${child.name}`} className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-lg font-bold text-slate-600 shadow-sm">+</button>}</div>{isExpanded && <div id={contentId} className="mt-3 grid gap-3">{routineChores.map((chore) => <div key={chore.id} data-chore-id={String(chore.id)} data-child-id={String(child.id)} data-routine={routine.id} draggable={!chore.completionId && !chore.isFixed} onDragStart={() => !chore.isFixed && setDraggedChoreId(chore.id)} onDragEnd={() => setDraggedChoreId(null)} onDragOver={(event) => { if (!chore.completionId && !chore.isFixed) event.preventDefault(); }} onDrop={() => { if (draggedChoreId !== null && !chore.completionId && !chore.isFixed) onReorder(child.id, routine.id, draggedChoreId, chore.id); setDraggedChoreId(null); }} className={`relative min-w-0 transition ${draggedChoreId === chore.id ? "opacity-45" : ""}`}><button onClick={() => onToggle(chore)} className={`flex min-h-20 w-full items-center gap-2 rounded-2xl bg-white/90 p-3 text-left shadow-sm transition-transform active:scale-[.98] ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span onPointerDown={(event) => { if (event.pointerType !== "mouse" && !chore.isFixed) { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDraggedChoreId(chore.id); } }} onPointerUp={(event) => finishTouchDrag(event, child.id, routine.id)} onPointerCancel={() => setDraggedChoreId(null)} onClick={(event) => event.stopPropagation()} className={`shrink-0 select-none touch-none text-base leading-none ${chore.isFixed ? "text-transparent" : "cursor-grab text-slate-400 active:cursor-grabbing"}`}>⠿</span><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-3xl shadow-sm">{!chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji}</span><span className={`min-w-0 flex-1 text-base font-black leading-tight ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${chore.completionId ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200"}`}>{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><span className={`grid size-9 shrink-0 place-items-center rounded-lg border-2 text-xl font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>{celebratingChoreId === chore.id && <ChoreCelebration/>}{!chore.isFixed && <button onClick={() => onDeleteChore(chore)} title={`Delete ${chore.title}`} className="absolute right-1 top-1 rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-rose-600"><AppIcon name="trash" className="size-3.5"/></button>}</div>)}{routineChores.length === 0 && <p className="rounded-xl bg-white/50 px-3 py-4 text-center text-xs font-semibold text-slate-600">{routine.id === "To-do" ? "Add an anytime to-do." : "Routine is ready for today."}</p>}</div>}</section>; })}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add a child to create a chore board.</div>}</div></section>;
 }
 
-function SettingsPage(props: Parameters<typeof SettingsPageContent>[0]) {
+type SettingsPageProps = Parameters<typeof SettingsPageContent>[0] & { choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; onPayOut: (childMemberId: string | number, amountCents: number) => Promise<{ error?: string }>; onResetToday: () => Promise<{ error?: string; deleted?: number }>; onRewardModeChange: (mode: ChoreRewardMode) => void; chores: ChoreEntry[]; onEditReward: (chore: ChoreEntry) => void };
+
+function SettingsPage({ choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onRewardModeChange, chores, onEditReward, ...props }: SettingsPageProps) {
   const [signOutMessage, setSignOutMessage] = useState("");
   const [settingsUnlocked, setSettingsUnlocked] = useState(!supabase);
   async function handleSignOut() {
@@ -1350,7 +1510,12 @@ function SettingsPage(props: Parameters<typeof SettingsPageContent>[0]) {
     const result = await props.onSignOut();
     if (result.error) setSignOutMessage(result.error);
   }
-  return <><SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} />{settingsUnlocked && <TabVisibilitySettings showChoresTab={props.showChoresTab} showWishlistTab={props.showWishlistTab} onTabVisibilityChange={props.onTabVisibilityChange} />}{supabase && <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-600">ACCOUNT</p><h2 className="mt-1 text-2xl font-bold">Sign out</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Sign out of this family command center on this device.</p></div><button type="button" onClick={() => void handleSignOut()} className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"><AppIcon name="signOut" className="size-4" />Log out</button></div>{signOutMessage && <p className="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-200">{signOutMessage}</p>}</div></section>}</>;
+  const currentMember = props.members.find((member) => props.currentUserId && String(member.userId) === props.currentUserId);
+  return <><SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} />{settingsUnlocked && <><TabVisibilitySettings showChoresTab={props.showChoresTab} showWishlistTab={props.showWishlistTab} onTabVisibilityChange={props.onTabVisibilityChange} />{props.showChoresTab && <><ChoreRewardModeSettings mode={choreRewardMode} onModeChange={onRewardModeChange} /><ChoreRewardSettings members={props.members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} onEditReward={onEditReward} />{currentMember?.role === "adult" && <><ChorePayoutSettings members={props.members} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} onPayOut={onPayOut} /><ChoreResetSettings onResetToday={onResetToday} /></>}</>}</>}{supabase && <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="max-w-2xl rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-600">ACCOUNT</p><h2 className="mt-1 text-2xl font-bold">Sign out</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Sign out of this family command center on this device.</p></div><button type="button" onClick={() => void handleSignOut()} className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700"><AppIcon name="signOut" className="size-4" />Log out</button></div>{signOutMessage && <p className="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-200">{signOutMessage}</p>}</div></section>}</>;
+}
+
+function ChoreRewardModeSettings({ mode, onModeChange }: { mode: ChoreRewardMode; onModeChange: (mode: ChoreRewardMode) => void }) {
+  return <section className="mx-auto max-w-[1800px] px-5 pb-5 md:px-9"><div className="max-w-2xl rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-100 dark:bg-amber-400/10 dark:ring-amber-300/20"><p className="text-sm font-black uppercase tracking-wide text-amber-700 dark:text-amber-200">CHORE REWARDS</p><h2 className="mt-1 text-2xl font-black">Choose the incentive style</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">This choice controls what the chores board shows. The other reward values stay saved, so you can switch back anytime.</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => onModeChange("money")} aria-pressed={mode === "money"} className={`rounded-2xl p-4 text-left ring-1 transition ${mode === "money" ? "bg-emerald-500 text-white ring-emerald-600 shadow-md" : "bg-white/80 text-slate-700 ring-amber-200 hover:bg-white dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><span className="text-lg font-black">Money</span><span className={`mt-1 block text-sm font-semibold ${mode === "money" ? "text-white/85" : "text-slate-500 dark:text-slate-300"}`}>Show cents like $0.10 for each completed chore.</span></button><button type="button" onClick={() => onModeChange("stars")} aria-pressed={mode === "stars"} className={`rounded-2xl p-4 text-left ring-1 transition ${mode === "stars" ? "bg-violet-500 text-white ring-violet-600 shadow-md" : "bg-white/80 text-slate-700 ring-amber-200 hover:bg-white dark:bg-white/10 dark:text-slate-100 dark:ring-white/10"}`}><span className="text-lg font-black">Stars</span><span className={`mt-1 block text-sm font-semibold ${mode === "stars" ? "text-white/85" : "text-slate-500 dark:text-slate-300"}`}>Show star rewards instead of money.</span></button></div></div></section>;
 }
 
 function TabVisibilitySettings({ showChoresTab, showWishlistTab, onTabVisibilityChange }: { showChoresTab: boolean; showWishlistTab: boolean; onTabVisibilityChange: (tab: "chores" | "wishlist", visible: boolean) => void }) {
@@ -1358,6 +1523,7 @@ function TabVisibilitySettings({ showChoresTab, showWishlistTab, onTabVisibility
 }
 
 function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult, onSignOut }: { members: Member[]; currentUserId: string | null; onMemberColorChange: (memberId: string | number, color: string) => Promise<void>; onAddMember: (name: string, role: Member["role"]) => Promise<{ error?: string }>; onRemoveMember: (member: Member) => Promise<{ error?: string }>; onUpdateCurrentMemberName: (name: string) => Promise<{ error?: string }>; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void; showChoresTab: boolean; showWishlistTab: boolean; onTabVisibilityChange: (tab: "chores" | "wishlist", visible: boolean) => void; onUnlocked?: () => void; googleConnections: GoogleConnection[]; appleFeeds: AppleFeed[]; onConnect: () => void; onToggleConnection: (connection: GoogleConnection) => void; onAddApple: (name: string, url: string) => void; onToggleApple: (feed: AppleFeed) => void; onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }>; onSignOut: () => Promise<{ error?: string }> }) {
+  const { confirm, prompt } = useAppNotifications();
   void onSignOut;
   const [appleName, setAppleName] = useState("Home");
   const [appleUrl, setAppleUrl] = useState("");
@@ -1404,7 +1570,7 @@ function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAd
     setSettingsPin(""); setPinMode("unlocked"); onUnlocked?.();
   }
   function addApple(event: FormEvent) { event.preventDefault(); if (!appleUrl.trim()) return; onAddApple(appleName.trim() || "Apple Calendar", appleUrl.trim()); setAppleUrl(""); }
-  async function inviteAdult(event: FormEvent) { event.preventDefault(); setInviteStatus("Creating a private invite…"); const result = await onInviteAdult(inviteEmail, inviteName); if (result.error) { setInviteStatus(result.error); return; } setInviteStatus("Invite link copied. Send it only to this email address."); setInviteEmail(""); if (result.link) window.prompt("Copy this private invitation link and send it to them:", result.link); }
+  async function inviteAdult(event: FormEvent) { event.preventDefault(); setInviteStatus("Creating a private invite…"); const result = await onInviteAdult(inviteEmail, inviteName); if (result.error) { setInviteStatus(result.error); return; } setInviteStatus("Invite link copied. Send it only to this email address."); setInviteEmail(""); if (result.link) await prompt("Copy this private invitation link and send it to them:", result.link, { title: "Private invitation link", confirmLabel: "Done" }); }
   async function saveNickname(event: FormEvent) {
     event.preventDefault();
     setSavingNickname(true);
@@ -1428,7 +1594,7 @@ function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAd
       setMemberMessage("You cannot remove the account you are currently using.");
       return;
     }
-    if (!window.confirm(`Remove ${member.name} from this family? Their assigned tasks and chores will become unassigned.`)) return;
+    if (!await confirm(`Remove ${member.name} from this family? Their assigned tasks and chores will become unassigned.`, { title: "Remove family member?", destructive: true })) return;
     setRemovingMemberId(member.id);
     setMemberMessage("");
     const result = await onRemoveMember(member);
@@ -1441,26 +1607,27 @@ function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAd
 }
 
 function ListsPage({ lists, expandedListKeys, onToggleListExpanded, onAddList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { lists: SharedList[]; expandedListKeys: Record<string, boolean>; onToggleListExpanded: (kind: ListKind, listId: string | number) => void; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
+  const { confirm, prompt } = useAppNotifications();
   const [pin, setPin] = useState(""); const [privateLists, setPrivateLists] = useState<SharedList[] | null>(null); const [message, setMessage] = useState("");
   async function unlock() { if (!supabase) return; const { data, error } = await supabase.rpc("get_private_lists", { p_pin: pin }); if (error) { setMessage(error.message); return; } setPrivateLists(data ?? []); setMessage(""); }
-  async function addPrivate() { const title = window.prompt("Name this private list"); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list", { p_pin: pin, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
-  async function addPrivateItem(listId: string | number) { const title = window.prompt("Add an item"); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list_item", { p_pin: pin, p_list_id: listId, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
-  async function deletePrivate(list: SharedList) { if (!window.confirm(`Delete “${list.title}” and all of its items?`) || !supabase) return; const { error } = await supabase.rpc("delete_private_list", { p_pin: pin, p_list_id: list.id }); if (error) { setMessage(error.message); return; } await unlock(); }
+  async function addPrivate() { const title = await prompt("What should this private list be called?", "", { title: "Add a private list", confirmLabel: "Add list" }); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list", { p_pin: pin, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
+  async function addPrivateItem(listId: string | number) { const title = await prompt("What should this private list item say?", "", { title: "Add a private item", confirmLabel: "Add item" }); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list_item", { p_pin: pin, p_list_id: listId, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
+  async function deletePrivate(list: SharedList) { if (!await confirm(`Delete “${list.title}” and all of its items?`, { title: "Delete private list?", destructive: true }) || !supabase) return; const { error } = await supabase.rpc("delete_private_list", { p_pin: pin, p_list_id: list.id }); if (error) { setMessage(error.message); return; } await unlock(); }
   async function updatePrivateItem(item: SharedListItem, remove = false) { if (!supabase) return; const { error } = await supabase.rpc("update_private_list_item", { p_pin: pin, p_item_id: item.id, p_completed: remove ? item.done : !item.done, p_delete: remove }); if (error) { setMessage(error.message); return; } await unlock(); }
-  return <section className="mx-auto w-full min-w-0 max-w-[1800px] space-y-8 overflow-x-hidden px-5 pb-24 md:px-9 lg:pb-8"><div className="min-w-0"><div className="mb-5 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="truncate text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="shrink-0 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list, index) => <ListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("shared", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("shared", list.id)} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteItem={onDeleteItem} onDeleteList={onDeleteList} />)}</div> : <p className="text-slate-500">No family lists yet.</p>}</div><div className="min-w-0 overflow-hidden rounded-[2rem] border border-violet-200 bg-violet-50 p-6 dark:border-violet-400/25 dark:bg-violet-500/10"><p className="text-sm font-bold text-violet-600">PRIVATE LISTS</p><h2 className="mt-1 text-2xl font-bold">🔒 Surprises stay private</h2>{privateLists === null ? <form onSubmit={(e) => { e.preventDefault(); void unlock(); }} className="mt-4 flex max-w-sm gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} inputMode="numeric" type="password" placeholder="Enter family PIN" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-slate-800"/><button className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">Unlock</button></form> : <><div className="mt-4 grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{privateLists.map((list, index) => <PrivateListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("private", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("private", list.id)} onAddItem={addPrivateItem} onDelete={deletePrivate} onToggleItem={(item) => void updatePrivateItem(item)} onDeleteItem={(item) => { if (window.confirm(`Delete “${item.title}”?`)) void updatePrivateItem(item, true); }} />)}</div><div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void addPrivate()} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">+ New private list</button><button onClick={() => { setPrivateLists(null); setPin(""); }} className="rounded-xl px-4 py-2 font-bold text-violet-700">Lock</button></div></>}{message && <p className="mt-3 text-sm font-bold text-rose-600">{message}</p>}</div></section>;
+  return <section className="mx-auto w-full min-w-0 max-w-[1800px] space-y-8 overflow-x-hidden px-5 pb-24 md:px-9 lg:pb-8"><div className="min-w-0"><div className="mb-5 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="truncate text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="shrink-0 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list, index) => <ListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("shared", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("shared", list.id)} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteItem={onDeleteItem} onDeleteList={onDeleteList} />)}</div> : <p className="text-slate-500">No family lists yet.</p>}</div><div className="min-w-0 overflow-hidden rounded-[2rem] border border-violet-200 bg-violet-50 p-6 dark:border-violet-400/25 dark:bg-violet-500/10"><p className="text-sm font-bold text-violet-600">PRIVATE LISTS</p><h2 className="mt-1 text-2xl font-bold">🔒 Surprises stay private</h2>{privateLists === null ? <form onSubmit={(e) => { e.preventDefault(); void unlock(); }} className="mt-4 flex max-w-sm gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} inputMode="numeric" type="password" placeholder="Enter family PIN" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-slate-800"/><button className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">Unlock</button></form> : <><div className="mt-4 grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{privateLists.map((list, index) => <PrivateListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("private", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("private", list.id)} onAddItem={addPrivateItem} onDelete={deletePrivate} onToggleItem={(item) => void updatePrivateItem(item)} onDeleteItem={(item) => { void confirm(`Delete “${item.title}”?`, { title: "Delete private item?", destructive: true }).then((approved) => { if (approved) void updatePrivateItem(item, true); }); }} />)}</div><div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void addPrivate()} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">+ New private list</button><button onClick={() => { setPrivateLists(null); setPin(""); }} className="rounded-xl px-4 py-2 font-bold text-violet-700">Lock</button></div></>}{message && <p className="mt-3 text-sm font-bold text-rose-600">{message}</p>}</div></section>;
 }
 
 function PrivateListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onDelete, onToggleItem, onDeleteItem }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (id: string | number) => void; onDelete: (list: SharedList) => void; onToggleItem: (item: SharedListItem) => void; onDeleteItem: (item: SharedListItem) => void }) {
   const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
   const contentId = `private-list-content-${String(list.id)}`;
-  return <article className={`min-w-0 overflow-hidden rounded-[2rem] p-6 text-slate-800 shadow-sm ring-1 ring-white/70 dark:text-white dark:ring-white/10 ${colors[colorIndex % colors.length]}`}><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex min-w-0 max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h3></div><div className="flex shrink-0 gap-2"><button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700">+</button><button type="button" onClick={() => onDelete(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600"><AppIcon name="trash" className="size-4"/></button></div></div>{expanded && <div id={contentId} className="mt-5 min-w-0 space-y-2">{list.items.map((item) => <div key={item.id} className="flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700"><button type="button" onClick={() => onToggleItem(item)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button><span className={`min-w-0 flex-1 truncate ${item.done ? "line-through opacity-60" : ""}`}>{item.title}</span><button type="button" onClick={() => onDeleteItem(item)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button></div>)}{list.items.length === 0 && <p className="text-sm text-slate-600">Tap + to add an item.</p>}</div>}</article>;
+  return <article className={`self-start min-w-0 overflow-hidden rounded-[2rem] p-6 text-slate-800 shadow-sm ring-1 ring-white/70 dark:text-white dark:ring-white/10 ${colors[colorIndex % colors.length]}`}><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex min-w-0 max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h3></div><div className="flex shrink-0 gap-2"><button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700">+</button><button type="button" onClick={() => onDelete(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600"><AppIcon name="trash" className="size-4"/></button></div></div>{expanded && <div id={contentId} className="mt-5 min-w-0 space-y-2">{list.items.map((item) => <div key={item.id} className="flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700"><button type="button" onClick={() => onToggleItem(item)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button><span className={`min-w-0 flex-1 truncate ${item.done ? "line-through opacity-60" : ""}`}>{item.title}</span><button type="button" onClick={() => onDeleteItem(item)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button></div>)}{list.items.length === 0 && <p className="text-sm text-slate-600">Tap + to add an item.</p>}</div>}</article>;
 }
 
 function ListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
   const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
   const contentId = `shared-list-content-${String(list.id)}`;
   return (
-    <article className={`min-w-0 overflow-hidden rounded-[2rem] p-6 shadow-sm ring-1 ring-white/70 dark:ring-white/10 ${colors[colorIndex % colors.length]}`}>
+    <article className={`self-start min-w-0 overflow-hidden rounded-[2rem] p-6 shadow-sm ring-1 ring-white/70 dark:ring-white/10 ${colors[colorIndex % colors.length]}`}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex min-w-0 max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h2>

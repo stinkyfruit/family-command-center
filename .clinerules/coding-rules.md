@@ -33,3 +33,9 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 - Use animation when it improves interaction feedback, communicates state, or supports an appropriate seasonal theme. Keep motion purposeful and restrained; respect `prefers-reduced-motion` and provide a clear static fallback.
 - Use the shared Phosphor icon library through `src/components/home/shared-ui.tsx` and `AppIcon` for interface icons. Do not introduce a second icon library or use ad hoc Unicode characters as functional controls. Emoji may still be used as decorative or user-facing content where it fits the existing design.
 - Keep interaction behavior consistent with neighboring features, including button sizes, hover/active states, delete affordances, confirmation/error behavior, keyboard focus, and accessible labels.
+
+## Notifications and dialogs
+
+- Never use native `window.alert`, `window.confirm`, or `window.prompt` in the app UI. Use `useAppNotifications` from `src/components/home/shared-ui.tsx` instead.
+- Use `notify(message, tone)` for transient status and error feedback. Use `confirm(message, options)` for destructive or consequential actions, and `prompt(message, defaultValue, options)` for short text entry.
+- Keep notifications branded with the shared Tailwind/Phosphor presentation, keyboard-dismissible, accessible with `role="alert"`/`role="status"` and `aria-modal`, and respectful of the existing dark mode and reduced-motion conventions.

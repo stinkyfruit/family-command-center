@@ -21,3 +21,7 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 - **Reversion cleanup:** When reverting or abandoning a feature, remove all introduced code, configuration, and assets that will no longer be used. If the feature added database tables, columns, policies, indexes, seed rows, or other persistent objects, add a separate cleanup migration for the already-applied schema; do not rewrite or delete an applied migration to hide its history. Destructive cleanup must be explicit and documented.
 
 See `.clinerules/coding-rules.md` for the full, stack-aware rule set.
+
+## Notification UI
+
+Use the shared `useAppNotifications` API from `src/components/home/shared-ui.tsx` for all app feedback and dialogs. Do not add native `window.alert`, `window.confirm`, or `window.prompt` calls. Use branded Tailwind/Phosphor toasts for status/errors and the shared accessible modal for confirmations and short text entry.

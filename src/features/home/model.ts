@@ -188,7 +188,8 @@ export function moodOption(key: MoodKey) {
 export function localDateInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
+export type ChoreRewardMode = "money" | "stars";
+export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
 export const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
   { id: "After school", label: "After school & nighttime", icon: "🎒" },
