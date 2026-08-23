@@ -6,6 +6,7 @@ import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
 import {
   type AppleFeed,
+  type AuroraActivity,
   type ChoreEntry,
   type Event,
   type GoogleConnection,
@@ -13,6 +14,9 @@ import {
   type MoodCheckin,
   type MoodKey,
   type MoonPhase,
+  type MeteorShower,
+  auroraActivityForLocation,
+  auroraActivityLabel,
   type SharedList,
   type SharedListItem,
   type ThemeMode,
@@ -32,6 +36,7 @@ import {
   localDateInputValue,
   moodOption,
   moonPhase,
+  nextMeteorShower,
   notoIconPath,
   pickCelebrationAnimation,
   starterEvents,
@@ -89,6 +94,7 @@ export default function Home() {
   const [calendarAnchor, setCalendarAnchor] = useState(new Date());
   const [activeTab, setActiveTab] = useState<HomeTab>("home");
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [auroraActivity, setAuroraActivity] = useState<AuroraActivity | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [celebratingBirthdayDate, setCelebratingBirthdayDate] = useState<string | null>(null);
@@ -340,6 +346,14 @@ export default function Home() {
         const data = await weatherResponse.json();
         setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: "Local forecast", code: data.current.weather_code, isDay: Boolean(data.current.is_day) });
         if (data.daily.sunrise?.[0] && data.daily.sunset?.[0]) setSunTimes({ sunrise: data.daily.sunrise[0] * 1000, sunset: data.daily.sunset[0] * 1000 });
+
+        try {
+          const auroraResponse = await fetch("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json");
+          if (!auroraResponse.ok) throw new Error("Aurora request failed");
+          setAuroraActivity(auroraActivityForLocation(await auroraResponse.json(), latitude, longitude));
+        } catch {
+          setAuroraActivity(null);
+        }
 
         // A city name is nice to have, but its lookup must never hide usable weather.
         try {
@@ -1117,6 +1131,7 @@ export default function Home() {
 
   const visibleNavigationTabs = navigationTabs.filter(([tab]) => tab !== "chores" || showChoresTab).filter(([tab]) => tab !== "wishlist" || showWishlistTab);
   const currentMoonPhase = moonPhase(new Date());
+  const upcomingMeteorShower = nextMeteorShower(new Date());
   const isNightWeather = weather ? !weather.isDay : dark;
 
   return (
@@ -1133,7 +1148,7 @@ export default function Home() {
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <>
           <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
-            <article className={`weather-card relative w-full overflow-hidden rounded-[1.75rem] p-5 text-white shadow-lg max-md:min-h-40 max-md:p-5 md:max-lg:min-h-40 md:max-lg:p-6 md:p-6 ${isNightWeather ? "weather-card-night shadow-indigo-950/40" : "weather-card-day shadow-sky-200/50"}`}><span className={`weather-card-orb absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="weather-card-content relative flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p>{isNightWeather && weather && <MoonPhaseBadge phase={currentMoonPhase}/>}</div><span className="block size-24 shrink-0 overflow-hidden max-md:size-28 md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">{isNightWeather ? "🌙" : "☀️"}</span>}</span></div></article>
+            <article className={`weather-card relative w-full overflow-hidden rounded-[1.75rem] p-5 text-white shadow-lg max-md:min-h-40 max-md:p-5 md:max-lg:min-h-40 md:max-lg:p-6 md:p-6 ${isNightWeather ? "weather-card-night shadow-indigo-950/40" : "weather-card-day shadow-sky-200/50"}`}><span className={`weather-card-orb absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="weather-card-content relative min-w-0"><div className="flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p>{isNightWeather && weather && <MoonPhaseBadge phase={currentMoonPhase}/>}</div><span className="block size-24 shrink-0 overflow-hidden max-md:size-28 md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">{isNightWeather ? "🌙" : "☀️"}</span>}</span></div><WeatherSkyDetails sunTimes={sunTimes} meteorShower={upcomingMeteorShower} auroraActivity={auroraActivity} /></div></article>
             <article className="min-w-0 overflow-hidden rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-violet-600">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-8 place-items-center rounded-xl bg-violet-100 text-lg font-bold text-violet-600 hover:bg-violet-200">+</button></div><div className="mt-3 min-w-0 space-y-1">{openTodos.slice(0, 5).map((todo) => { const assignee = members.find((member) => member.id === todo.assigneeMemberId); return <label key={todo.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 text-sm hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => toggleTodo(todo.id)} className="size-4 accent-violet-500"/><span className="min-w-0 flex-1 truncate font-medium">{todo.title}</span>{assignee && <span className="max-w-24 shrink-0 truncate rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${assignee.color ?? "#fda4af"}33`, color: assignee.color ?? "#be123c" }}>{assignee.name}</span>}</label>; })}{openTodos.length === 0 && <p className="text-sm text-slate-400">You&apos;re all caught up.</p>}</div><button onClick={() => setActiveTab("tasks")} className="mt-2 text-xs font-bold text-violet-600">View all tasks →</button></article>
             <div className="min-w-0 md:hidden"><PhoneHomeCalendar events={visibleCalendarEvents} members={members} onOpenDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} onOpenEvent={setSelectedEvent} /></div>
             <FamilyMoodCard members={members} checkins={moodCheckins} selectedMemberId={moodMemberId} selectedMood={selectedMood} saving={savingMood} message={moodMessage} onMemberChange={(memberId) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); }} onMoodChange={setSelectedMood} onSave={saveMoodCheckin} />
@@ -1177,6 +1192,15 @@ function WeatherAnimation({ weather }: { weather: Weather }) {
 
 function MoonPhaseBadge({ phase }: { phase: MoonPhase }) {
   return <div className="weather-moon-badge mt-3 flex items-center gap-2" role="img" aria-label={`${phase.name}, ${phase.illumination}% illuminated`}><span className={`weather-moon weather-moon--${phase.key} size-7 shrink-0`} aria-hidden="true"/><span className="min-w-0"><span className="block text-xs font-black leading-tight text-indigo-50">{phase.name}</span><span className="block text-[10px] font-semibold leading-tight text-indigo-100/75">{phase.illumination}% illuminated</span></span></div>;
+}
+
+function WeatherSkyDetails({ sunTimes, meteorShower, auroraActivity }: { sunTimes: { sunrise: number; sunset: number } | null; meteorShower: MeteorShower; auroraActivity: AuroraActivity | null }) {
+  const formatTime = (timestamp: number) => new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
+  const peakDate = meteorShower.peakDate.toLocaleDateString([], { month: "short", day: "numeric" });
+  const auroraLabel = auroraActivity ? `Aurora: ${auroraActivityLabel(auroraActivity.probability)}` : "Aurora forecast unavailable";
+  const auroraDetail = auroraActivity ? `${auroraActivity.probability}% activity near you` : "Try again later";
+  const meteorLabel = `${meteorShower.name} peak ${peakDate}`;
+  return <div className="weather-sky-details mt-4 grid gap-2 border-t border-white/20 pt-3 text-white/90 sm:grid-cols-2"><div className="grid grid-cols-2 gap-2"><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunrise</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunrise) : "—"}</p></div><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunset</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunset) : "—"}</p></div></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sky watch</p><p className="mt-0.5 break-words text-sm font-black leading-snug" title={auroraLabel}>{auroraLabel}</p><p className="break-words text-[10px] font-semibold leading-snug text-white/65" title={meteorLabel}>{auroraDetail} · {meteorLabel}</p></div></div>;
 }
 
 function ChoreCelebration({ animationSrc }: { animationSrc?: string }) {

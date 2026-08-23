@@ -38,6 +38,8 @@ export type Todo = { id: string | number; title: string; due: string; dueAt?: st
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
 export type MoonPhaseKey = "new" | "waxing-crescent" | "first-quarter" | "waxing-gibbous" | "full" | "waning-gibbous" | "last-quarter" | "waning-crescent";
 export type MoonPhase = { key: MoonPhaseKey; name: string; illumination: number };
+export type MeteorShower = { name: string; peakDate: Date; activeStart: Date; activeEnd: Date };
+export type AuroraActivity = { probability: number; forecastTime: string | null };
 
 const synodicMonth = 29.530588853;
 const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
@@ -65,6 +67,52 @@ export function moonPhase(date = new Date()): MoonPhase {
     "waning-crescent": "Waning crescent",
   };
   return { key, name: names[key], illumination };
+}
+
+const meteorShowerPeaks = [
+  { name: "Quadrantids", month: 0, day: 3, startDays: -6, endDays: 9 },
+  { name: "Lyrids", month: 3, day: 22, startDays: -6, endDays: 3 },
+  { name: "Eta Aquariids", month: 4, day: 5, startDays: -16, endDays: 23 },
+  { name: "Delta Aquariids", month: 6, day: 30, startDays: -18, endDays: 24 },
+  { name: "Perseids", month: 7, day: 12, startDays: -26, endDays: 12 },
+  { name: "Orionids", month: 9, day: 21, startDays: -19, endDays: 17 },
+  { name: "Leonids", month: 10, day: 17, startDays: -11, endDays: 13 },
+  { name: "Geminids", month: 11, day: 14, startDays: -10, endDays: 6 },
+] as const;
+
+export function nextMeteorShower(date = new Date()): MeteorShower {
+  const candidates = [date.getFullYear(), date.getFullYear() + 1].flatMap((year) => meteorShowerPeaks.map((shower) => {
+    const peakDate = new Date(year, shower.month, shower.day);
+    const activeStart = new Date(peakDate);
+    const activeEnd = new Date(peakDate);
+    activeStart.setDate(activeStart.getDate() + shower.startDays);
+    activeEnd.setDate(activeEnd.getDate() + shower.endDays);
+    return { name: shower.name, peakDate, activeStart, activeEnd };
+  }));
+  return candidates.sort((first, second) => first.activeStart.getTime() - second.activeStart.getTime()).find((shower) => shower.activeEnd >= date) ?? candidates[0];
+}
+
+export function auroraActivityForLocation(payload: unknown, latitude: number, longitude: number): AuroraActivity | null {
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { coordinates?: unknown }).coordinates)) return null;
+  const coordinates = (payload as { coordinates: unknown[] }).coordinates;
+  let closest: { distance: number; probability: number } | null = null;
+  for (const point of coordinates) {
+    if (!Array.isArray(point) || point.length < 3) continue;
+    const [pointLongitude, pointLatitude, pointProbability] = point;
+    if (typeof pointLongitude !== "number" || typeof pointLatitude !== "number" || typeof pointProbability !== "number") continue;
+    const longitudeDistance = Math.abs(((longitude - pointLongitude + 540) % 360) - 180);
+    const distance = Math.hypot(latitude - pointLatitude, longitudeDistance * Math.cos(latitude * Math.PI / 180));
+    if (!closest || distance < closest.distance) closest = { distance, probability: pointProbability };
+  }
+  if (!closest) return null;
+  const forecastTime = (payload as { "Forecast Time"?: unknown })["Forecast Time"];
+  return { probability: Math.round(Math.max(0, Math.min(100, closest.probability))), forecastTime: typeof forecastTime === "string" ? forecastTime : null };
+}
+
+export function auroraActivityLabel(probability: number) {
+  if (probability >= 50) return "Strong activity";
+  if (probability >= 15) return "Possible tonight";
+  return "Low activity";
 }
 export type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
 export type MoodKey = "great" | "good" | "okay" | "tired" | "low";
