@@ -36,6 +36,36 @@ export function pickCelebrationAnimation() {
 export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
+export type MoonPhaseKey = "new" | "waxing-crescent" | "first-quarter" | "waxing-gibbous" | "full" | "waning-gibbous" | "last-quarter" | "waning-crescent";
+export type MoonPhase = { key: MoonPhaseKey; name: string; illumination: number };
+
+const synodicMonth = 29.530588853;
+const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
+
+export function moonPhase(date = new Date()): MoonPhase {
+  const daysSinceKnownNewMoon = (date.getTime() - knownNewMoon) / 86_400_000;
+  const fraction = ((daysSinceKnownNewMoon % synodicMonth) + synodicMonth) % synodicMonth / synodicMonth;
+  const illumination = Math.round((1 - Math.cos(fraction * Math.PI * 2)) / 2 * 100);
+  const key: MoonPhaseKey = fraction < 0.03 || fraction >= 0.97 ? "new"
+    : fraction < 0.22 ? "waxing-crescent"
+      : fraction < 0.28 ? "first-quarter"
+        : fraction < 0.47 ? "waxing-gibbous"
+          : fraction < 0.53 ? "full"
+            : fraction < 0.72 ? "waning-gibbous"
+              : fraction < 0.78 ? "last-quarter"
+                : "waning-crescent";
+  const names: Record<MoonPhaseKey, string> = {
+    new: "New moon",
+    "waxing-crescent": "Waxing crescent",
+    "first-quarter": "First quarter",
+    "waxing-gibbous": "Waxing gibbous",
+    full: "Full moon",
+    "waning-gibbous": "Waning gibbous",
+    "last-quarter": "Last quarter",
+    "waning-crescent": "Waning crescent",
+  };
+  return { key, name: names[key], illumination };
+}
 export type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
 export type MoodKey = "great" | "good" | "okay" | "tired" | "low";
 export type MoodCheckin = { id: string | number; memberId: string | number; mood: MoodKey; checkedInAt: string };

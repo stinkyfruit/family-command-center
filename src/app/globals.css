@@ -112,6 +112,72 @@ article .mt-5.space-y-2 > button > span:first-child.text-emerald-500::after {
   100% { transform: scale(1); }
 }
 
+/* Weather card: let the forecast become a small night sky after sunset. */
+.weather-card {
+  isolation: isolate;
+  transition: background 500ms ease, box-shadow 500ms ease;
+}
+.weather-card-day {
+  background: linear-gradient(135deg, #7dd3fc, #60a5fa 52%, #818cf8);
+}
+.weather-card-night {
+  background: radial-gradient(circle at 76% 18%, rgb(129 140 248 / .2), transparent 19%), linear-gradient(135deg, #111936 0%, #172554 48%, #312e81 100%);
+}
+.weather-card-night::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background-image: radial-gradient(circle at 12% 24%, rgb(255 255 255 / .8) 0 1px, transparent 1.5px), radial-gradient(circle at 28% 72%, rgb(191 219 254 / .7) 0 1px, transparent 1.5px), radial-gradient(circle at 52% 18%, rgb(255 255 255 / .72) 0 1px, transparent 1.5px), radial-gradient(circle at 64% 58%, rgb(224 231 255 / .6) 0 1px, transparent 1.5px), radial-gradient(circle at 88% 32%, rgb(255 255 255 / .75) 0 1px, transparent 1.5px), radial-gradient(circle at 94% 78%, rgb(191 219 254 / .65) 0 1px, transparent 1.5px);
+  opacity: .55;
+  animation: weather-stars 8s ease-in-out infinite alternate;
+}
+.weather-card-night::after {
+  position: absolute;
+  right: -10%;
+  bottom: -55%;
+  width: 75%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  content: "";
+  pointer-events: none;
+  background: rgb(129 140 248 / .12);
+  filter: blur(28px);
+}
+.weather-card-content { z-index: 1; }
+.weather-card-orb { z-index: 0; }
+.weather-moon-badge { position: relative; z-index: 1; }
+.weather-moon {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #fff7d1;
+  box-shadow: 0 0 0 3px rgb(255 247 209 / .08), 0 0 20px rgb(255 247 209 / .45);
+  animation: weather-moon-float 5s ease-in-out infinite;
+}
+.weather-moon::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  background: #1b2754;
+  transition: transform 500ms ease;
+}
+.weather-moon--new { background: #1b2754; box-shadow: 0 0 0 1px rgb(165 180 252 / .35); }
+.weather-moon--new::after,
+.weather-moon--full::after,
+.weather-moon--first-quarter::after,
+.weather-moon--last-quarter::after { display: none; }
+.weather-moon--waxing-crescent::after { transform: translateX(-36%); }
+.weather-moon--waxing-gibbous::after { transform: translateX(-12%); }
+.weather-moon--waning-gibbous::after { transform: translateX(12%); }
+.weather-moon--waning-crescent::after { transform: translateX(36%); }
+.weather-moon--first-quarter { background: linear-gradient(90deg, #1b2754 0 50%, #fff7d1 50%); }
+.weather-moon--last-quarter { background: linear-gradient(90deg, #fff7d1 0 50%, #1b2754 50%); }
+@keyframes weather-stars { from { opacity: .38; transform: translateY(0); } to { opacity: .72; transform: translateY(3px); } }
+@keyframes weather-moon-float { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
+
 /* One visual language for destructive actions across lists, chores, and events. */
 button[title^="Delete"],
 form button[type="button"].text-rose-600 {
