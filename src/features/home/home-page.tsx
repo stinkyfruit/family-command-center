@@ -26,20 +26,16 @@ import {
   type Todo,
   type Weather,
   choreIcon,
-  choreRoutines,
   displayEventsOnce,
   familyHolidaysForYear,
   isHexColor,
   isMoodKey,
-  isVisibleRoutineChore,
   memberColorOptions,
   listIcon,
   localDateInputValue,
   moodOption,
   moonPhase,
   notableSkyEventForDate,
-  notoIconPath,
-  pickCelebrationAnimation,
   starterEvents,
   timeGreeting,
   weatherAnimation,
@@ -62,6 +58,9 @@ import { AuthScreen, Screensaver, SeasonalScreensaver, TaskEditor, TasksPage } f
 import ChristmasWishlistPage from "@/features/christmas-wishlist/christmas-wishlist-page";
 import { parseVoiceCommand } from "@/features/home/voice-command";
 import { SettingsPage } from "@/features/settings/settings-page";
+import { ListsPage, listPreferenceKey, type ListKind } from "@/features/lists/lists-page";
+import { ChoreCelebration, ChoresPage } from "@/features/chores/chores-page";
+import { VoiceChoreEditor, VoiceListEditor, WeekendChoreEditor, type VoiceChoreDraft, type VoiceListDraft, type WeekendChoreDraft } from "@/features/voice/voice-command-editors";
 
 const navigationTabs = [
   ["home", "home", "Home"],
@@ -74,15 +73,6 @@ const navigationTabs = [
 ] as const;
 type HomeTab = typeof navigationTabs[number][0];
 type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
-type VoiceChoreDraft = { title: string; memberId: string; routine: string; scheduledFor: string };
-type WeekendChoreDraft = { memberId: string; title: string; reward: string };
-type VoiceListDraft = { title: string; listId: string };
-type ListKind = "shared" | "private";
-
-function listPreferenceKey(kind: ListKind, listId: string | number) {
-  return `${kind}:${String(listId)}`;
-}
-
 export default function Home() {
   const { notify, confirm, prompt } = useAppNotifications();
   const [events, setEvents] = useState(starterEvents);
@@ -1319,7 +1309,6 @@ export default function Home() {
     </main>
   );
 }
-
 function WeatherAnimation({ weather, isNight = !weather.isDay }: { weather: Weather; isNight?: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
@@ -1344,185 +1333,4 @@ function WeatherSkyDetails({ sunTimes, notableSkyEvent, auroraActivity }: { sunT
   const notableDetail = notableSkyEvent?.detail ?? "The sky is quiet for now";
   const auroraLabel = auroraActivity ? `Aurora: ${auroraActivityLabel(auroraActivity.probability)} · ${auroraActivity.probability}% near you` : "Aurora activity loading…";
   return <div className="weather-sky-details mt-4 grid gap-2 border-t border-white/20 pt-3 text-white/90 sm:grid-cols-2"><div className="grid grid-cols-2 gap-2"><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunrise</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunrise) : "—"}</p></div><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunset</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunset) : "—"}</p></div></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sky watch</p><p className="mt-0.5 break-words text-sm font-black leading-snug" title={notableLabel}>{notableLabel}</p><p className="break-words text-[10px] font-semibold leading-snug text-white/65" title={notableDetail}>{notableDetail}</p><p className="mt-1 break-words text-[10px] font-semibold leading-snug text-white/65" title={auroraLabel}>{auroraLabel}</p></div></div>;
-}
-
-function ChoreCelebration({ animationSrc, label = "Chore complete" }: { animationSrc?: string; label?: string }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [animation] = useState(() => animationSrc ?? pickCelebrationAnimation());
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduceMotion(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return <div className="pointer-events-auto fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label={label}><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <Lottie src={animation} autoplay loop={false} className="h-[min(70vh,38rem)] w-full drop-shadow-2xl" />}</div></div>;
-}
-
-function VoiceChoreEditor({ draft, members, onClose, onSave }: { draft: VoiceChoreDraft; members: Member[]; onClose: () => void; onSave: (draft: VoiceChoreDraft) => Promise<void> }) {
-  const [title, setTitle] = useState(draft.title);
-  const [memberId, setMemberId] = useState(draft.memberId);
-  const [routine, setRoutine] = useState(draft.routine);
-  const [scheduledFor, setScheduledFor] = useState(draft.scheduledFor);
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={(event) => { event.preventDefault(); void onSave({ title, memberId, routine, scheduledFor }); }} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">VOICE ADD</p><h2 className="text-2xl font-bold">Review chore</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Chore<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><label className="mt-4 block text-sm font-bold">Assign to<StyledSelect value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.filter((member) => member.role === "child").map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}</StyledSelect></label><label className="mt-4 block text-sm font-bold">Routine<StyledSelect value={routine} onChange={(event) => setRoutine(event.target.value)}><option>Before school</option><option>After school</option><option>To-do</option></StyledSelect></label><label className="mt-4 block text-sm font-bold">Date<input type="date" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Save chore</button></div></form></div>;
-}
-
-function WeekendChoreEditor({ draft, mode, memberName, onClose, onSave }: { draft: WeekendChoreDraft; mode: ChoreRewardMode; memberName: string; onClose: () => void; onSave: (draft: { memberId: string; title: string; reward: number }) => Promise<void> }) {
-  const [title, setTitle] = useState(draft.title);
-  const [reward, setReward] = useState(draft.reward);
-  const unit = mode === "money" ? "cents" : "stars";
-  const maximum = mode === "money" ? 1000 : 100;
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    const value = Number(reward);
-    if (!title.trim()) return;
-    if (!Number.isInteger(value) || value < 0 || value > maximum || (mode === "money" && value % 5 !== 0)) return;
-    await onSave({ memberId: draft.memberId, title: title.trim(), reward: value });
-  }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={save} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">WEEKEND CHORE</p><h2 className="text-2xl font-bold">Add for {memberName}</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Chore<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-slate-800 outline-violet-500" placeholder="e.g. Clean up toys" /></label><label className="mt-4 block text-sm font-bold">Reward ({unit})<input required type="number" min="0" max={maximum} step={mode === "money" ? 5 : 1} value={reward} onChange={(event) => setReward(event.target.value)} className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-slate-800 outline-violet-500" />{mode === "money" && <span className="mt-1 block text-xs font-medium text-slate-500">Enter cents, such as 10 for $0.10. Rewards must end in 0 or 5.</span>}</label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Add chore</button></div></form></div>;
-}
-
-function VoiceListEditor({ draft, lists, onClose, onSave }: { draft: VoiceListDraft; lists: SharedList[]; onClose: () => void; onSave: (draft: VoiceListDraft) => Promise<void> }) {
-  const [title, setTitle] = useState(draft.title);
-  const [listId, setListId] = useState(draft.listId);
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={(event) => { event.preventDefault(); void onSave({ title, listId }); }} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">VOICE ADD</p><h2 className="text-2xl font-bold">Review list item</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">Item<input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500"/></label><label className="mt-4 block text-sm font-bold">Add to<StyledSelect value={listId} onChange={(event) => setListId(event.target.value)}>{lists.map((list) => <option key={list.id} value={String(list.id)}>{list.title}</option>)}</StyledSelect></label><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">Save item</button></div></form></div>;
-}
-
-function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
-  return <><WeekdayChoresBoard members={members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={onToggle} /><TemporaryRoutineChores members={members} chores={chores} mode={choreRewardMode} onToggle={onToggle} /> </>;
-}
-
-function formatReward(cents: number, stars: number, mode: ChoreRewardMode) {
-  return mode === "money" ? `$${(cents / 100).toFixed(2)}` : `${stars} ${stars === 1 ? "star" : "stars"}`;
-}
-
-function ChildIncentiveProgress({ child, chores, mode, targetCents, targetStars, earnedCentsByMember, paidOutCentsByMember }: { child: Member; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number> }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const isWeekend = [0, 6].includes(new Date().getDay());
-  const weekendStart = new Date();
-  weekendStart.setHours(0, 0, 0, 0);
-  if (weekendStart.getDay() === 0) weekendStart.setDate(weekendStart.getDate() - 1);
-  const weekendDates = new Set([0, 1].map((offset) => {
-    const date = new Date(weekendStart);
-    date.setDate(weekendStart.getDate() + offset);
-    return date.toLocaleDateString("en-CA");
-  }));
-  const weekendChores = chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === "Weekend" && chore.scheduledFor && weekendDates.has(chore.scheduledFor));
-  const weekendTarget = mode === "money" ? weekendChores.reduce((sum, chore) => sum + chore.rewardCents, 0) : weekendChores.reduce((sum, chore) => sum + chore.rewardStars, 0);
-  const target = isWeekend ? weekendTarget : mode === "money" ? targetCents : targetStars;
-  const dailyEarned = isWeekend
-    ? weekendChores.reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0)
-    : chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine !== "To-do" && chore.isDaily).reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0);
-  const runningEarnedCents = earnedCentsByMember[String(child.id)] ?? 0;
-  const paidOutCents = paidOutCentsByMember[String(child.id)] ?? 0;
-  const availableCents = runningEarnedCents - paidOutCents;
-  const progress = Math.min(100, target ? dailyEarned / target * 100 : 0);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduceMotion(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return <article className="relative overflow-hidden rounded-2xl bg-white/75 p-4 dark:bg-white/10"><div className="flex items-start justify-between gap-2"><div>{mode === "money" ? <><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">Available</p><p className="mt-0.5 text-3xl font-black leading-none text-emerald-700 dark:text-emerald-200">${Math.max(0, availableCents / 100).toFixed(2)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">Earned: ${(runningEarnedCents / 100).toFixed(2)} · Paid out: ${(paidOutCents / 100).toFixed(2)}</p></> : <span className="text-sm font-black text-slate-700 dark:text-slate-100">Progress</span>}</div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200">{mode === "money" ? `${isWeekend ? "Weekend" : "Today"}: $${(dailyEarned / 100).toFixed(2)} / $${(target / 100).toFixed(2)}` : `${dailyEarned} / ${target} stars`}</span></div><div className="mt-3 flex items-end gap-4"><div className="relative grid size-28 shrink-0 place-items-end overflow-hidden rounded-[1.75rem] bg-gradient-to-b from-amber-50 to-amber-100 p-1 dark:from-amber-300/10 dark:to-amber-400/20"><div className="absolute inset-x-0 bottom-0 rounded-t-[1.5rem] bg-gradient-to-t from-amber-300/70 to-yellow-200/60 transition-[height] motion-reduce:transition-none" style={{ height: `${Math.max(12, progress)}%` }} />{reduceMotion ? <span className="relative z-10 grid size-28 place-items-center text-7xl" aria-label={`${child.name}'s piggy bank`}>🐷</span> : <Lottie src="/chores/piggy%20bank.json" autoplay loop className="relative z-10 size-28 object-contain drop-shadow-sm" aria-label={`${child.name}'s piggy bank`} />}</div><div className="min-w-0 flex-1"><p className="text-sm font-black text-slate-700 dark:text-slate-100">{isWeekend ? target === 0 ? "No weekend chores yet" : progress >= 100 ? "Weekend complete!" : `${Math.round(progress)}% of weekend chores` : progress >= 100 ? "Pool complete!" : `${Math.round(progress)}% of the pool`}</p><div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-500 transition-[width] motion-reduce:transition-none" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-300">{isWeekend ? target === 0 ? "Add weekend chores in Settings to create a reward pool." : "Complete weekend chores to grow the Earned total." : mode === "money" ? "Complete chores to grow the Earned total." : `Every completed chore adds to ${child.name}&apos;s bank.`}</p></div></div></article>;
-}
-
-function TemporaryRoutineChores({ members, chores, mode, onToggle }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; onToggle: (chore: ChoreEntry) => void }) {
-  const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
-  const today = new Date().toLocaleDateString("en-CA");
-  const children = members.filter((member) => member.role === "child");
-  const temporary = chores.filter((chore) => !chore.isFixed && chore.scheduledFor === today && (chore.routine === "Before school" || chore.routine === "After school" || chore.routine === "Weekend"));
-  if (!children.length) return null;
-  const weekend = !isWeekday;
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-violet-50 p-5 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:ring-violet-400/20"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">{weekend ? "Weekend chores" : "For today only"}</p><h2 className="mt-1 text-xl font-black">{weekend ? "Weekend chores" : "One-time routine chores"}</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{weekend ? "Weekend chores are managed in Settings. These do not change the weekday routine." : "Extra chores for today."}</p></div><div className="mt-4 grid gap-3 md:grid-cols-2">{children.map((child) => { const childChores = temporary.filter((chore) => chore.assigneeMemberId === child.id); const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <article key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-3 space-y-2">{childChores.length ? childChores.map((chore) => <button type="button" key={chore.id} onClick={() => onToggle(chore)} className={`flex min-h-16 w-full items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-left transition-transform active:scale-[.98] dark:bg-white/10 ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span className="text-lg">{chore.emoji}</span><span className={`min-w-0 flex-1 text-sm font-bold ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200">{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><span className={`grid size-8 shrink-0 place-items-center rounded-lg border-2 text-lg font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>) : <p className="rounded-xl border border-dashed border-white/70 px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:border-white/20 dark:text-slate-300">Nothing extra today.</p>}</div></article>; })}</div></div></section>;
-}
-
-function WeekdayChoresBoard({ members, chores, mode, targetCents, targetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; mode: ChoreRewardMode; targetCents: number; targetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
-  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
-  const [expandedRoutines, setExpandedRoutines] = useState<Record<string, boolean>>({});
-  const children = members.filter((member) => member.role === "child");
-  const isWeekday = new Date().getDay() > 0 && new Date().getDay() < 6;
-  const routineOrder = currentHour >= 12 ? ["After school", "Before school", "To-do"] : ["Before school", "After school", "To-do"];
-  const routines = [...choreRoutines]
-    .sort((first, second) => routineOrder.indexOf(first.id) - routineOrder.indexOf(second.id));
-  const today = new Date().toLocaleDateString("en-CA");
-  const sortedChores = chores.filter((chore) => isVisibleRoutineChore(chore, today)).sort((first, second) => Number(Boolean(first.completionId)) - Number(Boolean(second.completionId)) || first.sortOrder - second.sortOrder);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentHour(new Date().getHours()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const choreById = new Map(chores.map((chore) => [String(chore.id), chore]));
-    const frame = window.requestAnimationFrame(() => {
-      document.querySelectorAll<HTMLElement>("[data-chore-id]").forEach((card) => {
-        const chore = choreById.get(card.dataset.choreId ?? "");
-        if (!chore) return;
-        const emoji = !chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji;
-        const source = notoIconPath(emoji);
-        const pictureSlot = card.querySelector<HTMLElement>("button > span:first-of-type");
-        if (!source || !pictureSlot) return;
-        const image = document.createElement("img");
-        image.src = source;
-        image.alt = "";
-        image.className = "size-9 object-contain";
-        image.dataset.notoChorePicture = "true";
-        image.onerror = () => { pictureSlot.textContent = emoji; };
-        pictureSlot.replaceChildren(image);
-        pictureSlot.setAttribute("aria-hidden", "true");
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [chores, expandedRoutines]);
-
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8"><div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div><p className="text-sm font-bold text-sky-600">KIDS&apos; CHORES</p><h2 className="text-2xl font-bold">{isWeekday ? "Daily routines" : "Weekend chores"}</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{isWeekday ? "Choose a chore to mark it complete. Chore setup and editing live in Settings." : "Weekday routines are off today. Weekend chores and progress stay visible here."}</p></div>{children.length ? <div className="mt-5 grid gap-5 md:grid-cols-2">{children.map((child) => { const theme = child.name.toLowerCase() === "lucas" ? "bg-[linear-gradient(135deg,#fda4af,#fef08a,#86efac,#93c5fd,#c4b5fd)]" : child.name.toLowerCase() === "michael" ? "bg-emerald-100 dark:bg-emerald-400/10" : "bg-sky-50 dark:bg-sky-400/10"; return <div key={child.id} className={`rounded-3xl p-5 ${theme}`}><h3 className="text-2xl font-black">{child.name}</h3><div className="mt-5 space-y-5"><ChildIncentiveProgress child={child} chores={chores} mode={mode} targetCents={targetCents} targetStars={targetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} />{isWeekday && routines.map((routine) => { const routineKey = `${child.id}-${routine.id}`; const isExpanded = expandedRoutines[routineKey] ?? (routine.id !== "Before school" || currentHour < 12); const contentId = `routine-${routineKey.toLowerCase().replaceAll(" ", "-")}`; const routineChores = sortedChores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === routine.id); return <section key={routine.id} className="rounded-2xl bg-white/45 p-3"><div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setExpandedRoutines((current) => ({ ...current, [routineKey]: !isExpanded }))} aria-controls={contentId} aria-expanded={isExpanded} className="flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl text-left text-sm font-black text-slate-700 hover:bg-white/40"><AppIcon name="chevronRight" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${isExpanded ? "rotate-90" : ""}`}/><span className="mr-1.5">{routine.icon}</span>{routine.label}</button></div>{isExpanded && <div id={contentId} className="mt-3 grid gap-3">{routineChores.map((chore) => <div key={chore.id} data-chore-id={String(chore.id)} className="relative min-w-0"><button type="button" onClick={() => onToggle(chore)} className={`flex min-h-20 w-full items-center gap-2 rounded-2xl bg-white/90 p-3 text-left shadow-sm transition-transform active:scale-[.98] ${chore.completionId ? "opacity-65" : "hover:-translate-y-0.5"}`}><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-3xl shadow-sm">{!chore.emoji || chore.emoji === "✨" ? choreIcon(chore.title) : chore.emoji}</span><span className={`min-w-0 flex-1 text-base font-black leading-tight ${chore.completionId ? "text-slate-400 line-through" : "text-slate-800"}`}>{chore.title}</span><span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${chore.completionId ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200"}`}>{formatReward(chore.rewardCents, chore.rewardStars, mode)}</span><span className={`grid size-9 shrink-0 place-items-center rounded-lg border-2 text-xl font-black ${chore.completionId ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span></button>{celebratingChoreId === chore.id && <ChoreCelebration/>}</div>)}{routineChores.length === 0 && <p className="rounded-xl bg-white/50 px-3 py-4 text-center text-xs font-semibold text-slate-600">Routine is ready for today.</p>}</div>}</section>; })}</div></div>; })}</div> : <div className="mt-6 rounded-2xl bg-slate-50 p-8 text-center text-slate-500">Add a child in Settings to create a chore board.</div>}</div></section>;
-}
-
-
-function ListsPage({ lists, expandedListKeys, onToggleListExpanded, onAddList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { lists: SharedList[]; expandedListKeys: Record<string, boolean>; onToggleListExpanded: (kind: ListKind, listId: string | number) => void; onAddList: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
-  const { confirm, prompt } = useAppNotifications();
-  const [pin, setPin] = useState(""); const [privateLists, setPrivateLists] = useState<SharedList[] | null>(null); const [message, setMessage] = useState("");
-  async function unlock() { if (!supabase) return; const { data, error } = await supabase.rpc("get_private_lists", { p_pin: pin }); if (error) { setMessage(error.message); return; } setPrivateLists(data ?? []); setMessage(""); }
-  async function addPrivate() { const title = await prompt("What should this private list be called?", "", { title: "Add a private list", confirmLabel: "Add list" }); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list", { p_pin: pin, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
-  async function addPrivateItem(listId: string | number) { const title = await prompt("What should this private list item say?", "", { title: "Add a private item", confirmLabel: "Add item" }); if (!title?.trim() || !supabase) return; const { error } = await supabase.rpc("add_private_list_item", { p_pin: pin, p_list_id: listId, p_title: title.trim() }); if (error) { setMessage(error.message); return; } await unlock(); }
-  async function deletePrivate(list: SharedList) { if (!await confirm(`Delete “${list.title}” and all of its items?`, { title: "Delete private list?", destructive: true }) || !supabase) return; const { error } = await supabase.rpc("delete_private_list", { p_pin: pin, p_list_id: list.id }); if (error) { setMessage(error.message); return; } await unlock(); }
-  async function updatePrivateItem(item: SharedListItem, remove = false) { if (!supabase) return; const { error } = await supabase.rpc("update_private_list_item", { p_pin: pin, p_item_id: item.id, p_completed: remove ? item.done : !item.done, p_delete: remove }); if (error) { setMessage(error.message); return; } await unlock(); }
-  return <section className="mx-auto w-full min-w-0 max-w-[1800px] space-y-8 overflow-x-hidden px-5 pb-24 md:px-9 lg:pb-8"><div className="min-w-0"><div className="mb-5 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-sm font-bold text-violet-600">SHARED LISTS</p><h2 className="truncate text-3xl font-bold">Keep the house moving</h2></div><button onClick={onAddList} className="shrink-0 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">+ New list</button></div>{lists.length ? <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{lists.map((list, index) => <ListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("shared", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("shared", list.id)} onAddItem={onAddItem} onToggleItem={onToggleItem} onDeleteItem={onDeleteItem} onDeleteList={onDeleteList} />)}</div> : <p className="text-slate-500">No family lists yet.</p>}</div><div className="min-w-0 overflow-hidden rounded-[2rem] border border-violet-200 bg-violet-50 p-6 dark:border-violet-400/25 dark:bg-violet-500/10"><p className="text-sm font-bold text-violet-600">PRIVATE LISTS</p><h2 className="mt-1 text-2xl font-bold">🔒 Surprises stay private</h2>{privateLists === null ? <form onSubmit={(e) => { e.preventDefault(); void unlock(); }} className="mt-4 flex max-w-sm gap-2"><input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} inputMode="numeric" type="password" placeholder="Enter family PIN" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-slate-800"/><button className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">Unlock</button></form> : <><div className="mt-4 grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">{privateLists.map((list, index) => <PrivateListCard key={list.id} list={list} colorIndex={index} expanded={expandedListKeys[listPreferenceKey("private", list.id)] ?? false} onToggleExpanded={() => onToggleListExpanded("private", list.id)} onAddItem={addPrivateItem} onDelete={deletePrivate} onToggleItem={(item) => void updatePrivateItem(item)} onDeleteItem={(item) => { void confirm(`Delete “${item.title}”?`, { title: "Delete private item?", destructive: true }).then((approved) => { if (approved) void updatePrivateItem(item, true); }); }} />)}</div><div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void addPrivate()} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white">+ New private list</button><button onClick={() => { setPrivateLists(null); setPin(""); }} className="rounded-xl px-4 py-2 font-bold text-violet-700">Lock</button></div></>}{message && <p className="mt-3 text-sm font-bold text-rose-600">{message}</p>}</div></section>;
-}
-
-function PrivateListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onDelete, onToggleItem, onDeleteItem }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (id: string | number) => void; onDelete: (list: SharedList) => void; onToggleItem: (item: SharedListItem) => void; onDeleteItem: (item: SharedListItem) => void }) {
-  const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
-  const contentId = `private-list-content-${String(list.id)}`;
-  return <article className={`self-start min-w-0 overflow-hidden rounded-[2rem] p-6 text-slate-800 shadow-sm ring-1 ring-white/70 dark:text-white dark:ring-white/10 ${colors[colorIndex % colors.length]}`}><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex min-w-0 max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h3></div><div className="flex shrink-0 gap-2"><button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700">+</button><button type="button" onClick={() => onDelete(list)} title={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600"><AppIcon name="trash" className="size-4"/></button></div></div>{expanded && <div id={contentId} className="mt-5 min-w-0 space-y-2">{list.items.map((item) => <div key={item.id} className="flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700"><button type="button" onClick={() => onToggleItem(item)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button><span className={`min-w-0 flex-1 truncate ${item.done ? "line-through opacity-60" : ""}`}>{item.title}</span><button type="button" onClick={() => onDeleteItem(item)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button></div>)}{list.items.length === 0 && <p className="text-sm text-slate-600">Tap + to add an item.</p>}</div>}</article>;
-}
-
-function ListCard({ list, colorIndex, expanded, onToggleExpanded, onAddItem, onToggleItem, onDeleteItem, onDeleteList }: { list: SharedList; colorIndex: number; expanded: boolean; onToggleExpanded: () => void; onAddItem: (listId: string | number) => void; onToggleItem: (listId: string | number, itemId: string | number) => void; onDeleteItem: (listId: string | number, itemId: string | number) => void; onDeleteList: (list: SharedList) => void }) {
-  const colors = ["bg-rose-100 dark:bg-rose-500/45", "bg-sky-100 dark:bg-sky-500/45", "bg-amber-100 dark:bg-amber-400/45", "bg-emerald-100 dark:bg-emerald-500/45", "bg-violet-100 dark:bg-violet-500/45", "bg-orange-100 dark:bg-orange-500/45"];
-  const contentId = `shared-list-content-${String(list.id)}`;
-  return (
-    <article className={`self-start min-w-0 overflow-hidden rounded-[2rem] p-6 shadow-sm ring-1 ring-white/70 dark:ring-white/10 ${colors[colorIndex % colors.length]}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-bold"><button type="button" onClick={onToggleExpanded} aria-expanded={expanded} aria-controls={contentId} className="flex min-w-0 max-w-full items-center gap-2 text-left"><span className="truncate">{list.title}</span><AppIcon name={expanded ? "chevronDown" : "chevronRight"} className="size-4 shrink-0" /></button></h2>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={() => onAddItem(list.id)} className="grid size-9 place-items-center rounded-xl bg-white/80 text-lg font-bold text-violet-700 hover:bg-white">+</button>
-          <button type="button" onClick={() => onDeleteList(list)} title={`Delete ${list.title}`} aria-label={`Delete ${list.title}`} className="grid size-9 place-items-center rounded-xl bg-white/80 text-rose-600 hover:bg-rose-50">
-            <AppIcon name="trash" className="size-4" />
-          </button>
-        </div>
-      </div>
-      {expanded && <div id={contentId} className="mt-5 min-w-0 space-y-2">
-        {list.items.map((item) => (
-          <div key={item.id} className="flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700">
-            <button type="button" onClick={() => onToggleItem(list.id, item.id)} aria-label={`Complete ${item.title}`} className={`grid size-5 shrink-0 place-items-center rounded-md border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-400 text-transparent"}`}>✓</button>
-            <span className={`min-w-0 flex-1 truncate ${item.done ? "line-through text-slate-400" : ""}`}>{item.title}</span>
-            <button type="button" onClick={() => onDeleteItem(list.id, item.id)} title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} className="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100"><AppIcon name="trash" className="size-4"/></button>
-          </div>
-        ))}
-        {list.items.length === 0 && <p className="text-sm text-slate-500">Tap + to add an item.</p>}
-      </div>}
-    </article>
-  );
 }

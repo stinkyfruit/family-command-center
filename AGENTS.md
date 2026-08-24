@@ -35,4 +35,5 @@ For every new feature, work in small, verifiable slices:
 - Implement one focused slice at a time, keeping the feature usable after each slice. Avoid bundling unrelated cleanup into the same change.
 - After each slice, run proportionate checks: targeted linting, TypeScript, `git diff --check`, and a production build when routing, rendering, or integration risk warrants it. Use visual QA when a browser is available.
 - Report progress after each slice: identify the current slice, how many slices are complete, the estimated number remaining, what changed, and what was verified. Include the recommended next slice. Continue iteratively when the user says “next.”
+- After each completed slice, provide a concise, copyable commit message in a fenced code block.
 - Before considering a feature complete, check loading, empty, error, permission, responsive, keyboard, and reduced-motion states where they apply.
