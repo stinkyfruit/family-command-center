@@ -21,7 +21,8 @@ Imported event rows are a local projection of Google/iCloud. The external calend
 
 1. In Google Cloud Console, enable the **Pollen API** for a project and create an API key. The Pollen API provides daily forecasts for up to five days and returns a Universal Pollen Index plus provider guidance.
 2. Add the key as the server-only `GOOGLE_POLLEN_API_KEY` variable shown in `.env.example`. Do not prefix it with `NEXT_PUBLIC_` or commit `.env.local`.
-3. Restart `npm run dev`. The weather overlay will show the local pollen index and expandable guidance when the provider has data.
+3. For production, add `GOOGLE_POLLEN_API_KEY` in your hosting provider's project settings under **Environment Variables** for the **Production** environment, then redeploy. For Vercel, use **Project Settings → Environment Variables**. Do not commit the production key to the repository.
+4. Restart `npm run dev` locally or redeploy production. The weather overlay will show the local pollen index and expandable guidance when the provider has data.
 
 The app requests pollen through `/api/weather-pollen`, so the key never reaches the browser. Google requires attribution for displayed Pollen API results; the overlay labels the pollen tile as “Pollen data by Google.”
 

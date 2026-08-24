@@ -79,7 +79,7 @@ function WeatherGlyph({ code, isDay = true, label, className }: { code: number; 
     return () => media.removeEventListener("change", update);
   }, []);
   const fallback = code >= 95 ? "⛈️" : code >= 71 && code <= 77 ? "❄️" : code >= 45 && code <= 67 ? "🌧️" : code === 3 ? "☁️" : isDay ? "☀️" : "🌙";
-  return reduceMotion ? <span className={`${className} grid place-items-center text-2xl leading-none`} role="img" aria-label={label}>{fallback}</span> : <AccessibleLottie src={weatherAnimation(code, isDay)} label={label} wrapperClassName={className} className="size-full" />;
+  return reduceMotion ? <span className={`${className} grid place-items-center text-2xl leading-none`} role="img" aria-label={label}>{fallback}</span> : <AccessibleLottie src={weatherAnimation(code, isDay)} label={label} wrapperClassName={className} className="size-full" autoplay controls={false} />;
 }
 
 function OutdoorConditions({ insights }: { insights: WeatherInsights | null }) {
