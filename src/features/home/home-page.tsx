@@ -140,6 +140,15 @@ function writeCachedWeatherPollen(latitude: number, longitude: number, pollen: W
 
 type ChoreRealtimeRow = Record<string, unknown>;
 type ChoreRealtimePayload = { eventType: string; new: ChoreRealtimeRow; old: ChoreRealtimeRow };
+type MoodRealtimeRow = Record<string, unknown>;
+type MoodRealtimePayload = { eventType: string; new: MoodRealtimeRow; old: MoodRealtimeRow };
+
+function moodCheckinFromRealtimeRow(row: MoodRealtimeRow): MoodCheckin | null {
+  const id = row.id;
+  const memberId = row.member_id;
+  if ((typeof id !== "string" && typeof id !== "number") || (typeof memberId !== "string" && typeof memberId !== "number") || !isMoodKey(row.mood) || typeof row.checked_in_at !== "string") return null;
+  return { id, memberId, mood: row.mood, checkedInAt: row.checked_in_at };
+}
 
 function choreFromRealtimeRow(row: ChoreRealtimeRow, previous?: ChoreEntry): ChoreEntry | null {
   const id = row.id ?? previous?.id;
@@ -535,6 +544,33 @@ export default function Home() {
       void client.removeChannel(channel);
     };
   }, [householdId]);
+
+  useEffect(() => {
+    if (!supabase || !householdId || !householdDataLoaded) return;
+
+    const applyMoodChange = (payload: MoodRealtimePayload) => {
+      if (payload.eventType === "DELETE") {
+        const deletedId = payload.old.id;
+        if (typeof deletedId !== "string" && typeof deletedId !== "number") return;
+        setMoodCheckins((current) => current.filter((checkin) => String(checkin.id) !== String(deletedId)));
+        return;
+      }
+
+      const incoming = moodCheckinFromRealtimeRow(payload.new);
+      if (!incoming) return;
+      setMoodCheckins((current) => [incoming, ...current.filter((checkin) => String(checkin.id) !== String(incoming.id) && String(checkin.memberId) !== String(incoming.memberId))]);
+    };
+
+    const client = supabase;
+    const channel = client
+      .channel(`household-moods:${householdId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mood_checkins", filter: `household_id=eq.${householdId}` }, (payload) => applyMoodChange(payload))
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [householdDataLoaded, householdId]);
 
   useEffect(() => {
     if (!supabase || !householdId || !householdDataLoaded) return;
