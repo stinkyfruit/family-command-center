@@ -90,6 +90,10 @@ export default function Home() {
   const [householdName, setHouseholdName] = useState("Your Family Home");
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
+  const [householdDataLoading, setHouseholdDataLoading] = useState(false);
+  const [householdDataLoaded, setHouseholdDataLoaded] = useState(false);
+  const [householdDataError, setHouseholdDataError] = useState("");
+  const [householdDataRetryKey, setHouseholdDataRetryKey] = useState(0);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [inviteReady, setInviteReady] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
@@ -241,6 +245,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !householdId) return;
+    let cancelled = false;
+    // The query lifecycle begins when the household or retry key changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHouseholdDataLoading(true);
+    setHouseholdDataError("");
     const today = localDateInputValue(new Date());
     Promise.all([
       supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source").eq("household_id", householdId).order("starts_at"),
@@ -256,6 +265,13 @@ export default function Home() {
       supabase.from("mood_checkins").select("id, member_id, mood, checked_in_at").eq("household_id", householdId).eq("checkin_date", localDateInputValue(new Date())).order("checked_in_at", { ascending: false }),
       supabase.from("calendar_event_member_assignments").select("source, external_id, member_ids").eq("household_id", householdId),
     ]).then(([eventResult, todoResult, memberResult, choreResult, completionResult, payoutResult, listResult, listItemResult, connectionResult, appleFeedResult, moodResult, eventAssignmentResult]) => {
+      if (cancelled) return;
+      const queryError = [eventResult.error, todoResult.error, memberResult.error, choreResult.error, completionResult.error, payoutResult.error, listResult.error, listItemResult.error, connectionResult.error, appleFeedResult.error, moodResult.error, eventAssignmentResult.error].find(Boolean);
+      if (queryError) {
+        setHouseholdDataLoading(false);
+        setHouseholdDataError(`Could not load your family home: ${queryError.message}`);
+        return;
+      }
       const assignmentByEvent = new Map((eventAssignmentResult.data ?? []).map((assignment) => [`${assignment.source}:${assignment.external_id}`, assignment.member_ids]));
       if (eventResult.data) setEvents(displayEventsOnce(eventResult.data.map((event) => ({
         id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source,
@@ -311,8 +327,15 @@ export default function Home() {
         const initialMood = loadedMoods.find((checkin) => String(checkin.memberId) === initialMemberId)?.mood;
         if (initialMood) setSelectedMood(initialMood);
       }
+      setHouseholdDataLoaded(true);
+      setHouseholdDataLoading(false);
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setHouseholdDataLoading(false);
+      setHouseholdDataError(error instanceof Error ? `Could not load your family home: ${error.message}` : "Could not load your family home. Please try again.");
     });
-  }, [householdId, todayKey, user?.id]);
+    return () => { cancelled = true; };
+  }, [householdId, householdDataRetryKey, todayKey, user?.id]);
 
   useEffect(() => {
     if (!supabase || !user?.id) return;
@@ -1015,6 +1038,8 @@ export default function Home() {
 
   if (screenSaver) return <Screensaver onExit={() => setScreenSaver(false)} />;
   if (seasonalScreenSaver) return <SeasonalScreensaver onExit={() => setSeasonalScreenSaver(false)} />;
+  if (supabase && user && householdId && householdDataLoading && !householdDataLoaded) return <main aria-busy="true" className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section className="w-full max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Your family home</p><h1 className="mt-4 text-2xl font-bold">Getting everything ready…</h1><p className="mt-2 text-slate-500">Loading your calendar, tasks, chores, lists, and family check-ins.</p></section></main>;
+  if (supabase && user && householdId && householdDataError && !householdDataLoaded) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section role="alert" className="w-full max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-rose-600">Couldn&apos;t load your home</p><h1 className="mt-4 text-2xl font-bold">Let&apos;s try that again</h1><p className="mt-2 text-slate-500">{householdDataError}</p><button onClick={() => setHouseholdDataRetryKey((key) => key + 1)} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white transition hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2">Try again</button></section></main>;
 
   const visibleNavigationTabs = navigationTabs.filter(([tab]) => tab !== "chores" || showChoresTab).filter(([tab]) => tab !== "wishlist" || showWishlistTab);
   const celebrationActive = celebratingTaskId !== null || celebratingBirthdayDate !== null || celebratingChoreId !== null;
@@ -1025,6 +1050,8 @@ export default function Home() {
         {activeTab === "wishlist" && <div className="christmas-pine-scene pointer-events-none absolute inset-0 z-0" aria-hidden="true" />}
         <HomeNavigation tabs={visibleNavigationTabs} activeTab={activeTab} onNavigate={navigateToTab} />
         <HomeHeader householdName={householdName} activeTab={activeTab} dark={dark} voiceCommand={voiceCommand} onVoiceCommandChange={(value) => { setVoiceCommand(value); setVoiceMessage(""); }} onVoiceCommandComplete={(value) => { setVoiceCommand(""); applyVoiceCommand(value); }} onScreenSaver={() => setScreenSaver(true)} onToggleTheme={() => updateThemeMode(dark ? "light" : "dark")} />
+        {householdDataError && householdDataLoaded && <div role="alert" className="mx-auto mt-4 flex w-[calc(100%-2.5rem)] max-w-[1800px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 md:w-[calc(100%-4.5rem)]"><span>We couldn&apos;t refresh all of your family home data.</span><button onClick={() => setHouseholdDataRetryKey((key) => key + 1)} className="rounded-lg px-3 py-1.5 font-bold underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Try again</button></div>}
+        {householdDataLoading && householdDataLoaded && <p role="status" className="mx-auto mt-4 w-[calc(100%-2.5rem)] max-w-[1800px] text-sm text-slate-500 md:w-[calc(100%-4.5rem)]">Refreshing your family home…</p>}
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <HomeDashboard weather={weather} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={addTodo} onToggleTodo={toggleTodo} onOpenTasks={() => setActiveTab("tasks")} onOpenCalendar={() => setActiveTab("calendar")} onOpenCalendarDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={(memberId) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); }} onMoodChange={setSelectedMood} onSaveMood={saveMoodCheckin} calendarAnchor={calendarAnchor} />}
           {activeTab === "calendar" && <CalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={() => googleConnected || appleFeeds.some((feed) => feed.enabled) ? syncAllCalendars() : connectGoogleCalendar()} view={view} onViewChange={(value) => setView(value)} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={toggleCalendarMemberFilter} onToggleFamily={() => setShowFamilyEvents((visible) => !visible)} onEditEvent={setSelectedEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} onCreateEvent={openEventFormAt} showEventForm={showEventForm} onShowEventForm={() => setShowEventForm(true)} onCloseEventForm={() => setShowEventForm(false)} onSubmitEvent={addEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={(memberId) => setEventMemberIds((ids) => ids.includes(memberId) ? ids.filter((item) => item !== memberId) : [...ids, memberId])} />}
