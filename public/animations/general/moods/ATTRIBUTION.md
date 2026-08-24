@@ -14,4 +14,4 @@ which packages the original animated JSON files from Google’s
 [Noto Emoji Animation project](https://googlefonts.github.io/noto-emoji-animation/).
 
 The additional mood animations (`1f929.json`, `1f60c.json`, `1f624.json`, and
-`1f61f.json`) are original, lightweight Lottie animations created for this app.
+`1f61f.json`) are also Noto Emoji animations from the same source.
