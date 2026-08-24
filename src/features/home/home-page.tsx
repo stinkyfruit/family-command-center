@@ -239,6 +239,11 @@ export default function Home() {
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
       setAuthReady(true);
+    }).catch(() => {
+      // A temporary auth/network failure should not leave the app on its
+      // indefinite startup screen.
+      setUser(null);
+      setAuthReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
     return () => listener.subscription.unsubscribe();
@@ -798,6 +803,8 @@ export default function Home() {
       setGoogleConnected(true);
       await refreshCalendarEvents();
       setCalendarMessage(result.skipped ? "Google Calendar is already up to date." : `Google Calendar synced${result.imported ? ` · ${result.imported} events checked` : ""}.`);
+    } catch {
+      setCalendarMessage("Google Calendar could not be reached right now. Your family home is still available.");
     } finally {
       syncingGoogleRef.current = false;
       setSyncingGoogle(false);
@@ -816,7 +823,9 @@ export default function Home() {
       setGoogleConnected(Boolean(status.connected));
       if (status.connected && (!status.lastSyncedAt || Date.now() - new Date(status.lastSyncedAt).getTime() > 10 * 60_000)) await syncGoogleCalendar(false);
     }
-    void checkAndRefreshGoogleCalendar();
+    void checkAndRefreshGoogleCalendar().catch(() => {
+      setCalendarMessage("Google Calendar could not be checked right now. Your family home is still available.");
+    });
   }, [householdId, syncGoogleCalendar]);
 
   async function toggleGoogleCalendar(connection: GoogleConnection) {
