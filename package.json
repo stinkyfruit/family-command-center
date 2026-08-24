@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/generate-animation-manifest.mjs && next dev",
-    "build": "node scripts/generate-animation-manifest.mjs && next build",
+    "dev": "node scripts/generate-animation-manifest.mjs && next dev --webpack",
+    "build": "node scripts/generate-animation-manifest.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
