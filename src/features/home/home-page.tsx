@@ -306,9 +306,7 @@ export default function Home() {
           if (typeof household.show_chores_tab === "boolean") setShowChoresTab(household.show_chores_tab);
           if (typeof household.show_wishlist_tab === "boolean") setShowWishlistTab(household.show_wishlist_tab);
           if (household.chore_reward_mode === "money" || household.chore_reward_mode === "stars") setChoreRewardMode(household.chore_reward_mode);
-          // Older households may still have the previous $2.50/$10 target
-          // until the latest reward migration is applied.
-          if (typeof household.chore_reward_target_cents === "number") setChoreRewardTargetCents(200);
+          if (typeof household.chore_reward_target_cents === "number") setChoreRewardTargetCents(household.chore_reward_target_cents);
           if (typeof household.chore_reward_target_stars === "number") setChoreRewardTargetStars(household.chore_reward_target_stars);
         }
       }

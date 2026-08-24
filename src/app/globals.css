@@ -238,6 +238,29 @@ button[title^="Delete"]:has(svg)::after {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+@media (max-width: 640px) {
+  /* Keep daily chore titles visible when the reward and completion controls share a narrow card. */
+  button[class*="min-h-20"],
+  button[class*="min-h-16"] {
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  button[class*="min-h-20"] > span:nth-child(2),
+  button[class*="min-h-16"] > span:nth-child(2) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  button[class*="min-h-20"] > span:nth-child(4),
+  button[class*="min-h-16"] > span:nth-child(4) {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
 /* Chore deletion lives beside the card, not on top of the child-facing UI. */
 .relative:has(> button[title^="Delete"]) {
   display: flex;
