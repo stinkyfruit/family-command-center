@@ -219,6 +219,25 @@ button[title^="Delete"]:has(svg)::after {
   color: #f1f5f9;
 }
 
+/* Chore settings need comfortable reading sizes, especially on the narrow settings panel. */
+#settings-chores [class*="md:grid-cols-2"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#settings-chores [class*="text-[10px]"] {
+  font-size: .75rem;
+  line-height: 1rem;
+}
+
+#settings-chores [class*="text-sm"] {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+#settings-chores .bg-slate-50 [class*="lg:grid-cols-3"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 /* Chore deletion lives beside the card, not on top of the child-facing UI. */
 .relative:has(> button[title^="Delete"]) {
   display: flex;

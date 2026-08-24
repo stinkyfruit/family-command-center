@@ -206,6 +206,9 @@ export function localDateInputValue(date: Date) {
 export type ChoreRewardMode = "money" | "stars";
 export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
 export type ChoreCreationOptions = { isDaily?: boolean; isFixed?: boolean; scheduledFor?: string | null };
+export function isDailyRoutineChore(chore: ChoreEntry) {
+  return chore.isDaily && chore.isFixed && (chore.routine === "Before school" || chore.routine === "After school");
+}
 export const choreEmojiOptions = ["✨", "🧹", "🧸", "🐾", "🛏️", "🪥", "🍽️", "🧺", "📚", "🫧", "🌟", "🎯", "🐶", "🌈", "🚀", "💪", "🎨", "🧩", "🌱", "🦄", "🦖", "⭐"] as const;
 export const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },

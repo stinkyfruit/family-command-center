@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
 import type { ChoreEntry, ChoreRewardMode, Member } from "@/features/home/model";
-import { choreIcon, choreRoutines, isVisibleRoutineChore, notoIconPath, pickCelebrationAnimation } from "@/features/home/model";
+import { choreIcon, choreRoutines, isDailyRoutineChore, isVisibleRoutineChore, notoIconPath, pickCelebrationAnimation } from "@/features/home/model";
 
 export function ChoreCelebration({ animationSrc, label = "Chore complete" }: { animationSrc?: string; label?: string }) {
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -40,10 +40,13 @@ function ChildIncentiveProgress({ child, chores, mode, targetCents, targetStars,
   }));
   const weekendChores = chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === "Weekend" && chore.scheduledFor && weekendDates.has(chore.scheduledFor));
   const weekendTarget = mode === "money" ? weekendChores.reduce((sum, chore) => sum + chore.rewardCents, 0) : weekendChores.reduce((sum, chore) => sum + chore.rewardStars, 0);
-  const target = isWeekend ? weekendTarget : mode === "money" ? targetCents : targetStars;
+  const dailyChores = chores.filter((chore) => chore.assigneeMemberId === child.id && isDailyRoutineChore(chore));
+  const dailyPotential = mode === "money" ? dailyChores.reduce((sum, chore) => sum + chore.rewardCents, 0) : dailyChores.reduce((sum, chore) => sum + chore.rewardStars, 0);
+  const configuredTarget = mode === "money" ? targetCents : targetStars;
+  const target = isWeekend ? weekendTarget : dailyPotential || configuredTarget;
   const dailyEarned = isWeekend
     ? weekendChores.reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0)
-    : chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine !== "To-do" && chore.isDaily).reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0);
+    : dailyChores.reduce((sum, chore) => sum + (mode === "money" ? chore.completedRewardCents ?? 0 : chore.completedRewardStars ?? 0), 0);
   const runningEarnedCents = earnedCentsByMember[String(child.id)] ?? 0;
   const paidOutCents = paidOutCentsByMember[String(child.id)] ?? 0;
   const availableCents = runningEarnedCents - paidOutCents;
