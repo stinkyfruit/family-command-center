@@ -36,6 +36,9 @@ export function pickCelebrationAnimation() {
 export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
+export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number };
+export type WeatherForecastDay = { date: number; high: number; low: number; summary: string; code: number; precipitationProbability: number; sunrise: number; sunset: number };
+export type WeatherForecast = { hours: WeatherForecastHour[]; days: WeatherForecastDay[] };
 export type MoonPhaseKey = "new" | "waxing-crescent" | "first-quarter" | "waxing-gibbous" | "full" | "waning-gibbous" | "last-quarter" | "waning-crescent";
 export type MoonPhase = { key: MoonPhaseKey; name: string; illumination: number };
 export type MeteorShower = { name: string; peakDate: Date; activeStart: Date; activeEnd: Date };

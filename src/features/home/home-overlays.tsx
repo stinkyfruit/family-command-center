@@ -1,15 +1,20 @@
 "use client";
 
 import type { FormEvent } from "react";
-import type { Event, ChoreRewardMode, Member, SharedList, Todo } from "@/features/home/model";
+import type { Event, ChoreRewardMode, Member, SharedList, Todo, Weather, WeatherForecast } from "@/features/home/model";
 import { EventDetails, EventEditor } from "@/components/home/calendar";
 import { TaskEditor } from "@/components/home/task-components";
 import { ChoreCelebration } from "@/features/chores/chores-page";
 import { VoiceChoreEditor, VoiceListEditor, WeekendChoreEditor, type VoiceChoreDraft, type VoiceListDraft, type WeekendChoreDraft } from "@/features/voice/voice-command-editors";
+import { WeatherForecastOverlay } from "@/features/weather/weather-forecast";
 
 type WeekendChoreResult = { memberId: string; title: string; reward: number };
 
 type HomeOverlaysProps = {
+  weather: Weather | null;
+  weatherForecast: WeatherForecast | null;
+  showWeatherForecast: boolean;
+  onCloseWeatherForecast: () => void;
   selectedEvent: Event | null;
   members: Member[];
   onCloseSelectedEvent: () => void;
@@ -45,6 +50,10 @@ type HomeOverlaysProps = {
 };
 
 export function HomeOverlays({
+  weather,
+  weatherForecast,
+  showWeatherForecast,
+  onCloseWeatherForecast,
   selectedEvent,
   members,
   onCloseSelectedEvent,
@@ -79,6 +88,7 @@ export function HomeOverlays({
   celebratingBirthday,
 }: HomeOverlaysProps) {
   return <>
+    {showWeatherForecast && <WeatherForecastOverlay weather={weather} forecast={weatherForecast} onClose={onCloseWeatherForecast} />}
     {selectedEvent && <EventDetails event={selectedEvent} members={members} onClose={onCloseSelectedEvent} onEdit={onEditSelectedEvent} />}
     {editingEvent && <EventEditor key={editingEvent.id} event={editingEvent} members={members} onClose={onCloseEditingEvent} onSave={onSaveEvent} onApplySeries={onApplySeries} onDelete={onDeleteEvent} />}
     {showTodoForm && <TaskEditor title={todoTitle} dueDate={todoDueDate} assigneeMemberId={todoAssigneeMemberId} members={members} editing={Boolean(editingTodo)} onTitleChange={onTodoTitleChange} onDueDateChange={onTodoDueDateChange} onAssigneeChange={onTodoAssigneeChange} onClose={onCloseTodoForm} onSave={onSaveTodo} />}
