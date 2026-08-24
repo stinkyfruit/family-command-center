@@ -197,6 +197,7 @@ export function localDateInputValue(date: Date) {
 }
 export type ChoreRewardMode = "money" | "stars";
 export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
+export type ChoreCreationOptions = { isDaily?: boolean; isFixed?: boolean; scheduledFor?: string | null };
 export const choreRoutines = [
   { id: "Before school", label: "Before school", icon: "☀️" },
   { id: "After school", label: "After school & nighttime", icon: "🎒" },
@@ -207,7 +208,7 @@ export const fixedRoutineChoreKeys = new Set([
   "after school|change clothes and put school clothes in laundry basket", "after school|sharpen pencils", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
 ]);
 export function isVisibleRoutineChore(chore: ChoreEntry, today: string) {
-  return chore.routine === "To-do" || fixedRoutineChoreKeys.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today);
+  return chore.routine === "To-do" || chore.isFixed || fixedRoutineChoreKeys.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today);
 }
 export type SharedListItem = { id: string | number; title: string; done: boolean };
 export type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };

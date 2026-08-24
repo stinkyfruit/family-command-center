@@ -5,6 +5,19 @@
 3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql` and `supabase/migrations/20260822_add_mood_checkins.sql`.
 4. Restart `npm run dev`. The current screen remains a local demo until the next implementation slice connects authentication and data queries.
 
+## Chore behavior — source of truth
+
+This section defines the household chore model. Existing and future features must follow it unless the user explicitly requests a different behavior; when a request conflicts with it or leaves the chore type ambiguous, ask before changing the model.
+
+- Creating a household creates the adult household member but does not create chores by itself.
+- Adding a child preloads the household's existing daily chore template for that child. The seeded chores are recurring daily chores split between **Before school** and **After school**.
+- In Settings → Chores → Manage chores, adults can manage chores for each child:
+  - **Daily chores** repeat every day. New daily chores must be explicitly created as either **Daily morning** (`Before school`) or **Daily evening** (`After school`). They are stored with `is_daily = true`, `is_fixed = true`, and no `scheduled_for` date.
+  - **Ad hoc chores** are extra tasks and are not part of the daily routine or daily reward template. The Manage chores **Ad hoc** action creates an anytime `To-do` with `is_daily = false`; Weekend chores remain date-specific one-offs managed in the Weekend chores tab.
+- Daily and ad hoc chores can be renamed, added, or deleted from Settings. These changes are household-specific and must persist using the chore's `household_id` and child assignment.
+- Chore rewards are managed separately in the Rewards tab. Editing a chore's name must not change its reward, and adding or deleting a daily chore must not silently rebalance other chores' rewards.
+- The UI must make the type obvious by separating daily and ad hoc chores and labeling the relevant routine/date. Use the shared app notifications, confirmations, and `AppIcon` controls for chore actions.
+
 ## Google Calendar sync
 
 1. Run `supabase/migrations/20260815_add_apple_calendar_feeds.sql`, `supabase/migrations/20260815_add_event_categories.sql`, `supabase/migrations/20260815_add_event_locations.sql`, `supabase/migrations/20260815_add_event_members.sql`, `supabase/migrations/20260815_add_google_calendar_credentials.sql`, `supabase/migrations/20260815_add_google_calendar_selection.sql`, `supabase/migrations/20260815_fix_google_calendar_credentials_access.sql`, `supabase/migrations/20260815_preserve_imported_event_categories.sql`, `supabase/migrations/20260817_track_imported_calendar_event_sources.sql`, `supabase/migrations/20260817_add_recurring_event_member_assignments.sql`, `supabase/migrations/20260822_add_calendar_event_assignments.sql`, and `supabase/migrations/20260822_repair_imported_event_assignment_projection.sql`, in the Supabase SQL Editor.

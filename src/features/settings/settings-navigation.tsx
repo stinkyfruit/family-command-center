@@ -9,7 +9,7 @@ const settingsSections: Array<{ id: SettingsSectionId; label: string; descriptio
   { id: "settings-personal", label: "Personal", description: "Appearance and nickname", icon: "settings" },
   { id: "settings-family", label: "Family", description: "People and home tabs", icon: "home" },
   { id: "settings-calendars", label: "Calendars", description: "Google and Apple feeds", icon: "calendar" },
-  { id: "settings-chores", label: "Chores", description: "Rewards and payouts", icon: "chores" },
+  { id: "settings-chores", label: "Chores", description: "Rewards and chore names", icon: "chores" },
   { id: "settings-account", label: "Account", description: "Sign out", icon: "signOut" },
 ];
 

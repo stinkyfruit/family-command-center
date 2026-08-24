@@ -23,6 +23,7 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 - Lottie animations are generated into `src/generated/animation-manifest.ts` by `scripts/generate-animation-manifest.mjs` — regenerate, don't hand-edit ignores (run `npm run dev`/`npm run build` which run the generator first).
 - Keep route handlers lean: delegate Google Calendar OAuth/sync logic to `src/lib/google-calendar.ts`.
 - External calendar events are a replaceable local projection: Google/iCloud are authoritative for imported event existence, local deletion must not block re-import, and family assignments must be persisted separately by source plus external event identity (with a separate recurring-series assignment for series-wide rules).
+- Chore behavior is defined by the `Chore behavior — source of truth` section in `SETUP.md`. Follow that contract for all existing and new chore features; if a requested change conflicts with it or does not specify whether a chore is daily or ad hoc, ask the user before proceeding.
 - Match existing import style, validation, and error-handling patterns in touched files.
 - When reverting or abandoning a feature, remove all introduced code and configuration that will no longer be used. For database objects or rows introduced by the feature, add a separate, explicit cleanup migration rather than rewriting or deleting an already-applied migration; document destructive cleanup clearly.
 
