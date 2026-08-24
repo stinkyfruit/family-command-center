@@ -170,8 +170,8 @@ article .mt-5.space-y-2 > button > span:first-child.text-emerald-500::after {
 .weather-moon--first-quarter::after,
 .weather-moon--last-quarter::after { display: none; }
 .weather-moon--waxing-crescent::after { transform: translateX(-36%); }
-.weather-moon--waxing-gibbous::after { transform: translateX(-12%); }
-.weather-moon--waning-gibbous::after { transform: translateX(12%); }
+.weather-moon--waxing-gibbous::after { transform: translateX(-82%); }
+.weather-moon--waning-gibbous::after { transform: translateX(82%); }
 .weather-moon--waning-crescent::after { transform: translateX(36%); }
 .weather-moon--first-quarter { background: linear-gradient(90deg, #1b2754 0 50%, #fff7d1 50%); }
 .weather-moon--last-quarter { background: linear-gradient(90deg, #fff7d1 0 50%, #1b2754 50%); }
