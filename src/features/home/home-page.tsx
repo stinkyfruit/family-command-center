@@ -134,7 +134,12 @@ export default function Home() {
   const [weekendChoreDraft, setWeekendChoreDraft] = useState<WeekendChoreDraft | null>(null);
   const [voiceListDraft, setVoiceListDraft] = useState<VoiceListDraft | null>(null);
   const [expandedListKeys, setExpandedListKeys] = useState<Record<string, boolean>>({});
+  const sharedListIdsRef = useRef(new Set<string>());
   const completingChoreIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    sharedListIdsRef.current = new Set(sharedLists.map((list) => String(list.id)));
+  }, [sharedLists]);
 
   useEffect(() => {
     if (screenSaver || !window.matchMedia("(min-width: 768px)").matches) return;
@@ -339,6 +344,58 @@ export default function Home() {
     });
     return () => { cancelled = true; };
   }, [householdId, householdDataRetryKey, todayKey, user?.id]);
+
+  useEffect(() => {
+    if (!supabase || !householdId) return;
+
+    const applyListChange = (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+      const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as { id?: string; title?: string; icon?: string };
+      if (!row.id) return;
+      const id = row.id;
+      const listId = String(id);
+
+      if (payload.eventType === "DELETE") sharedListIdsRef.current.delete(listId);
+      else sharedListIdsRef.current.add(listId);
+
+      setSharedLists((current) => {
+        if (payload.eventType === "DELETE") return current.filter((list) => String(list.id) !== listId);
+        const incoming = { id, title: row.title ?? "Untitled list", icon: row.icon ?? "☰" };
+        const existing = current.find((list) => String(list.id) === listId);
+        if (existing) return current.map((list) => String(list.id) === listId ? { ...list, ...incoming } : list);
+        return [...current, { ...incoming, items: [] }];
+      });
+    };
+
+    const applyListItemChange = (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+      const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as { id?: string; list_id?: string; title?: string; completed?: boolean };
+      if (!row.id) return;
+      const id = row.id;
+      const itemId = String(id);
+      const listId = row.list_id ? String(row.list_id) : null;
+      if (payload.eventType !== "DELETE" && (!listId || !sharedListIdsRef.current.has(listId))) return;
+
+      setSharedLists((current) => current.map((list) => {
+        if (payload.eventType === "DELETE") {
+          return { ...list, items: list.items.filter((item) => String(item.id) !== itemId) };
+        }
+        if (String(list.id) !== listId) return list;
+        const incoming = { id, title: row.title ?? "Untitled item", done: Boolean(row.completed) };
+        const existing = list.items.some((item) => String(item.id) === itemId);
+        return { ...list, items: existing ? list.items.map((item) => String(item.id) === itemId ? { ...item, ...incoming } : item) : [...list.items, incoming] };
+      }));
+    };
+
+    const client = supabase;
+    const channel = client
+      .channel(`household-shared-lists:${householdId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lists", filter: `household_id=eq.${householdId}` }, (payload) => applyListChange(payload))
+      .on("postgres_changes", { event: "*", schema: "public", table: "list_items" }, (payload) => applyListItemChange(payload))
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [householdId]);
 
   useEffect(() => {
     if (!supabase || !user?.id) return;
@@ -851,7 +908,7 @@ export default function Home() {
     if (supabase) {
       const { data, error } = await supabase.from("lists").insert({ household_id: householdId, created_by: user.id, title: title.trim(), icon }).select("id, title, icon").single();
       if (error) { notify(error.message); return; }
-      if (data) setSharedLists((items) => [...items, { ...data, items: [] }]);
+      if (data) setSharedLists((items) => items.some((item) => String(item.id) === String(data.id)) ? items : [...items, { ...data, items: [] }]);
     } else setSharedLists((items) => [...items, { id: Date.now().toString(), title: title.trim(), icon, items: [] }]);
   }
 
@@ -861,7 +918,7 @@ export default function Home() {
     if (supabase) {
       const { data, error } = await supabase.from("list_items").insert({ list_id: listId, title: title.trim() }).select("id, title, completed").single();
       if (error) { notify(error.message); return; }
-      if (data) setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: data.id, title: data.title, done: data.completed }] } : list));
+      if (data) setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.some((item) => String(item.id) === String(data.id)) ? list.items : [...list.items, { id: data.id, title: data.title, done: data.completed }] } : list));
     } else setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: Date.now().toString(), title: title.trim(), done: false }] } : list));
   }
 
@@ -870,7 +927,13 @@ export default function Home() {
     if (!item) return;
     const done = !item.done;
     setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.map((entry) => entry.id === itemId ? { ...entry, done } : entry) } : list));
-    if (supabase) await supabase.from("list_items").update({ completed: done }).eq("id", itemId);
+    if (supabase) {
+      const { error } = await supabase.from("list_items").update({ completed: done }).eq("id", itemId);
+      if (error) {
+        setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.map((entry) => entry.id === itemId ? { ...entry, done: item.done } : entry) } : list));
+        notify(`Could not update this list item: ${error.message}`);
+      }
+    }
   }
 
   async function deleteListItem(listId: string | number, itemId: string | number) {
