@@ -788,9 +788,9 @@ export default function Home() {
       const response = await fetch("/api/google-calendar/sync", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ householdId, force }) });
       const result = await response.json();
       if (!response.ok) {
-        if (result.error === "Google Calendar credentials were not found.") {
+        if (result.tokenRevoked || result.error === "Google Calendar credentials were not found.") {
           setGoogleConnected(false);
-          setCalendarMessage("Google Calendar needs to be reconnected. Tap Connect Google to finish setup.");
+          setCalendarMessage(result.tokenRevoked ? "Google Calendar token revoked. Tap Connect Google to reconnect." : "Google Calendar needs to be reconnected. Tap Connect Google to finish setup.");
         } else setCalendarMessage(result.error ?? "Could not sync Google Calendar.");
         return;
       }
@@ -946,13 +946,25 @@ export default function Home() {
     } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed, scheduledFor, rewardCents, rewardStars }]);
   }
 
+  async function reorderChores(choreIds: Array<string | number>) {
+    const previousChores = chores;
+    const nextSortOrders = new Map(choreIds.map((choreId, index) => [String(choreId), index + 1]));
+    setChores((items) => items.map((chore) => nextSortOrders.has(String(chore.id)) ? { ...chore, sortOrder: nextSortOrders.get(String(chore.id)) ?? chore.sortOrder } : chore));
+    if (!supabase || !householdId) return;
+    const results = await Promise.all(choreIds.map((choreId, index) => supabase!.from("chores").update({ sort_order: index + 1 }).eq("id", choreId).eq("household_id", householdId)));
+    const error = results.find((result) => result.error)?.error;
+    if (error) {
+      setChores(previousChores);
+      notify(`Could not save the chore order: ${error.message}`);
+    }
+  }
+
   const editChore = useCallback(async (chore: ChoreEntry) => {
     const title = (await prompt("Update this chore’s name.", chore.title, { title: "Edit chore", confirmLabel: "Save" }))?.trim();
     if (!title || title === chore.title) return;
-    const emoji = choreIcon(title);
-    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title, emoji } : item));
+    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title } : item));
     if (supabase && householdId) {
-      const { error } = await supabase.from("chores").update({ title, emoji }).eq("id", chore.id).eq("household_id", householdId);
+      const { error } = await supabase.from("chores").update({ title }).eq("id", chore.id).eq("household_id", householdId);
       if (error) {
         setChores((items) => items.map((item) => item.id === chore.id ? chore : item));
         notify(`Could not update this chore: ${error.message}`);
@@ -1194,6 +1206,16 @@ export default function Home() {
     setHouseholdName,
   });
 
+  useEffect(() => {
+    const handleChoreEmojiUpdate: EventListener = (event) => {
+      const detail = (event as unknown as CustomEvent<{ choreId: string | number; emoji: string }>).detail;
+      const chore = chores.find((item) => String(item.id) === String(detail?.choreId));
+      if (chore && detail?.emoji) void settingsActions.updateChoreEmoji(chore, detail.emoji);
+    };
+    window.addEventListener("family-update-chore-emoji", handleChoreEmojiUpdate);
+    return () => window.removeEventListener("family-update-chore-emoji", handleChoreEmojiUpdate);
+  }, [chores, settingsActions]);
+
   function navigateToTab(tab: HomeTab) {
     if (tab !== "settings" && window.location.hash.startsWith("#settings-")) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
@@ -1225,7 +1247,7 @@ export default function Home() {
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <HomeDashboard weather={weather} onOpenWeatherForecast={() => setShowWeatherForecast(true)} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={addTodo} onToggleTodo={toggleTodo} onOpenTasks={() => setActiveTab("tasks")} onOpenCalendar={() => setActiveTab("calendar")} onOpenCalendarDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={(memberId) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); }} onMoodChange={setSelectedMood} onSaveMood={saveMoodCheckin} calendarAnchor={calendarAnchor} />}
           {activeTab === "calendar" && <CalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={() => googleConnected || appleFeeds.some((feed) => feed.enabled) ? syncAllCalendars() : connectGoogleCalendar()} view={view} onViewChange={(value) => setView(value)} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={toggleCalendarMemberFilter} onToggleFamily={() => setShowFamilyEvents((visible) => !visible)} onEditEvent={setSelectedEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} onCreateEvent={openEventFormAt} showEventForm={showEventForm} onShowEventForm={() => setShowEventForm(true)} onCloseEventForm={() => setShowEventForm(false)} onSubmitEvent={addEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={(memberId) => setEventMemberIds((ids) => ids.includes(memberId) ? ids.filter((item) => item !== memberId) : [...ids, memberId])} />}
-        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={toggleChore} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={settingsActions.recordChorePayout} onResetToday={settingsActions.resetTodayChoreCompletions} onClearAll={settingsActions.clearAllChoreIncentiveTotals} onAddChore={addChore} onDeleteChore={settingsActions.deleteChore} onRewardModeChange={settingsActions.updateChoreRewardMode} chores={chores} onEditReward={settingsActions.editChoreReward} onEditChore={settingsActions.editChore} members={members} currentUserId={user?.id ?? null} onMemberColorChange={settingsActions.updateMemberColor} onAddMember={settingsActions.addMember} onRemoveMember={settingsActions.removeMember} onUpdateCurrentMemberName={settingsActions.updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={settingsActions.updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={settingsActions.inviteAdult} onSignOut={settingsActions.signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
+        </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={toggleChore} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={settingsActions.recordChorePayout} onResetToday={settingsActions.resetTodayChoreCompletions} onClearAll={settingsActions.clearAllChoreIncentiveTotals} onAddChore={addChore} onDeleteChore={settingsActions.deleteChore} onRewardModeChange={settingsActions.updateChoreRewardMode} chores={chores} onEditReward={settingsActions.editChoreReward} onEditChore={settingsActions.editChore} onReorderChores={reorderChores} members={members} currentUserId={user?.id ?? null} onMemberColorChange={settingsActions.updateMemberColor} onAddMember={settingsActions.addMember} onRemoveMember={settingsActions.removeMember} onUpdateCurrentMemberName={settingsActions.updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={settingsActions.updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={settingsActions.inviteAdult} onSignOut={settingsActions.signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
       <HomeOverlays weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} showWeatherForecast={showWeatherForecast} onCloseWeatherForecast={() => setShowWeatherForecast(false)} selectedEvent={selectedEvent} members={members} onCloseSelectedEvent={() => setSelectedEvent(null)} onEditSelectedEvent={() => { if (!selectedEvent) return; setEditingEvent(selectedEvent); setSelectedEvent(null); }} editingEvent={editingEvent} onCloseEditingEvent={() => setEditingEvent(null)} onSaveEvent={saveEvent} onApplySeries={applySeriesMembers} onDeleteEvent={deleteEvent} showTodoForm={showTodoForm} todoTitle={todoTitle} todoDueDate={todoDueDate} todoAssigneeMemberId={todoAssigneeMemberId} editingTodo={editingTodo} onTodoTitleChange={setTodoTitle} onTodoDueDateChange={setTodoDueDate} onTodoAssigneeChange={setTodoAssigneeMemberId} onCloseTodoForm={() => { setEditingTodo(null); setShowTodoForm(false); }} onSaveTodo={saveTodo} voiceChoreDraft={voiceChoreDraft} onCloseVoiceChore={() => setVoiceChoreDraft(null)} onSaveVoiceChore={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} weekendChoreDraft={weekendChoreDraft} choreRewardMode={choreRewardMode} onCloseWeekendChore={() => setWeekendChoreDraft(null)} onSaveWeekendChore={async (draft) => { await addChore(draft.memberId, "Weekend", draft.title, new Date().toLocaleDateString("en-CA"), draft.reward); setWeekendChoreDraft(null); }} voiceListDraft={voiceListDraft} sharedLists={sharedLists} onCloseVoiceList={() => setVoiceListDraft(null)} onSaveVoiceList={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} celebratingTask={celebratingTaskId !== null} celebratingBirthday={celebratingBirthdayDate !== null} />
     </main>

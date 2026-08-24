@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { ChoreEntry, ChoreRewardMode, Event, Member, Todo } from "@/features/home/model";
-import { choreIcon, isHexColor, memberColorOptions } from "@/features/home/model";
+import { isHexColor, memberColorOptions } from "@/features/home/model";
 
 type NotificationOptions = { title?: string; destructive?: boolean };
 type PromptOptions = { title?: string; confirmLabel?: string };
@@ -186,13 +186,24 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
   async function editChore(chore: ChoreEntry) {
     const title = (await prompt("Update this chore’s name.", chore.title, { title: "Edit chore", confirmLabel: "Save" }))?.trim();
     if (!title || title === chore.title) return;
-    const emoji = choreIcon(title);
-    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title, emoji } : item));
+    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title } : item));
     if (supabase && householdId) {
-      const { error } = await supabase.from("chores").update({ title, emoji }).eq("id", chore.id).eq("household_id", householdId);
+      const { error } = await supabase.from("chores").update({ title }).eq("id", chore.id).eq("household_id", householdId);
       if (error) {
         setChores((items) => items.map((item) => item.id === chore.id ? chore : item));
         notify(`Could not update this chore: ${error.message}`);
+      }
+    }
+  }
+
+  async function updateChoreEmoji(chore: ChoreEntry, emoji: string) {
+    if (!emoji || emoji === chore.emoji) return;
+    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, emoji } : item));
+    if (supabase && householdId) {
+      const { error } = await supabase.from("chores").update({ emoji }).eq("id", chore.id).eq("household_id", householdId);
+      if (error) {
+        setChores((items) => items.map((item) => item.id === chore.id ? chore : item));
+        notify(`Could not update this chore icon: ${error.message}`);
       }
     }
   }
@@ -333,5 +344,5 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     return error ? { error: error.message } : {};
   }
 
-  return { addMember, updateCurrentMemberName, removeMember, editChoreReward, editChore, updateChoreRewardMode, recordChorePayout, resetTodayChoreCompletions, clearAllChoreIncentiveTotals, deleteChore, updateTabVisibility, updateMemberColor, createHousehold, inviteAdult, signOut };
+  return { addMember, updateCurrentMemberName, removeMember, editChoreReward, editChore, updateChoreEmoji, updateChoreRewardMode, recordChorePayout, resetTodayChoreCompletions, clearAllChoreIncentiveTotals, deleteChore, updateTabVisibility, updateMemberColor, createHousehold, inviteAdult, signOut };
 }

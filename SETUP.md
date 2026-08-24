@@ -15,6 +15,8 @@ This section defines the household chore model. Existing and future features mus
   - **Daily chores** repeat every day. New daily chores must be explicitly created as either **Daily morning** (`Before school`) or **Daily evening** (`After school`). They are stored with `is_daily = true`, `is_fixed = true`, and no `scheduled_for` date.
   - **Ad hoc chores** are extra tasks and are not part of the daily routine or daily reward template. The Manage chores **Ad hoc** action creates an anytime `To-do` with `is_daily = false`; Weekend chores remain date-specific one-offs managed in the Weekend chores tab.
 - Daily and ad hoc chores can be renamed, added, or deleted from Settings. These changes are household-specific and must persist using the chore's `household_id` and child assignment.
+- Chore icons are household data stored in `emoji`. New chores receive an automatic starting icon, adults can choose a fun emoji or picture from the curated icon menu in Manage chores, and renaming a chore must not overwrite a chosen icon.
+- Chore order is editable in Settings within each child’s individual list: daily morning, daily evening, and ad hoc. Drag-and-drop and the keyboard Up/Down controls update the persisted `sort_order`; reordering must not move a chore between daily and ad hoc types or between routines.
 - Chore rewards are managed separately in the Rewards tab. Editing a chore's name must not change its reward, and adding or deleting a daily chore must not silently rebalance other chores' rewards.
 - The UI must make the type obvious by separating daily and ad hoc chores and labeling the relevant routine/date. Use the shared app notifications, confirmations, and `AppIcon` controls for chore actions.
 

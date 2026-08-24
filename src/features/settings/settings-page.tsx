@@ -22,9 +22,11 @@ export type SettingsPageProps = SettingsPageContentProps & {
   chores: ChoreEntry[];
   onEditReward: (chore: ChoreEntry) => void;
   onEditChore: (chore: ChoreEntry) => void;
+  onReorderChores: (choreIds: Array<string | number>) => void;
+  onEmojiChange?: (chore: ChoreEntry, emoji: string) => void;
 };
 
-export function SettingsPage({ choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onClearAll, onAddChore, onDeleteChore, onRewardModeChange, chores, onEditReward, onEditChore, ...props }: SettingsPageProps) {
+export function SettingsPage({ choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onClearAll, onAddChore, onDeleteChore, onRewardModeChange, chores, onEditReward, onEditChore, onReorderChores, onEmojiChange, ...props }: SettingsPageProps) {
   const [settingsUnlocked, setSettingsUnlocked] = useState(!supabase);
   const [choreSettingsTab, setChoreSettingsTab] = useState<ChoreSettingsTab>("rewards");
   const currentMember = props.members.find((member) => props.currentUserId && String(member.userId) === props.currentUserId);
@@ -33,7 +35,7 @@ export function SettingsPage({ choreRewardMode, choreRewardTargetCents, choreRew
     {settingsUnlocked && <SettingsNavigation showChores={props.showChoresTab} showAccount={Boolean(supabase)} />}
     <SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} />
     {settingsUnlocked && <>
-      {props.showChoresTab && <ChoreSettingsSection activeTab={choreSettingsTab} onTabChange={setChoreSettingsTab} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} onPayOut={onPayOut} onResetToday={onResetToday} onClearAll={onClearAll} onAddChore={onAddChore} onDeleteChore={onDeleteChore} onRewardModeChange={onRewardModeChange} chores={chores} onEditReward={onEditReward} onEditChore={onEditChore} members={props.members} currentMember={currentMember} />}
+      {props.showChoresTab && <ChoreSettingsSection activeTab={choreSettingsTab} onTabChange={setChoreSettingsTab} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} onPayOut={onPayOut} onResetToday={onResetToday} onClearAll={onClearAll} onAddChore={onAddChore} onDeleteChore={onDeleteChore} onRewardModeChange={onRewardModeChange} chores={chores} onEditReward={onEditReward} onEditChore={onEditChore} onReorderChores={onReorderChores} onEmojiChange={onEmojiChange} members={props.members} currentMember={currentMember} />}
       {supabase && <AccountSettings onSignOut={props.onSignOut} />}
     </>}
   </>;

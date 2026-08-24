@@ -7,6 +7,10 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isRevokedTokenError(message: string) {
+  return /invalid_grant|token has been expired or revoked|token.*revoked|refresh token.*invalid/i.test(message);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requestUser(request.headers.get("authorization"));
@@ -18,7 +22,11 @@ export async function POST(request: NextRequest) {
     const staleConnections = force ? connections : connections.filter((connection) => !connection.last_synced_at || Date.now() - new Date(connection.last_synced_at).getTime() > 10 * 60_000);
     const count = await Promise.all(staleConnections.map(importGoogleEvents));
     return NextResponse.json({ imported: count.reduce((total, value) => total + value, 0), skipped: staleConnections.length === 0 });
-  } catch (error) { return NextResponse.json({ error: errorMessage(error, "Could not sync calendars.") }, { status: 500 }); }
+  } catch (error) {
+    const message = errorMessage(error, "Could not sync calendars.");
+    if (isRevokedTokenError(message)) return NextResponse.json({ error: "Google Calendar token revoked.", tokenRevoked: true }, { status: 401 });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function GET(request: NextRequest) {

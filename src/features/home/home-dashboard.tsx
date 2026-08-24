@@ -65,6 +65,6 @@ export function HomeDashboard({
       <div className="min-w-0 md:hidden"><PhoneHomeCalendar events={visibleCalendarEvents} members={members} onOpenDay={onOpenCalendarDay} onOpenEvent={onOpenEvent} /></div>
       <FamilyMoodCard members={members} checkins={moodCheckins} selectedMemberId={moodMemberId} selectedMood={selectedMood} saving={savingMood} message={moodMessage} onMemberChange={onMoodMemberChange} onMoodChange={onMoodChange} onSave={onSaveMood} />
     </section>
-    <CalendarPreview anchor={calendarAnchor} events={visibleCalendarEvents} members={members} onOpenCalendar={onOpenCalendar} onOpenDay={onOpenCalendarDay} />
+    <CalendarPreview anchor={calendarAnchor} events={visibleCalendarEvents} members={members} onOpenCalendar={onOpenCalendar} onOpenDay={onOpenCalendarDay} onOpenEvent={onOpenEvent} />
   </>;
 }
