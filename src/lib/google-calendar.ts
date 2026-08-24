@@ -52,6 +52,9 @@ export function verifyGoogleState(value: string): OAuthState | null {
   } catch { return null; }
 }
 
+type GoogleCalendarEvent = { id: string; recurringEventId?: string; summary?: string; description?: string; location?: string; status?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } };
+type GoogleEventsPage = { items?: GoogleCalendarEvent[]; nextPageToken?: string; error?: { message?: string } };
+
 export async function importGoogleEvents(connection: { id: string; household_id: string; connected_by: string; google_calendar_id: string }) {
   const admin = serverSupabase();
   const { data: credentialRows, error } = await admin.rpc("get_google_calendar_credentials", { p_connection_id: connection.id });
@@ -68,10 +71,19 @@ export async function importGoogleEvents(connection: { id: string; household_id:
   }
   const start = new Date();
   const end = new Date(); end.setFullYear(end.getFullYear() + 1);
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&maxResults=2500`, { headers: { Authorization: `Bearer ${accessToken}` } });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
-  const googleItems = (result.items ?? []).filter((item: { status?: string }) => item.status !== "cancelled") as { id: string; recurringEventId?: string; summary?: string; description?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
+  const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.google_calendar_id)}/events`;
+  const query = new URLSearchParams({ singleEvents: "true", orderBy: "startTime", timeMin: start.toISOString(), timeMax: end.toISOString(), maxResults: "2500" });
+  const allGoogleItems: GoogleCalendarEvent[] = [];
+  let nextPageToken: string | undefined;
+  do {
+    if (nextPageToken) query.set("pageToken", nextPageToken);
+    const response = await fetch(`${eventsUrl}?${query.toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json() as GoogleEventsPage;
+    if (!response.ok) throw new Error(result.error?.message ?? "Google Calendar sync failed.");
+    allGoogleItems.push(...(result.items ?? []));
+    nextPageToken = result.nextPageToken;
+  } while (nextPageToken);
+  const googleItems = allGoogleItems.filter((item) => item.status !== "cancelled");
   const externalIds = googleItems.map((item) => item.id);
   const { data: trackedEvents } = await admin.from("events").select("id, external_id").eq("google_calendar_connection_id", connection.id);
   const seriesExternalIds = [...new Set(googleItems.flatMap((item) => item.recurringEventId ? [`${connection.id}:${item.recurringEventId}`] : []))];
@@ -103,9 +115,9 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     if (upsertError) throw upsertError;
   }
   // Only remove events that a prior sync already tied to this exact calendar.
-  // If Google gave us a paginated result, leave cleanup for the next complete sync.
+  // Every Google result page has been fetched, so this is a complete projection.
   const removedIds = (trackedEvents ?? []).filter((event) => !externalIds.includes(event.external_id)).map((event) => event.id);
-  if (!result.nextPageToken && removedIds.length) {
+  if (removedIds.length) {
     const { error: cleanupError } = await admin.from("events").delete().in("id", removedIds);
     if (cleanupError) throw cleanupError;
   }

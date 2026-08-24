@@ -52,6 +52,36 @@ import { createSettingsActions } from "@/features/settings/settings-actions";
 
 type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
 const WEATHER_POLLEN_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+const CALENDAR_EVENT_PAGE_SIZE = 500;
+const CALENDAR_EVENT_COLUMNS = "id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source";
+
+type CalendarEventRow = {
+  id: string;
+  title: string;
+  notes: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  all_day: boolean;
+  color: string | null;
+  location: string | null;
+  category: string | null;
+  member_ids: string[] | null;
+  external_id: string | null;
+  series_external_id: string | null;
+  source: "app" | "google" | "apple";
+};
+
+async function loadCalendarEventRows(householdId: string) {
+  if (!supabase) return { data: null, error: new Error("Supabase is not configured.") };
+  const rows: CalendarEventRow[] = [];
+  for (let from = 0; ; from += CALENDAR_EVENT_PAGE_SIZE) {
+    const { data, error } = await supabase.from("events").select(CALENDAR_EVENT_COLUMNS).eq("household_id", householdId).order("starts_at").order("id").range(from, from + CALENDAR_EVENT_PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    const page = (data ?? []) as CalendarEventRow[];
+    rows.push(...page);
+    if (page.length < CALENDAR_EVENT_PAGE_SIZE) return { data: rows, error: null };
+  }
+}
 
 function nullableWeatherNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -369,7 +399,7 @@ export default function Home() {
     setHouseholdDataError("");
     const today = localDateInputValue(new Date());
     Promise.all([
-      supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source").eq("household_id", householdId).order("starts_at"),
+      loadCalendarEventRows(householdId),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
       supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active, reward_cents, reward_stars").eq("household_id", householdId).order("sort_order").order("created_at"),
@@ -890,7 +920,7 @@ export default function Home() {
   const refreshCalendarEvents = useCallback(async () => {
     if (!supabase || !householdId) return;
     const [{ data }, { data: assignments }] = await Promise.all([
-      supabase.from("events").select("id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source").eq("household_id", householdId).order("starts_at"),
+      loadCalendarEventRows(householdId),
       supabase.from("calendar_event_member_assignments").select("source, external_id, member_ids").eq("household_id", householdId),
     ]);
     const assignmentByEvent = new Map((assignments ?? []).map((assignment) => [`${assignment.source}:${assignment.external_id}`, assignment.member_ids]));
