@@ -17,7 +17,7 @@ export function MoodAnimation({ mood, className = "size-full" }: { mood: MoodKey
     return () => media.removeEventListener("change", update);
   }, []);
 
-  return reduceMotion ? <span className="grid size-full place-items-center text-3xl" aria-label={option.label}>{option.emoji}</span> : <AccessibleLottie src={option.animation} label={option.label} wrapperClassName={className} className="size-full" />;
+  return reduceMotion || !option.animation ? <span className="grid size-full place-items-center text-3xl" aria-label={option.label}>{option.emoji}</span> : <AccessibleLottie src={option.animation} label={option.label} wrapperClassName={className} className="size-full" />;
 }
 
 export function FamilyMoodCard({
@@ -76,7 +76,7 @@ export function FamilyMoodCard({
         <section role="dialog" aria-modal="true" aria-labelledby="mood-dialog-title" className="w-full max-w-md rounded-[2rem] bg-white p-5 text-slate-900 shadow-2xl dark:bg-[#242435] dark:text-slate-100">
           <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black tracking-wide text-violet-600 dark:text-violet-200">FAMILY CHECK-IN</p><h2 id="mood-dialog-title" className="mt-1 text-2xl font-black">How are you feeling?</h2><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">Checking in for {selectedMember?.name ?? "this family member"}.</p></div><button type="button" onClick={() => setShowMoodModal(false)} aria-label="Close mood check-in" className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>
           <div className="mt-5 space-y-4">
-            <div><p id="mood-options-label" className="text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">How are you feeling?</p><div role="group" aria-labelledby="mood-options-label" className="mt-2 grid grid-cols-5 gap-2">
+            <div><p id="mood-options-label" className="text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-200">How are you feeling?</p><div role="group" aria-labelledby="mood-options-label" className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
               {moodOptions.map((mood) => <button key={mood.key} type="button" aria-pressed={selectedMood === mood.key} onClick={() => onMoodChange(mood.key)} className={`grid min-w-0 place-items-center gap-1 rounded-2xl px-1 py-3 text-center transition ${selectedMood === mood.key ? `${mood.color} ring-2` : "bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"}`}><span className="text-2xl leading-none">{mood.emoji}</span><span className="truncate text-[11px] font-black">{mood.label}</span></button>)}
             </div></div>
             {message && <p role="status" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message}</p>}

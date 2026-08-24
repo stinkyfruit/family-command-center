@@ -12,6 +12,10 @@ import goodMoodAnimation from "../../../public/animations/general/moods/1f642.js
 import okayMoodAnimation from "../../../public/animations/general/moods/1f610.json";
 import tiredMoodAnimation from "../../../public/animations/general/moods/1f634.json";
 import lowMoodAnimation from "../../../public/animations/general/moods/1f622.json";
+import excitedMoodAnimation from "../../../public/animations/general/moods/1f929.json";
+import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.json";
+import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
+import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 
 export const halloweenScreensaverVideos = [
@@ -173,7 +177,7 @@ export function auroraActivityLabel(probability: number) {
   return "Low activity";
 }
 export type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
-export type MoodKey = "great" | "good" | "okay" | "tired" | "low";
+export type MoodKey = "great" | "good" | "okay" | "tired" | "low" | "excited" | "calm" | "frustrated" | "worried";
 export type MoodCheckin = { id: string | number; memberId: string | number; mood: MoodKey; checkedInAt: string };
 
 export const moodOptions = [
@@ -182,6 +186,10 @@ export const moodOptions = [
   { key: "okay", label: "Okay", emoji: "😐", animation: okayMoodAnimation, color: "bg-slate-100 text-slate-800 ring-slate-200" },
   { key: "tired", label: "Tired", emoji: "😴", animation: tiredMoodAnimation, color: "bg-indigo-100 text-indigo-900 ring-indigo-200" },
   { key: "low", label: "Low", emoji: "😢", animation: lowMoodAnimation, color: "bg-sky-100 text-sky-900 ring-sky-200" },
+  { key: "excited", label: "Excited", emoji: "🤩", animation: excitedMoodAnimation, color: "bg-orange-100 text-orange-900 ring-orange-200" },
+  { key: "calm", label: "Calm", emoji: "😌", animation: calmMoodAnimation, color: "bg-teal-100 text-teal-900 ring-teal-200" },
+  { key: "frustrated", label: "Frustrated", emoji: "😤", animation: frustratedMoodAnimation, color: "bg-rose-100 text-rose-900 ring-rose-200" },
+  { key: "worried", label: "Worried", emoji: "😟", animation: worriedMoodAnimation, color: "bg-purple-100 text-purple-900 ring-purple-200" },
 ] as const satisfies ReadonlyArray<{ key: MoodKey; label: string; emoji: string; animation: object; color: string }>;
 
 export function isMoodKey(value: unknown): value is MoodKey {
