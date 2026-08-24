@@ -21,7 +21,9 @@ import {
   type ThemeMode,
   type Todo,
   type Weather,
+  type WeatherAlert,
   type WeatherForecast,
+  type WeatherInsights,
   choreIcon,
   displayEventsOnce,
   familyHolidaysForYear,
@@ -48,6 +50,63 @@ import { HomeOverlays } from "@/features/home/home-overlays";
 import { createSettingsActions } from "@/features/settings/settings-actions";
 
 type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
+const WEATHER_POLLEN_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+
+function nullableWeatherNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseWeatherAlerts(payload: unknown): WeatherAlert[] {
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { features?: unknown }).features)) return [];
+  return (payload as { features: unknown[] }).features.flatMap((feature) => {
+    if (!feature || typeof feature !== "object") return [];
+    const properties = (feature as { properties?: unknown }).properties;
+    if (!properties || typeof properties !== "object") return [];
+    const data = properties as Record<string, unknown>;
+    const id = (feature as { id?: unknown }).id;
+    return [{
+      id: typeof id === "string" ? id : crypto.randomUUID(),
+      event: typeof data.event === "string" ? data.event : "Weather alert",
+      headline: typeof data.headline === "string" ? data.headline : "Active weather alert",
+      severity: typeof data.severity === "string" ? data.severity : "Unknown",
+      urgency: typeof data.urgency === "string" ? data.urgency : "Unknown",
+      certainty: typeof data.certainty === "string" ? data.certainty : "Unknown",
+      description: typeof data.description === "string" ? data.description : "",
+      instruction: typeof data.instruction === "string" ? data.instruction : "",
+      onset: typeof data.onset === "string" ? data.onset : null,
+      expires: typeof data.expires === "string" ? data.expires : null,
+      url: typeof data.web === "string" ? data.web : null,
+    } satisfies WeatherAlert];
+  });
+}
+
+function weatherPollenCacheKey(latitude: number, longitude: number) {
+  return `family-weather-pollen:${latitude.toFixed(2)}:${longitude.toFixed(2)}`;
+}
+
+function readCachedWeatherPollen(latitude: number, longitude: number): WeatherInsights["pollen"] {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(weatherPollenCacheKey(latitude, longitude));
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { savedAt?: unknown; pollen?: WeatherInsights["pollen"] };
+    if (typeof cached.savedAt !== "number" || Date.now() - cached.savedAt >= WEATHER_POLLEN_CACHE_TTL_MS || !cached.pollen?.configured) {
+      window.localStorage.removeItem(weatherPollenCacheKey(latitude, longitude));
+      return null;
+    }
+    return cached.pollen;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedWeatherPollen(latitude: number, longitude: number, pollen: WeatherInsights["pollen"]) {
+  if (typeof window === "undefined" || !pollen?.configured) return;
+  try {
+    window.localStorage.setItem(weatherPollenCacheKey(latitude, longitude), JSON.stringify({ savedAt: Date.now(), pollen }));
+  } catch { /* A full or restricted local cache should never block weather. */ }
+}
+
 export default function Home() {
   const { notify, confirm, prompt } = useAppNotifications();
   const [events, setEvents] = useState(starterEvents);
@@ -70,6 +129,7 @@ export default function Home() {
   const mainRef = useRef<HTMLElement | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherForecast, setWeatherForecast] = useState<WeatherForecast | null>(null);
+  const [weatherInsights, setWeatherInsights] = useState<WeatherInsights | null>(null);
   const [showWeatherForecast, setShowWeatherForecast] = useState(false);
   const [auroraActivity, setAuroraActivity] = useState<AuroraActivity | null>(null);
   const [cometCloseApproach, setCometCloseApproach] = useState<CometCloseApproach | null>(null);
@@ -428,6 +488,42 @@ export default function Home() {
         });
         if (data.daily.sunrise?.[0] && data.daily.sunset?.[0]) setSunTimes({ sunrise: data.daily.sunrise[0] * 1000, sunset: data.daily.sunset[0] * 1000 });
 
+        const airQualityUrl = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+        airQualityUrl.searchParams.set("latitude", String(latitude));
+        airQualityUrl.searchParams.set("longitude", String(longitude));
+        airQualityUrl.searchParams.set("current", "us_aqi,pm2_5,ozone,uv_index");
+        airQualityUrl.searchParams.set("timezone", "auto");
+        const cachedPollen = readCachedWeatherPollen(latitude, longitude);
+        const pollenRequest: Promise<WeatherInsights["pollen"]> = cachedPollen ? Promise.resolve(cachedPollen) : fetch(`/api/weather-pollen?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`).then(async (response) => {
+          if (!response.ok) throw new Error("Pollen request failed");
+          const result = await response.json() as WeatherInsights["pollen"];
+          writeCachedWeatherPollen(latitude, longitude, result);
+          return result;
+        });
+        const [airQualityResult, alertsResult, pollenResult] = await Promise.allSettled([
+          fetch(airQualityUrl),
+          fetch(`/api/weather-alerts?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`),
+          pollenRequest,
+        ]);
+        let airQuality: WeatherInsights["airQuality"] = null;
+        let uvIndex: number | null = null;
+        let pollen: WeatherInsights["pollen"] = null;
+        if (airQualityResult.status === "fulfilled" && airQualityResult.value.ok) {
+          const airQualityData = await airQualityResult.value.json();
+          const current = airQualityData.current ?? {};
+          airQuality = { aqi: nullableWeatherNumber(current.us_aqi), pm2_5: nullableWeatherNumber(current.pm2_5), ozone: nullableWeatherNumber(current.ozone) };
+          uvIndex = nullableWeatherNumber(current.uv_index);
+        }
+        let alerts: WeatherAlert[] = [];
+        let alertsAvailable = false;
+        if (alertsResult.status === "fulfilled" && alertsResult.value.ok) {
+          const alertsData = await alertsResult.value.json() as { available?: boolean; features?: unknown };
+          alerts = parseWeatherAlerts(alertsData);
+          alertsAvailable = alertsData.available === true;
+        }
+        if (pollenResult.status === "fulfilled") pollen = pollenResult.value;
+        setWeatherInsights({ airQuality, uvIndex, pollen, alerts, alertsAvailable });
+
         try {
           const auroraResponse = await fetch("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json");
           if (!auroraResponse.ok) throw new Error("Aurora request failed");
@@ -453,11 +549,11 @@ export default function Home() {
           const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.suburb ?? address.city_district ?? address.county;
           if (city) setWeather((current) => current ? { ...current, location: city } : current);
         } catch { /* Keep the useful "Local forecast" fallback. */ }
-      } catch { setWeather(null); setWeatherForecast(null); }
+      } catch { setWeather(null); setWeatherForecast(null); setWeatherInsights(null); }
     }
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
       (position) => loadWeather(position.coords.latitude, position.coords.longitude),
-      () => setWeather(null),
+      () => { setWeather(null); setWeatherForecast(null); setWeatherInsights(null); },
       { maximumAge: 900000, timeout: 8000 },
     );
   }, []);
@@ -1127,7 +1223,7 @@ export default function Home() {
           {activeTab === "calendar" && <CalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={() => googleConnected || appleFeeds.some((feed) => feed.enabled) ? syncAllCalendars() : connectGoogleCalendar()} view={view} onViewChange={(value) => setView(value)} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={toggleCalendarMemberFilter} onToggleFamily={() => setShowFamilyEvents((visible) => !visible)} onEditEvent={setSelectedEvent} onOpenDay={(date) => { setCalendarAnchor(date); setView("Day"); }} onCreateEvent={openEventFormAt} showEventForm={showEventForm} onShowEventForm={() => setShowEventForm(true)} onCloseEventForm={() => setShowEventForm(false)} onSubmitEvent={addEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={(memberId) => setEventMemberIds((ids) => ids.includes(memberId) ? ids.filter((item) => item !== memberId) : [...ids, memberId])} />}
         </div> : activeTab === "tasks" ? <TasksPage todos={todos} members={members} onAdd={addTodo} onToggle={toggleTodo} onEdit={editTodo} /> : activeTab === "chores" ? <ChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={toggleChore} /> : activeTab === "wishlist" ? <ChristmasWishlistPage voiceDraft={voiceWishlistDraft} /> : activeTab === "settings" ? <SettingsPage choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={settingsActions.recordChorePayout} onResetToday={settingsActions.resetTodayChoreCompletions} onClearAll={settingsActions.clearAllChoreIncentiveTotals} onAddChore={addChore} onDeleteChore={settingsActions.deleteChore} onRewardModeChange={settingsActions.updateChoreRewardMode} chores={chores} onEditReward={settingsActions.editChoreReward} members={members} currentUserId={user?.id ?? null} onMemberColorChange={settingsActions.updateMemberColor} onAddMember={settingsActions.addMember} onRemoveMember={settingsActions.removeMember} onUpdateCurrentMemberName={settingsActions.updateCurrentMemberName} themeMode={themeMode} onThemeModeChange={updateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} onTabVisibilityChange={settingsActions.updateTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={connectGoogleCalendar} onToggleConnection={toggleGoogleCalendar} onAddApple={addAppleCalendar} onToggleApple={toggleAppleCalendar} onInviteAdult={settingsActions.inviteAdult} onSignOut={settingsActions.signOut} /> : <ListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={toggleListExpanded} onAddList={addSharedList} onAddItem={addListItem} onToggleItem={toggleListItem} onDeleteItem={deleteListItem} onDeleteList={deleteSharedList} />}
       </div>
-      <HomeOverlays weather={weather} weatherForecast={weatherForecast} showWeatherForecast={showWeatherForecast} onCloseWeatherForecast={() => setShowWeatherForecast(false)} selectedEvent={selectedEvent} members={members} onCloseSelectedEvent={() => setSelectedEvent(null)} onEditSelectedEvent={() => { if (!selectedEvent) return; setEditingEvent(selectedEvent); setSelectedEvent(null); }} editingEvent={editingEvent} onCloseEditingEvent={() => setEditingEvent(null)} onSaveEvent={saveEvent} onApplySeries={applySeriesMembers} onDeleteEvent={deleteEvent} showTodoForm={showTodoForm} todoTitle={todoTitle} todoDueDate={todoDueDate} todoAssigneeMemberId={todoAssigneeMemberId} editingTodo={editingTodo} onTodoTitleChange={setTodoTitle} onTodoDueDateChange={setTodoDueDate} onTodoAssigneeChange={setTodoAssigneeMemberId} onCloseTodoForm={() => { setEditingTodo(null); setShowTodoForm(false); }} onSaveTodo={saveTodo} voiceChoreDraft={voiceChoreDraft} onCloseVoiceChore={() => setVoiceChoreDraft(null)} onSaveVoiceChore={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} weekendChoreDraft={weekendChoreDraft} choreRewardMode={choreRewardMode} onCloseWeekendChore={() => setWeekendChoreDraft(null)} onSaveWeekendChore={async (draft) => { await addChore(draft.memberId, "Weekend", draft.title, new Date().toLocaleDateString("en-CA"), draft.reward); setWeekendChoreDraft(null); }} voiceListDraft={voiceListDraft} sharedLists={sharedLists} onCloseVoiceList={() => setVoiceListDraft(null)} onSaveVoiceList={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} celebratingTask={celebratingTaskId !== null} celebratingBirthday={celebratingBirthdayDate !== null} />
+      <HomeOverlays weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} showWeatherForecast={showWeatherForecast} onCloseWeatherForecast={() => setShowWeatherForecast(false)} selectedEvent={selectedEvent} members={members} onCloseSelectedEvent={() => setSelectedEvent(null)} onEditSelectedEvent={() => { if (!selectedEvent) return; setEditingEvent(selectedEvent); setSelectedEvent(null); }} editingEvent={editingEvent} onCloseEditingEvent={() => setEditingEvent(null)} onSaveEvent={saveEvent} onApplySeries={applySeriesMembers} onDeleteEvent={deleteEvent} showTodoForm={showTodoForm} todoTitle={todoTitle} todoDueDate={todoDueDate} todoAssigneeMemberId={todoAssigneeMemberId} editingTodo={editingTodo} onTodoTitleChange={setTodoTitle} onTodoDueDateChange={setTodoDueDate} onTodoAssigneeChange={setTodoAssigneeMemberId} onCloseTodoForm={() => { setEditingTodo(null); setShowTodoForm(false); }} onSaveTodo={saveTodo} voiceChoreDraft={voiceChoreDraft} onCloseVoiceChore={() => setVoiceChoreDraft(null)} onSaveVoiceChore={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} weekendChoreDraft={weekendChoreDraft} choreRewardMode={choreRewardMode} onCloseWeekendChore={() => setWeekendChoreDraft(null)} onSaveWeekendChore={async (draft) => { await addChore(draft.memberId, "Weekend", draft.title, new Date().toLocaleDateString("en-CA"), draft.reward); setWeekendChoreDraft(null); }} voiceListDraft={voiceListDraft} sharedLists={sharedLists} onCloseVoiceList={() => setVoiceListDraft(null)} onSaveVoiceList={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} celebratingTask={celebratingTaskId !== null} celebratingBirthday={celebratingBirthdayDate !== null} />
     </main>
   );
 }

@@ -17,6 +17,14 @@ Once connected, the dashboard refreshes Google Calendar when it opens if the mos
 
 Imported event rows are a local projection of Google/iCloud. The external calendar controls whether an event exists; deleting an imported row in this app only removes it until the next sync. Family assignments are stored separately and remain attached when the external event is synced again.
 
+## Pollen forecast
+
+1. In Google Cloud Console, enable the **Pollen API** for a project and create an API key. The Pollen API provides daily forecasts for up to five days and returns a Universal Pollen Index plus provider guidance.
+2. Add the key as the server-only `GOOGLE_POLLEN_API_KEY` variable shown in `.env.example`. Do not prefix it with `NEXT_PUBLIC_` or commit `.env.local`.
+3. Restart `npm run dev`. The weather overlay will show the local pollen index and expandable guidance when the provider has data.
+
+The app requests pollen through `/api/weather-pollen`, so the key never reaches the browser. Google requires attribution for displayed Pollen API results; the overlay labels the pollen tile as “Pollen data by Google.”
+
 ## Assistant tooling — documentation MCP servers
 
 Codex reads MCP server config from `~/.codex/config.toml`. Add this entry for Context7:

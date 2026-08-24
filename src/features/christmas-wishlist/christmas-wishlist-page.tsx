@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Lottie } from "lottie-react";
+import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { supabase } from "@/lib/supabase";
 import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
 import { christmasAnimations } from "@/generated/animation-manifest";
@@ -235,7 +235,7 @@ function ChristmasLottie({ src, fallback, className, label, loop = true }: { src
     return () => media.removeEventListener("change", update);
   }, []);
 
-  return reduceMotion ? <span className={`grid place-items-center text-4xl ${className}`} aria-label={label}>{fallback}</span> : <div className={`relative overflow-hidden ${className}`}><Lottie src={src} autoplay loop={loop} className="size-full" aria-label={label} /></div>;
+  return reduceMotion ? <span className={`grid place-items-center text-4xl ${className}`} aria-label={label}>{fallback}</span> : <AccessibleLottie src={src} label={label} loop={loop} wrapperClassName={`relative overflow-hidden ${className}`} className="size-full" />;
 }
 
 function WishRow({ wish, index, onTogglePriority, onRemove }: { wish: WishItem; index: number; onTogglePriority: () => void; onRemove: () => void }) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Lottie } from "lottie-react";
+import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import type { Member, MoodCheckin, MoodKey } from "@/features/home/model";
 import { moodOption, moodOptions } from "@/features/home/model";
 import { memberCalendarColor } from "@/components/home/calendar";
@@ -17,7 +17,7 @@ export function MoodAnimation({ mood, className = "size-full" }: { mood: MoodKey
     return () => media.removeEventListener("change", update);
   }, []);
 
-  return reduceMotion ? <span className="grid size-full place-items-center text-3xl" aria-label={option.label}>{option.emoji}</span> : <Lottie src={option.animation} autoplay loop className={className} aria-label={option.label} />;
+  return reduceMotion ? <span className="grid size-full place-items-center text-3xl" aria-label={option.label}>{option.emoji}</span> : <AccessibleLottie src={option.animation} label={option.label} wrapperClassName={className} className="size-full" />;
 }
 
 export function FamilyMoodCard({
