@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Lottie } from "lottie-react";
 import { supabase } from "@/lib/supabase";
 import {
   type AppleFeed,
@@ -14,12 +13,9 @@ import {
   type Member,
   type MoodCheckin,
   type MoodKey,
-  type MoonPhase,
   type CometCloseApproach,
-  type NotableSkyEvent,
   cometCloseApproachForPayload,
   auroraActivityForLocation,
-  auroraActivityLabel,
   type SharedList,
   type SharedListItem,
   type ThemeMode,
@@ -34,12 +30,7 @@ import {
   listIcon,
   localDateInputValue,
   moodOption,
-  moonPhase,
-  notableSkyEventForDate,
   starterEvents,
-  timeGreeting,
-  weatherAnimation,
-  weatherOrbClass,
   weatherSummary,
 } from "@/features/home/model";
 import { AppIcon, SpeechInputButton, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
@@ -61,6 +52,7 @@ import { SettingsPage } from "@/features/settings/settings-page";
 import { ListsPage, listPreferenceKey, type ListKind } from "@/features/lists/lists-page";
 import { ChoreCelebration, ChoresPage } from "@/features/chores/chores-page";
 import { VoiceChoreEditor, VoiceListEditor, WeekendChoreEditor, type VoiceChoreDraft, type VoiceListDraft, type WeekendChoreDraft } from "@/features/voice/voice-command-editors";
+import { WeatherCard } from "@/features/weather/weather-card";
 
 const navigationTabs = [
   ["home", "home", "Home"],
@@ -1261,9 +1253,6 @@ export default function Home() {
   if (seasonalScreenSaver) return <SeasonalScreensaver onExit={() => setSeasonalScreenSaver(false)} />;
 
   const visibleNavigationTabs = navigationTabs.filter(([tab]) => tab !== "chores" || showChoresTab).filter(([tab]) => tab !== "wishlist" || showWishlistTab);
-  const currentMoonPhase = moonPhase(new Date());
-  const notableSkyEvent = notableSkyEventForDate(new Date(), cometCloseApproach);
-  const isNightWeather = dark || weather?.isDay === false;
   const celebrationActive = celebratingTaskId !== null || celebratingBirthdayDate !== null || celebratingChoreId !== null;
 
   return (
@@ -1280,7 +1269,7 @@ export default function Home() {
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         {(activeTab === "home" || activeTab === "calendar") ? <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 px-5 pb-24 md:px-9 lg:pb-8">{activeTab === "home" && <>
           <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.15fr_1fr_1fr]">
-            <article className={`weather-card relative w-full overflow-hidden rounded-[1.75rem] p-5 text-white shadow-lg max-md:min-h-40 max-md:p-5 md:max-lg:min-h-40 md:max-lg:p-6 md:p-6 ${isNightWeather ? "weather-card-night shadow-indigo-950/40" : "weather-card-day shadow-sky-200/50"}`}><span className={`weather-card-orb absolute -right-5 -top-9 size-28 rounded-full transition-colors duration-500 max-md:-top-6 max-md:size-20 ${weatherOrbClass(weather)}`}/><div className="weather-card-content relative min-w-0"><div className="flex h-full min-w-0 items-center justify-between gap-3 max-md:gap-2 md:gap-6 md:max-lg:gap-4"><div className="min-w-0 flex-1"><p title={`${timeGreeting()} · ${weather?.location ?? "LOCAL FORECAST"}`} className="break-words text-xs font-bold leading-tight tracking-wide md:max-lg:truncate md:max-lg:text-sm md:text-sm">{timeGreeting()} · {weather?.location ?? "LOCAL FORECAST"}</p><p className="mt-2 text-4xl font-black tracking-tighter max-md:text-3xl md:max-lg:text-5xl md:text-5xl">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-semibold leading-snug text-white/90 md:max-lg:text-base md:text-base">{weather ? `${weather.summary} · ↑ ${weather.high}° ↓ ${weather.low}°` : "Allow location for today’s weather"}</p>{isNightWeather && weather && <MoonPhaseBadge phase={currentMoonPhase}/>}</div><span className="block size-24 shrink-0 overflow-hidden max-md:size-28 md:size-40 md:max-lg:size-28">{weather ? <WeatherAnimation weather={weather} isNight={isNightWeather} /> : <span className="block text-6xl leading-none drop-shadow-sm md:text-8xl">{isNightWeather ? "🌙" : "☀️"}</span>}</span></div><WeatherSkyDetails sunTimes={sunTimes} notableSkyEvent={notableSkyEvent} auroraActivity={auroraActivity} /></div></article>
+            <WeatherCard weather={weather} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} />
             <article className="min-w-0 overflow-hidden rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-violet-600">ADULT SPACE</p><h2 className="text-lg font-bold">To-dos</h2></div><button onClick={addTodo} className="grid size-8 place-items-center rounded-xl bg-violet-100 text-lg font-bold text-violet-600 hover:bg-violet-200">+</button></div><div className="mt-3 min-w-0 space-y-1">{openTodos.slice(0, 5).map((todo) => { const assignee = members.find((member) => member.id === todo.assigneeMemberId); return <label key={todo.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 text-sm hover:bg-slate-50 dark:hover:bg-white/5"><input type="checkbox" checked={todo.done} onChange={() => toggleTodo(todo.id)} className="size-4 accent-violet-500"/><span className="min-w-0 flex-1 truncate font-medium">{todo.title}</span>{assignee && <span className="max-w-24 shrink-0 truncate rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${assignee.color ?? "#fda4af"}33`, color: assignee.color ?? "#be123c" }}>{assignee.name}</span>}</label>; })}{openTodos.length === 0 && <p className="text-sm text-slate-400">You&apos;re all caught up.</p>}</div><button onClick={() => setActiveTab("tasks")} className="mt-2 text-xs font-bold text-violet-600">View all tasks →</button></article>
             <div className="min-w-0 md:hidden"><PhoneHomeCalendar events={visibleCalendarEvents} members={members} onOpenDay={(day) => { setCalendarAnchor(day); setView("Day"); setActiveTab("calendar"); }} onOpenEvent={setSelectedEvent} /></div>
             <FamilyMoodCard members={members} checkins={moodCheckins} selectedMemberId={moodMemberId} selectedMood={selectedMood} saving={savingMood} message={moodMessage} onMemberChange={(memberId) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); }} onMoodChange={setSelectedMood} onSave={saveMoodCheckin} />
@@ -1308,29 +1297,4 @@ export default function Home() {
       {celebratingBirthdayDate !== null && <ChoreCelebration animationSrc="/animations/holidays/birthday/birthday.json" />}
     </main>
   );
-}
-function WeatherAnimation({ weather, isNight = !weather.isDay }: { weather: Weather; isNight?: boolean }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduceMotion(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  const isDay = !isNight;
-  const fallback = weather.code >= 95 ? "⛈️" : weather.code >= 71 && weather.code <= 77 ? "❄️" : weather.code >= 45 && weather.code <= 67 ? "🌧️" : weather.code === 3 ? "☁️" : isDay ? "☀️" : "🌙";
-  return reduceMotion ? <span className="block text-3xl leading-none drop-shadow-sm md:text-5xl" aria-label={weather.summary}>{fallback}</span> : <Lottie src={weatherAnimation(weather.code, isDay)} autoplay loop className="size-full drop-shadow-sm" aria-label={weather.summary} />;
-}
-
-function MoonPhaseBadge({ phase }: { phase: MoonPhase }) {
-  return <div className="weather-moon-badge mt-3 flex items-center gap-2" role="img" aria-label={`${phase.name}, ${phase.illumination}% illuminated`}><span className={`weather-moon weather-moon--${phase.key} size-7 shrink-0`} aria-hidden="true"/><span className="min-w-0"><span className="block text-xs font-black leading-tight text-indigo-50">{phase.name}</span><span className="block text-[10px] font-semibold leading-tight text-indigo-100/75">{phase.illumination}% illuminated</span></span></div>;
-}
-
-function WeatherSkyDetails({ sunTimes, notableSkyEvent, auroraActivity }: { sunTimes: { sunrise: number; sunset: number } | null; notableSkyEvent: NotableSkyEvent | null; auroraActivity: AuroraActivity | null }) {
-  const formatTime = (timestamp: number) => new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
-  const notableLabel = notableSkyEvent ? `${notableSkyEvent.title} · ${notableSkyEvent.date.toLocaleDateString([], { month: "short", day: "numeric" })}` : "No major sky events today";
-  const notableDetail = notableSkyEvent?.detail ?? "The sky is quiet for now";
-  const auroraLabel = auroraActivity ? `Aurora: ${auroraActivityLabel(auroraActivity.probability)} · ${auroraActivity.probability}% near you` : "Aurora activity loading…";
-  return <div className="weather-sky-details mt-4 grid gap-2 border-t border-white/20 pt-3 text-white/90 sm:grid-cols-2"><div className="grid grid-cols-2 gap-2"><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunrise</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunrise) : "—"}</p></div><div><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sunset</p><p className="mt-0.5 text-sm font-black">{sunTimes ? formatTime(sunTimes.sunset) : "—"}</p></div></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wide text-white/60">Sky watch</p><p className="mt-0.5 break-words text-sm font-black leading-snug" title={notableLabel}>{notableLabel}</p><p className="break-words text-[10px] font-semibold leading-snug text-white/65" title={notableDetail}>{notableDetail}</p><p className="mt-1 break-words text-[10px] font-semibold leading-snug text-white/65" title={auroraLabel}>{auroraLabel}</p></div></div>;
 }
