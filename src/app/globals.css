@@ -235,10 +235,14 @@ button[title^="Delete"]:has(svg)::after {
 }
 
 #settings-chores .bg-slate-50 [class*="lg:grid-cols-3"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (max-width: 640px) {
+  #settings-chores .bg-slate-50 [class*="lg:grid-cols-3"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   /* Keep daily chore titles visible when the reward and completion controls share a narrow card. */
   button[class*="min-h-20"],
   button[class*="min-h-16"] {
