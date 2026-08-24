@@ -20,6 +20,7 @@ This section defines the household chore model. Existing and future features mus
 - Chore rewards are managed separately in the Rewards tab. Editing a chore's name must not change its reward, and adding or deleting a daily chore must not silently rebalance other chores' rewards.
 - The household daily reward target fallback is stored in `households.chore_reward_target_cents` (cents). The Rewards tab and kids' weekday progress derive each child's potential daily total from its current daily chores; the stored household value is used only when that child has no daily chores. Future fallback changes must update the database value and the relevant migration rather than hardcoding it in the UI.
 - The kids' weekday chore progress card uses each child's current daily chore rewards as the potential daily total; the household reward target is only a fallback when that child has no daily chores. Weekend progress uses that child's scheduled weekend chores.
+- Chore edits and completions are household-scoped realtime data. With the Supabase schema and Realtime publication applied, signed-in family devices should reflect chore additions, edits, icons, deletions, reordering, and completions without a manual refresh.
 - The UI must make the type obvious by separating daily and ad hoc chores and labeling the relevant routine/date. Use the shared app notifications, confirmations, and `AppIcon` controls for chore actions.
 
 ## Google Calendar sync

@@ -108,6 +108,46 @@ function writeCachedWeatherPollen(latitude: number, longitude: number, pollen: W
   } catch { /* A full or restricted local cache should never block weather. */ }
 }
 
+type ChoreRealtimeRow = Record<string, unknown>;
+type ChoreRealtimePayload = { eventType: string; new: ChoreRealtimeRow; old: ChoreRealtimeRow };
+
+function choreFromRealtimeRow(row: ChoreRealtimeRow, previous?: ChoreEntry): ChoreEntry | null {
+  const id = row.id ?? previous?.id;
+  if (typeof id !== "string" && typeof id !== "number") return null;
+  const routine = typeof row.routine === "string" ? row.routine : previous?.routine ?? "To-do";
+  const isDaily = typeof row.is_daily === "boolean" ? row.is_daily : previous?.isDaily ?? routine !== "To-do";
+  const assigneeMemberId = row.assignee_member_id === null
+    ? null
+    : typeof row.assignee_member_id === "string" || typeof row.assignee_member_id === "number"
+      ? row.assignee_member_id
+      : previous?.assigneeMemberId ?? null;
+  const scheduledFor = row.scheduled_for === null
+    ? null
+    : typeof row.scheduled_for === "string"
+      ? row.scheduled_for
+      : previous?.scheduledFor ?? null;
+  return {
+    id,
+    title: typeof row.title === "string" ? row.title : previous?.title ?? "Untitled chore",
+    emoji: typeof row.emoji === "string" ? row.emoji : previous?.emoji ?? "✨",
+    assigneeMemberId,
+    sortOrder: typeof row.sort_order === "number" ? row.sort_order : previous?.sortOrder ?? 0,
+    routine,
+    isDaily,
+    isFixed: typeof row.is_fixed === "boolean" ? row.is_fixed : previous?.isFixed ?? false,
+    scheduledFor,
+    rewardCents: typeof row.reward_cents === "number" ? row.reward_cents : previous?.rewardCents ?? 50,
+    rewardStars: typeof row.reward_stars === "number" ? row.reward_stars : previous?.rewardStars ?? 1,
+    completionId: previous?.completionId,
+    completedRewardCents: previous?.completedRewardCents,
+    completedRewardStars: previous?.completedRewardStars,
+  };
+}
+
+function sortChores(items: ChoreEntry[]) {
+  return [...items].sort((first, second) => first.sortOrder - second.sortOrder || String(first.id).localeCompare(String(second.id)));
+}
+
 export default function Home() {
   const { notify, confirm, prompt } = useAppNotifications();
   const [events, setEvents] = useState(starterEvents);
@@ -197,6 +237,11 @@ export default function Home() {
   const [expandedListKeys, setExpandedListKeys] = useState<Record<string, boolean>>({});
   const sharedListIdsRef = useRef(new Set<string>());
   const completingChoreIdsRef = useRef(new Set<string>());
+  const choresRef = useRef<ChoreEntry[]>([]);
+
+  useEffect(() => {
+    choresRef.current = chores;
+  }, [chores]);
 
   useEffect(() => {
     sharedListIdsRef.current = new Set(sharedLists.map((list) => String(list.id)));
@@ -460,6 +505,81 @@ export default function Home() {
       void client.removeChannel(channel);
     };
   }, [householdId]);
+
+  useEffect(() => {
+    if (!supabase || !householdId || !householdDataLoaded) return;
+
+    const applyChoreChange = (payload: ChoreRealtimePayload) => {
+      const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+      const incomingId = row.id;
+      if (typeof incomingId !== "string" && typeof incomingId !== "number") return;
+      const choreId = String(incomingId);
+      if (payload.eventType === "DELETE") {
+        choresRef.current = choresRef.current.filter((chore) => String(chore.id) !== choreId);
+        setChores((current) => current.filter((chore) => String(chore.id) !== choreId));
+        return;
+      }
+
+      const existing = choresRef.current.find((chore) => String(chore.id) === choreId);
+      const incoming = choreFromRealtimeRow(row, existing);
+      if (!incoming) return;
+      const next = sortChores(existing
+        ? choresRef.current.map((chore) => String(chore.id) === choreId ? incoming : chore)
+        : [...choresRef.current, incoming]);
+      choresRef.current = next;
+      setChores(next);
+    };
+
+    const applyCompletionChange = (payload: ChoreRealtimePayload) => {
+      const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+      const choreId = row.chore_id;
+      if (typeof choreId !== "string" && typeof choreId !== "number") return;
+      const chore = choresRef.current.find((item) => String(item.id) === String(choreId));
+      if (!chore) return;
+
+      const completionId = row.id;
+      if (payload.eventType === "DELETE") {
+        if (String(chore.completionId) === String(completionId)) {
+          const next = choresRef.current.map((item) => String(item.id) === String(choreId) ? { ...item, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : item);
+          choresRef.current = next;
+          setChores(next);
+        }
+        const deletedReward = typeof row.reward_cents === "number" ? row.reward_cents : 0;
+        if (deletedReward > 0 && chore.assigneeMemberId !== null) {
+          const childKey = String(chore.assigneeMemberId);
+          setChoreEarnedCentsByMember((items) => ({ ...items, [childKey]: Math.max(0, (items[childKey] ?? 0) - deletedReward) }));
+        }
+        return;
+      }
+      if (typeof completionId !== "string" && typeof completionId !== "number") return;
+      const completedOn = row.completed_on;
+      if (chore.isDaily && typeof completedOn === "string" && completedOn !== localDateInputValue(new Date())) return;
+      if (String(chore.completionId) === String(completionId)) return;
+
+      const rewardCents = typeof row.reward_cents === "number" ? row.reward_cents : chore.rewardCents;
+      const rewardStars = typeof row.reward_stars === "number" ? row.reward_stars : chore.rewardStars;
+      const next = choresRef.current.map((item) => String(item.id) === String(choreId)
+        ? { ...item, completionId, completedRewardCents: rewardCents, completedRewardStars: rewardStars }
+        : item);
+      choresRef.current = next;
+      setChores(next);
+      if (!completingChoreIdsRef.current.has(String(choreId)) && chore.assigneeMemberId !== null) {
+        const childKey = String(chore.assigneeMemberId);
+        setChoreEarnedCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + rewardCents }));
+      }
+    };
+
+    const client = supabase;
+    const channel = client
+      .channel(`household-chores:${householdId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chores", filter: `household_id=eq.${householdId}` }, (payload) => applyChoreChange(payload))
+      .on("postgres_changes", { event: "*", schema: "public", table: "chore_completions" }, (payload) => applyCompletionChange(payload))
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [householdDataLoaded, householdId]);
 
   useEffect(() => {
     if (!supabase || !user?.id) return;
