@@ -16,9 +16,9 @@ type AccessibleLottieProps = {
 
 /**
  * Lottie animations intentionally start paused so motion is never forced on
- * the page. The control is kept next to the animation and is keyboard usable.
+ * the page. User-facing animations can opt into the playback control.
  */
-export function AccessibleLottie({ src, label, className, wrapperClassName = "", loop = true, autoplay = false, controls = true }: AccessibleLottieProps) {
+export function AccessibleLottie({ src, label, className, wrapperClassName = "", loop = true, autoplay = false, controls = false }: AccessibleLottieProps) {
   const lottieRef = useRef<LottieHandle>(null);
   const [isPlaying, setIsPlaying] = useState(autoplay);
 
