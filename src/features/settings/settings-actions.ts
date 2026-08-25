@@ -156,44 +156,25 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     return {};
   }
 
-  async function editChoreReward(chore: ChoreEntry) {
-    const currentValue = choreRewardMode === "money" ? chore.rewardCents : chore.rewardStars;
-    const unit = choreRewardMode === "money" ? "cents" : "stars";
-    const entered = await prompt(`How many ${unit} is “${chore.title}” worth?`, String(currentValue), { title: "Set chore reward", confirmLabel: "Save" });
-    if (entered === null) return;
-    const value = Number(entered);
+  async function updateChore(chore: ChoreEntry, title: string, rewardValue: number): Promise<{ error?: string }> {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return { error: "Enter a chore name." };
     const maximum = choreRewardMode === "money" ? 1000 : 100;
-    if (!Number.isInteger(value) || value < 0 || value > maximum) {
-      notify(`Enter a whole number from 0 to ${maximum}.`, "warning");
-      return;
-    }
-    if (choreRewardMode === "money" && value % 5 !== 0) {
-      notify("Money rewards must end in 0 or 5 cents, such as 10 or 15.", "warning");
-      return;
-    }
-    setChores((items) => items.map((item) => item.id === chore.id
-      ? { ...item, rewardCents: choreRewardMode === "money" ? value : item.rewardCents, rewardStars: choreRewardMode === "stars" ? value : item.rewardStars }
-      : item));
-    if (supabase) {
-      const { error } = await supabase.from("chores").update(choreRewardMode === "money" ? { reward_cents: value } : { reward_stars: value }).eq("id", chore.id).eq("household_id", householdId);
-      if (error) {
-        setChores((items) => items.map((item) => item.id === chore.id ? { ...item, rewardCents: chore.rewardCents, rewardStars: chore.rewardStars } : item));
-        notify(`Could not update this reward: ${error.message}`);
-      }
-    }
-  }
-
-  async function editChore(chore: ChoreEntry) {
-    const title = (await prompt("Update this chore’s name.", chore.title, { title: "Edit chore", confirmLabel: "Save" }))?.trim();
-    if (!title || title === chore.title) return;
-    setChores((items) => items.map((item) => item.id === chore.id ? { ...item, title } : item));
+    if (!Number.isInteger(rewardValue) || rewardValue < 0 || rewardValue > maximum) return { error: `Enter a whole number from 0 to ${maximum}.` };
+    if (choreRewardMode === "money" && rewardValue % 5 !== 0) return { error: "Money rewards must end in 0 or 5 cents, such as 10 or 15." };
+    const previous = chore;
+    const nextValues = choreRewardMode === "money" ? { title: trimmedTitle, reward_cents: rewardValue } : { title: trimmedTitle, reward_stars: rewardValue };
+    const nextChore = choreRewardMode === "money" ? { ...chore, title: trimmedTitle, rewardCents: rewardValue } : { ...chore, title: trimmedTitle, rewardStars: rewardValue };
+    setChores((items) => items.map((item) => item.id === chore.id ? nextChore : item));
     if (supabase && householdId) {
-      const { error } = await supabase.from("chores").update({ title }).eq("id", chore.id).eq("household_id", householdId);
+      const { error } = await supabase.from("chores").update(nextValues).eq("id", chore.id).eq("household_id", householdId);
       if (error) {
-        setChores((items) => items.map((item) => item.id === chore.id ? chore : item));
-        notify(`Could not update this chore: ${error.message}`);
+        setChores((items) => items.map((item) => item.id === chore.id ? previous : item));
+        return { error: `Could not update this chore: ${error.message}` };
       }
     }
+    notify("Chore updated.", "success");
+    return {};
   }
 
   async function updateChoreEmoji(chore: ChoreEntry, emoji: string) {
@@ -344,5 +325,5 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     return error ? { error: error.message } : {};
   }
 
-  return { addMember, updateCurrentMemberName, removeMember, editChoreReward, editChore, updateChoreEmoji, updateChoreRewardMode, recordChorePayout, resetTodayChoreCompletions, clearAllChoreIncentiveTotals, deleteChore, updateTabVisibility, updateMemberColor, createHousehold, inviteAdult, signOut };
+  return { addMember, updateCurrentMemberName, removeMember, updateChore, updateChoreEmoji, updateChoreRewardMode, recordChorePayout, resetTodayChoreCompletions, clearAllChoreIncentiveTotals, deleteChore, updateTabVisibility, updateMemberColor, createHousehold, inviteAdult, signOut };
 }
