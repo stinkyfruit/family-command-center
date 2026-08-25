@@ -32,7 +32,7 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
 
   return <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section role="dialog" aria-modal="true" aria-labelledby="weather-forecast-title" className="w-full max-w-2xl overflow-hidden rounded-[2rem] bg-white shadow-2xl dark:bg-[#242435]">
-      <div className="max-h-[min(760px,calc(100dvh-1.5rem))] overflow-y-auto p-5 sm:p-7">
+      <div className="max-h-[min(760px,calc(100dvh-1.5rem))] touch-pan-y overflow-y-auto overscroll-contain p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">LOCAL WEATHER</p>
