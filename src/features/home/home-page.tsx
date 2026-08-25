@@ -919,6 +919,26 @@ export default function Home() {
     setShowTodoForm(true);
   }
 
+  async function notifyTaskAssignment(targetMemberId: string, title: string, dueDate: string | null) {
+    if (!householdId) return;
+    const target = members.find((member) => String(member.id) === targetMemberId);
+    const result = await requestPushNotification({ event: "task_assigned", householdId, targetMemberId, taskTitle: title, dueDate });
+    const targetName = target?.name ?? "the assignee";
+    if (result.error) {
+      notify(`Task saved, but the notification could not be sent: ${result.error}`, "warning");
+      return;
+    }
+    if (result.sent === 0) {
+      notify(`Task saved, but ${targetName} has no active phone notification device.`, "warning");
+      return;
+    }
+    if ((result.failed ?? 0) > 0) {
+      notify(`Task saved. The notification reached ${targetName} with ${result.failed} device failure${result.failed === 1 ? "" : "s"}.`, "warning");
+      return;
+    }
+    notify(`Task saved and notification sent to ${targetName}.`, "success");
+  }
+
   async function saveTodo(event: FormEvent) {
     event.preventDefault();
     const title = todoTitle.trim();
@@ -931,14 +951,14 @@ export default function Home() {
       const { error } = await supabase.from("todos").update({ title, assignee_member_id: assigneeMemberId, due_at: dueAt }).eq("id", editingTodo.id).eq("household_id", householdId);
       if (error) { notify(`Could not update this task: ${error.message}`); return; }
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
-      if (changedToAnotherMember) void requestPushNotification({ event: "task_assigned", householdId, targetMemberId: String(assigneeMemberId), taskTitle: title, dueDate: todoDueDate || null });
+      if (changedToAnotherMember) void notifyTaskAssignment(String(assigneeMemberId), title, todoDueDate || null);
     } else if (editingTodo) {
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (supabase && user && householdId) {
       const { data, error } = await supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title, due_at: dueAt, assignee_member_id: assigneeMemberId }).select("id, assignee_member_id, due_at").single();
       if (error) { notify(`Could not add this task: ${error.message}`); return; }
       if (data) setTodos((items) => [...items, { id: data.id, title, due: data.due_at ? new Date(data.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: data.due_at, done: false, assigneeMemberId: data.assignee_member_id }]);
-      if (data && changedToAnotherMember) void requestPushNotification({ event: "task_assigned", householdId, targetMemberId: String(assigneeMemberId), taskTitle: title, dueDate: todoDueDate || null });
+      if (data && changedToAnotherMember) void notifyTaskAssignment(String(assigneeMemberId), title, todoDueDate || null);
     } else {
       setTodos((items) => [...items, { id: Date.now().toString(), title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, done: false, assigneeMemberId }]);
     }

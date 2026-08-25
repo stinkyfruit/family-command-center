@@ -16,7 +16,7 @@ export async function requestPushNotification(payload: PushNotificationRequest) 
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(payload),
     });
-    const result = await response.json() as { error?: string; sent?: number; skipped?: string };
+    const result = await response.json() as { error?: string; sent?: number; failed?: number; skipped?: string };
     return response.ok ? result : { error: result.error ?? "Could not send the notification." };
   } catch {
     return { error: "Could not reach the notification service." };
