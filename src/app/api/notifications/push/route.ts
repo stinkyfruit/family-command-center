@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requestUser, serverSupabase } from "@/lib/google-calendar";
+import { sendPushToMembers } from "@/lib/push-server";
+
+export const runtime = "nodejs";
+
+type NotificationBody =
+  | { event: "test"; householdId: string }
+  | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null };
+
+function text(value: unknown, maxLength: number) {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= maxLength ? value.trim() : null;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await requestUser(request.headers.get("authorization"));
+    if (!user) return NextResponse.json({ error: "Sign in before sending notifications." }, { status: 401 });
+    const body = await request.json() as Partial<NotificationBody>;
+    const householdId = text(body.householdId, 80);
+    if (!householdId || !body.event) return NextResponse.json({ error: "A household and notification event are required." }, { status: 400 });
+
+    const admin = serverSupabase();
+    const { data: actor } = await admin.from("members").select("id").eq("household_id", householdId).eq("user_id", user.id).maybeSingle();
+    if (!actor) return NextResponse.json({ error: "You do not have access to this household." }, { status: 403 });
+
+    if (body.event === "test") {
+      return NextResponse.json(await sendPushToMembers([actor.id], "Family Command Center", "Phone notifications are connected.", "push-test"));
+    }
+
+    if (body.event === "task_assigned") {
+      const targetMemberId = text(body.targetMemberId, 80);
+      const taskTitle = text(body.taskTitle, 200);
+      if (!targetMemberId || !taskTitle) return NextResponse.json({ error: "The task recipient and title are required." }, { status: 400 });
+      if (targetMemberId === actor.id) return NextResponse.json({ sent: 0, skipped: "self-assignment" });
+      const { data: target } = await admin.from("members").select("id").eq("id", targetMemberId).eq("household_id", householdId).maybeSingle();
+      if (!target) return NextResponse.json({ error: "The task recipient is not in this household." }, { status: 400 });
+      const dueDate = text(body.dueDate, 40);
+      const dueText = dueDate ? ` Due ${dueDate}.` : "";
+      return NextResponse.json(await sendPushToMembers([target.id], "New task assigned", `${taskTitle}.${dueText}`, "task-assigned"));
+    }
+
+    return NextResponse.json({ error: "Unsupported notification event." }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not send notification." }, { status: 500 });
+  }
+}

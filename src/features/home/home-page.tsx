@@ -49,6 +49,7 @@ import { HomeDashboard } from "@/features/home/home-dashboard";
 import { HomeHeader, HomeNavigation, navigationTabs, type HomeTab } from "@/features/home/home-shell";
 import { HomeOverlays } from "@/features/home/home-overlays";
 import { createSettingsActions } from "@/features/settings/settings-actions";
+import { requestPushNotification } from "@/lib/notification-client";
 
 type VoiceWishlistDraft = { id: string; title: string; memberId: string | null };
 const WEATHER_POLLEN_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
@@ -924,16 +925,20 @@ export default function Home() {
     if (!title) return;
     const assigneeMemberId = todoAssigneeMemberId || null;
     const dueAt = todoDueDate ? `${todoDueDate}T12:00:00.000Z` : null;
+    const currentMemberId = members.find((member) => user?.id && String(member.userId) === user.id)?.id;
+    const changedToAnotherMember = Boolean(assigneeMemberId) && String(assigneeMemberId) !== String(currentMemberId ?? "") && (!editingTodo || String(editingTodo.assigneeMemberId ?? "") !== String(assigneeMemberId));
     if (editingTodo && supabase && householdId) {
       const { error } = await supabase.from("todos").update({ title, assignee_member_id: assigneeMemberId, due_at: dueAt }).eq("id", editingTodo.id).eq("household_id", householdId);
       if (error) { notify(`Could not update this task: ${error.message}`); return; }
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
+      if (changedToAnotherMember) void requestPushNotification({ event: "task_assigned", householdId, targetMemberId: String(assigneeMemberId), taskTitle: title, dueDate: todoDueDate || null });
     } else if (editingTodo) {
       setTodos((items) => items.map((todo) => todo.id === editingTodo.id ? { ...todo, title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, assigneeMemberId } : todo));
     } else if (supabase && user && householdId) {
       const { data, error } = await supabase.from("todos").insert({ household_id: householdId, created_by: user.id, title, due_at: dueAt, assignee_member_id: assigneeMemberId }).select("id, assignee_member_id, due_at").single();
       if (error) { notify(`Could not add this task: ${error.message}`); return; }
       if (data) setTodos((items) => [...items, { id: data.id, title, due: data.due_at ? new Date(data.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: data.due_at, done: false, assigneeMemberId: data.assignee_member_id }]);
+      if (data && changedToAnotherMember) void requestPushNotification({ event: "task_assigned", householdId, targetMemberId: String(assigneeMemberId), taskTitle: title, dueDate: todoDueDate || null });
     } else {
       setTodos((items) => [...items, { id: Date.now().toString(), title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, done: false, assigneeMemberId }]);
     }

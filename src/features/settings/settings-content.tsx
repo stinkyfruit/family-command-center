@@ -6,8 +6,10 @@ import type { AppleFeed, GoogleConnection, Member, ThemeMode } from "@/features/
 import { defaultMemberColor, isHexColor, memberColorOptions } from "@/features/home/model";
 import { memberCalendarColor } from "@/components/home/calendar";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
+import { NotificationSettings } from "@/components/home/notification-settings";
 
 export type SettingsPageContentProps = {
+  householdId?: string | null;
   members: Member[];
   currentUserId: string | null;
   onMemberColorChange: (memberId: string | number, color: string) => Promise<void>;
@@ -32,7 +34,7 @@ export type SettingsPageContentProps = {
 
 type PinMode = "loading" | "setup" | "locked" | "unlocked";
 
-export function SettingsPageContent({ members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, showChoresTab, showWishlistTab, onTabVisibilityChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult }: SettingsPageContentProps) {
+export function SettingsPageContent({ householdId, members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, showChoresTab, showWishlistTab, onTabVisibilityChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult }: SettingsPageContentProps) {
   const { confirm, prompt } = useAppNotifications();
   const [appleName, setAppleName] = useState("Home");
   const [appleUrl, setAppleUrl] = useState("");
@@ -154,6 +156,10 @@ export function SettingsPageContent({ members, currentUserId, onMemberColorChang
       <SettingsGroup id="settings-personal" eyebrow="PERSONAL" title="Your settings" description="Set the way this family home feels for you.">
         <article className="rounded-2xl bg-sky-50 p-5 dark:bg-sky-400/10"><p className="font-bold">Appearance</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Auto follows local sunrise and sunset using the weather location.</p><div className="mt-4 flex flex-wrap gap-2">{([ ["auto", "Auto", "settings"], ["light", "Light", "sun"], ["dark", "Dark", "moon"] ] as const).map(([mode, label, icon]) => <button key={mode} type="button" onClick={() => onThemeModeChange(mode)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${themeMode === mode ? "bg-sky-600 text-white shadow-sm" : "bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100 dark:bg-white/10 dark:text-sky-100 dark:ring-white/10"}`}><AppIcon name={icon} className="size-4" />{label}</button>)}</div></article>
         <article className="rounded-2xl bg-violet-50 p-5 dark:bg-violet-400/10"><p className="font-bold">Your nickname</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">This is the name your family sees for your account.</p><form key={currentMember.id} onSubmit={saveNickname} className="mt-4 flex flex-wrap items-end gap-3"><label htmlFor="current-member-nickname" className="min-w-0 flex-1 text-sm font-bold">Nickname<input id="current-member-nickname" name="nickname" required maxLength={60} defaultValue={currentMember.name} onChange={() => setNicknameMessage("")} placeholder="e.g. Kristen" className="mt-1 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><button type="submit" disabled={savingNickname} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60">{savingNickname ? "Saving…" : "Save nickname"}</button></form>{nicknameMessage && <p className="mt-3 text-sm font-semibold text-violet-700 dark:text-violet-200">{nicknameMessage}</p>}</article>
+      </SettingsGroup>
+
+      <SettingsGroup id="settings-notifications" eyebrow="NOTIFICATIONS" title="Phone notifications" description="Choose whether this device can receive family updates when the app is closed.">
+        <NotificationSettings householdId={householdId} currentMember={currentMember} />
       </SettingsGroup>
 
       <SettingsGroup id="settings-family" eyebrow="FAMILY" title="People and household" description="Manage the people who share this home and the sections they see.">
