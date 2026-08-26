@@ -10,6 +10,7 @@ export const navigationTabs = [
   ["lists", "lists", "Lists"],
   ["wishlist", "wishlist", "Wish lists"],
   ["movie-night", "movieNight", "Movie Night"],
+  ["family-dinners", "familyDinners", "Family Dinners"],
   ["settings", "settings", "Settings"],
 ] as const;
 

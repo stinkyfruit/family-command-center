@@ -19,6 +19,7 @@ export type SettingsActionDependencies = {
   showChoresTab: boolean;
   showWishlistTab: boolean;
   showMovieNightTab: boolean;
+  showFamilyDinnersTab: boolean;
   activeTab: string;
   notify: (message: string, tone?: "info" | "success" | "error" | "warning") => void;
   confirm: (message: string, options?: NotificationOptions) => Promise<boolean>;
@@ -35,6 +36,7 @@ export type SettingsActionDependencies = {
   setShowChoresTab: Dispatch<SetStateAction<boolean>>;
   setShowWishlistTab: Dispatch<SetStateAction<boolean>>;
   setShowMovieNightTab: Dispatch<SetStateAction<boolean>>;
+  setShowFamilyDinnersTab: Dispatch<SetStateAction<boolean>>;
   setActiveTab: (tab: "home") => void;
   setHouseholdId: Dispatch<SetStateAction<string | null>>;
   setHouseholdName: Dispatch<SetStateAction<string>>;
@@ -53,6 +55,7 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     showChoresTab,
     showWishlistTab,
     showMovieNightTab,
+    showFamilyDinnersTab,
     activeTab,
     notify,
     confirm,
@@ -69,6 +72,7 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     setShowChoresTab,
     setShowWishlistTab,
     setShowMovieNightTab,
+    setShowFamilyDinnersTab,
     setActiveTab,
     setHouseholdId,
     setHouseholdName,
@@ -264,21 +268,23 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     }
   }
 
-  async function updateTabVisibility(tab: "chores" | "wishlist" | "movie-night", visible: boolean) {
-    const previous = tab === "chores" ? showChoresTab : tab === "wishlist" ? showWishlistTab : showMovieNightTab;
+  async function updateTabVisibility(tab: "chores" | "wishlist" | "movie-night" | "family-dinners", visible: boolean) {
+    const previous = tab === "chores" ? showChoresTab : tab === "wishlist" ? showWishlistTab : tab === "movie-night" ? showMovieNightTab : showFamilyDinnersTab;
     if (previous === visible) return;
     if (tab === "chores") setShowChoresTab(visible);
     else if (tab === "wishlist") setShowWishlistTab(visible);
-    else setShowMovieNightTab(visible);
+    else if (tab === "movie-night") setShowMovieNightTab(visible);
+    else setShowFamilyDinnersTab(visible);
     if (!visible && activeTab === tab) setActiveTab("home");
     if (!supabase || !householdId) return;
 
-    const column = tab === "chores" ? "show_chores_tab" : tab === "wishlist" ? "show_wishlist_tab" : "show_movie_night_tab";
+    const column = tab === "chores" ? "show_chores_tab" : tab === "wishlist" ? "show_wishlist_tab" : tab === "movie-night" ? "show_movie_night_tab" : "show_family_dinners_tab";
     const { error } = await supabase.from("households").update({ [column]: visible }).eq("id", householdId);
     if (error) {
       if (tab === "chores") setShowChoresTab(previous);
       else if (tab === "wishlist") setShowWishlistTab(previous);
-      else setShowMovieNightTab(previous);
+      else if (tab === "movie-night") setShowMovieNightTab(previous);
+      else setShowFamilyDinnersTab(previous);
       notify(`Could not update the ${tab} tab: ${error.message}`);
     }
   }

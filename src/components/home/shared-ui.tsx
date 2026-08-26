@@ -2,12 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type SelectHTMLAttributes } from "react";
 import Image from "next/image";
-import { BellIcon, CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, ClipboardTextIcon, FilmSlateIcon, GiftIcon, HouseIcon, InfoIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PauseIcon, PencilSimpleIcon, PlayIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
+import { BellIcon, CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, ClipboardTextIcon, FilmSlateIcon, ForkKnifeIcon, GiftIcon, HouseIcon, InfoIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PauseIcon, PencilSimpleIcon, PlayIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { notoIconPath } from "@/features/home/model";
 
-export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "bell" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop" | "play" | "pause" | "check" | "info" | "warning";
+export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "familyDinners" | "bell" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop" | "play" | "pause" | "check" | "info" | "warning";
 
-const navigationIconStyles: Record<Extract<IconName, "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight">, { tile: string; icon: string; activeIcon: string }> = {
+const navigationIconStyles: Record<Extract<IconName, "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "familyDinners">, { tile: string; icon: string; activeIcon: string }> = {
   home: { tile: "bg-amber-100 dark:bg-amber-400/20", icon: "text-amber-600 dark:text-amber-200", activeIcon: "text-amber-700" },
   calendar: { tile: "bg-sky-100 dark:bg-sky-400/20", icon: "text-sky-600 dark:text-sky-200", activeIcon: "text-sky-700" },
   tasks: { tile: "bg-violet-100 dark:bg-violet-400/20", icon: "text-violet-600 dark:text-violet-200", activeIcon: "text-violet-700" },
@@ -15,6 +15,7 @@ const navigationIconStyles: Record<Extract<IconName, "home" | "calendar" | "task
   lists: { tile: "bg-rose-100 dark:bg-rose-400/20", icon: "text-rose-600 dark:text-rose-200", activeIcon: "text-rose-700" },
   wishlist: { tile: "bg-pink-100 dark:bg-pink-400/20", icon: "text-pink-600 dark:text-pink-200", activeIcon: "text-pink-700" },
   movieNight: { tile: "bg-fuchsia-100 dark:bg-fuchsia-400/20", icon: "text-fuchsia-600 dark:text-fuchsia-200", activeIcon: "text-fuchsia-700" },
+  familyDinners: { tile: "bg-orange-100 dark:bg-orange-400/20", icon: "text-orange-600 dark:text-orange-200", activeIcon: "text-orange-700" },
   settings: { tile: "bg-indigo-100 dark:bg-indigo-400/20", icon: "text-indigo-600 dark:text-indigo-200", activeIcon: "text-indigo-700" },
 };
 
@@ -28,6 +29,7 @@ export function AppIcon({ name, className = "size-5", variant = "default", activ
     settings: SlidersHorizontalIcon,
     wishlist: GiftIcon,
     movieNight: FilmSlateIcon,
+    familyDinners: ForkKnifeIcon,
     bell: BellIcon,
     plus: PlusIcon,
     close: XIcon,
