@@ -7,7 +7,20 @@ export const runtime = "nodejs";
 type NotificationBody =
   | { event: "test"; householdId: string }
   | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
-  | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null };
+  | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null }
+  | { event: "mood_changed"; householdId: string; memberId: string; mood: string };
+
+const moodLabels: Record<string, string> = {
+  great: "Great",
+  good: "Good",
+  okay: "Okay",
+  tired: "Tired",
+  low: "Low",
+  excited: "Excited",
+  calm: "Calm",
+  frustrated: "Frustrated",
+  worried: "Worried",
+};
 
 function text(value: unknown, maxLength: number) {
   return typeof value === "string" && value.trim().length > 0 && value.length <= maxLength ? value.trim() : null;
@@ -54,6 +67,16 @@ export async function POST(request: NextRequest) {
       if (body.activity === "task_created") return NextResponse.json(await sendPushToMembers(recipients, "New family task", `${actorName} added a task: ${title}.`, "family-task"));
       if (body.activity === "list_created") return NextResponse.json(await sendPushToMembers(recipients, "New shared list", `${actorName} created the ${listTitle} list.`, "family-list"));
       return NextResponse.json(await sendPushToMembers(recipients, "Shared list updated", `${actorName} added ${title} to ${listTitle}.`, "family-list-item"));
+    }
+
+    if (body.event === "mood_changed") {
+      const memberId = text(body.memberId, 80);
+      const mood = text(body.mood, 20);
+      if (!memberId || !mood || !moodLabels[mood]) return NextResponse.json({ error: "The family member and mood are required." }, { status: 400 });
+      const { data: subject } = await admin.from("members").select("id, display_name").eq("id", memberId).eq("household_id", householdId).maybeSingle();
+      if (!subject) return NextResponse.json({ error: "The family member is not in this household." }, { status: 400 });
+      const { data: adults } = await admin.from("members").select("id").eq("household_id", householdId).eq("role", "adult").neq("id", subject.id);
+      return NextResponse.json(await sendPushToMembers((adults ?? []).map((adult) => adult.id), "Family mood updated", `${subject.display_name} checked in as ${moodLabels[mood]}.`, "family-mood"));
     }
 
     return NextResponse.json({ error: "Unsupported notification event." }, { status: 400 });

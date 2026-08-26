@@ -1353,6 +1353,7 @@ export default function Home() {
     const checkedInAt = new Date().toISOString();
     const optimistic: MoodCheckin = { id: `local-${moodMemberId}`, memberId: member.id, mood: selectedMood, checkedInAt };
     const previous = moodCheckins;
+    const moodChanged = previous.find((item) => String(item.memberId) === moodMemberId)?.mood !== selectedMood;
     setMoodCheckins((items) => [optimistic, ...items.filter((item) => String(item.memberId) !== moodMemberId)]);
     setMoodMessage("");
     setSavingMood(true);
@@ -1371,6 +1372,7 @@ export default function Home() {
         return false;
       }
       if (data && isMoodKey(data.mood)) setMoodCheckins((items) => [ { id: data.id, memberId: data.member_id, mood: data.mood, checkedInAt: data.checked_in_at }, ...items.filter((item) => String(item.memberId) !== moodMemberId) ]);
+      if (data && moodChanged) void requestPushNotification({ event: "mood_changed", householdId, memberId: String(member.id), mood: selectedMood });
     }
 
     setMoodMessage(`${member.name} checked in as ${moodOption(selectedMood).label}.`);
