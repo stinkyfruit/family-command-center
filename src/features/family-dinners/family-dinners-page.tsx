@@ -15,6 +15,7 @@ const categories = [
   { value: "main", label: "Main dish" },
   { value: "side", label: "Side" },
   { value: "bread", label: "Bread" },
+  { value: "snacks", label: "Snacks" },
   { value: "dessert", label: "Dessert" },
 ] as const;
 type DinnerCategory = (typeof categories)[number]["value"];
