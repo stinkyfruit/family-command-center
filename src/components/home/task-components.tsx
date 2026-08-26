@@ -76,7 +76,7 @@ export function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: 
   const deleteTodo = (id: string | number) => window.dispatchEvent(new CustomEvent("family-delete-todo", { detail: id }));
 
   return (
-    <section className="mx-auto max-w-[1600px] px-5 pb-24 md:px-9 lg:pb-8">
+    <section className="mx-auto max-w-[1600px] px-5 pb-32 md:px-9 lg:pb-8">
       <div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8">
         <div className="flex items-center justify-between">
           <div>
