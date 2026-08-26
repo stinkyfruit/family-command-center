@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
-import type { Member } from "@/features/home/model";
+import type { Member, SharedList } from "@/features/home/model";
 import { supabase } from "@/lib/supabase";
 
 const PHOTO_BUCKET = "family-dinner-photos";
@@ -23,6 +23,17 @@ type DinnerRating = { id: string; memberId: string | null; memberName: string; r
 type DinnerDish = { id: string; position: number; title: string; category: DinnerCategory; photoPath: string | null; photoUrl: string | null; ratings: DinnerRating[] };
 type Dinner = { id: string; eatenOn: string | null; createdAt: string; notes: string | null; dishes: DinnerDish[] };
 type DishDraft = { id: string | null; title: string; category: DinnerCategory; photoFile: File | null; photoPath: string | null; photoUrl: string | null; photoRemoved: boolean; ratings: Record<string, string> };
+type RatedDish = DinnerDish & { dinnerId: string; dinnerDate: string | null; average: number };
+type FamilyDinnersPageProps = {
+  householdId: string | null;
+  members: Member[];
+  currentUserId: string | null;
+  sharedLists: SharedList[];
+  onAddListItem: (listId: string | number) => void;
+  onToggleListItem: (listId: string | number, itemId: string | number) => void;
+  onDeleteListItem: (listId: string | number, itemId: string | number) => void;
+  onOpenSharedLists: () => void;
+};
 
 function blankDish(): DishDraft {
   return { id: null, title: "", category: "main", photoFile: null, photoPath: null, photoUrl: null, photoRemoved: false, ratings: {} };
@@ -54,6 +65,25 @@ function sortDinners(dinners: Dinner[]) {
   return [...dinners].sort((first, second) => (second.eatenOn ?? "").localeCompare(first.eatenOn ?? "") || second.createdAt.localeCompare(first.createdAt));
 }
 
+function topRatedDishesForFilter(dinners: Dinner[], ratingFilter: "all" | DinnerCategory) {
+  const grouped = new Map<string, RatedDish>();
+  for (const dinner of dinners) {
+    for (const dish of dinner.dishes) {
+      if (!dish.ratings.length || (ratingFilter !== "all" && dish.category !== ratingFilter)) continue;
+      const key = `${dish.category}:${dish.title.trim().toLowerCase()}`;
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, { ...dish, dinnerId: dinner.id, dinnerDate: dinner.eatenOn, average: averageRating(dish) });
+        continue;
+      }
+      const ratings = [...existing.ratings, ...dish.ratings];
+      const newer = (dinner.eatenOn ?? "") >= (existing.dinnerDate ?? "");
+      grouped.set(key, { ...existing, ...(newer ? { id: dish.id, dinnerId: dinner.id, dinnerDate: dinner.eatenOn, photoPath: dish.photoPath, photoUrl: dish.photoUrl } : {}), ratings, average: ratings.reduce((total, rating) => total + rating.rating, 0) / ratings.length });
+    }
+  }
+  return [...grouped.values()].sort((first, second) => second.average - first.average || second.ratings.length - first.ratings.length || (second.dinnerDate ?? "").localeCompare(first.dinnerDate ?? "")).slice(0, 8);
+}
+
 async function preparePhoto(file: File) {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Choose a JPG, PNG, or WebP photo.");
   if (file.size > MAX_PHOTO_BYTES && file.type === "image/webp") throw new Error("That photo is over 3 MB. Choose a smaller photo.");
@@ -77,7 +107,7 @@ function DinnerPhoto({ url, title, className = "h-44 w-full" }: { url: string | 
   return <div className={`grid place-items-center overflow-hidden rounded-2xl bg-orange-100 text-orange-600 dark:bg-orange-400/20 dark:text-orange-200 ${className}`}>{url ? <img src={url} alt={`${title} photo`} className="size-full object-cover" loading="lazy" /> : <AppIcon name="familyDinners" className="size-10" />}</div>;
 }
 
-export function FamilyDinnersPage({ householdId, members, currentUserId }: { householdId: string | null; members: Member[]; currentUserId: string | null }) {
+export function FamilyDinnersPage({ householdId, members, currentUserId, sharedLists, onAddListItem, onToggleListItem, onDeleteListItem, onOpenSharedLists }: FamilyDinnersPageProps) {
   const { notify, confirm } = useAppNotifications();
   const [dinners, setDinners] = useState<Dinner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +120,7 @@ export function FamilyDinnersPage({ householdId, members, currentUserId }: { hou
   const [eatenOn, setEatenOn] = useState("");
   const [notes, setNotes] = useState("");
   const [dishDrafts, setDishDrafts] = useState<DishDraft[]>([blankDish()]);
+  const [ratingFilter, setRatingFilter] = useState<"all" | DinnerCategory>("all");
 
   useEffect(() => {
     if (!selectedDinner) return;
@@ -136,6 +167,8 @@ export function FamilyDinnersPage({ householdId, members, currentUserId }: { hou
   }, [householdId]);
 
   const totalDishes = useMemo(() => dinners.reduce((total, dinner) => total + dinner.dishes.length, 0), [dinners]);
+  const topRatedDishes = useMemo(() => topRatedDishesForFilter(dinners, ratingFilter), [dinners, ratingFilter]);
+  const dinnerIdeasList = sharedLists.find((list) => list.title.trim().toLowerCase() === "dinner ideas") ?? null;
 
   function updateDish(index: number, update: Partial<DishDraft>) {
     setDishDrafts((current) => current.map((dish, dishIndex) => dishIndex === index ? { ...dish, ...update } : dish));
@@ -270,6 +303,18 @@ export function FamilyDinnersPage({ householdId, members, currentUserId }: { hou
         <div className="flex flex-wrap items-start justify-between gap-5"><div className="max-w-2xl"><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-100">Family dinners</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Pass the memories</h1><p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-orange-50">Keep the recipes, dishes, and family opinions that make dinner worth remembering.</p></div><button type="button" onClick={() => { if (showForm) resetForm(); else { setEditingDinnerId(null); setMessage(""); setShowForm(true); } }} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-orange-900 shadow-sm hover:bg-orange-50"><AppIcon name="plus" className="size-4" />{showForm ? "Close form" : "Record a dinner"}</button></div>
         <div className="mt-7 grid max-w-xl grid-cols-2 gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><p className="text-2xl font-black">{dinners.length}</p><p className="text-xs font-bold text-orange-100">Dinners recorded</p></div><div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><p className="text-2xl font-black">{totalDishes}</p><p className="text-xs font-bold text-orange-100">Dishes remembered</p></div><div className="hidden rounded-2xl bg-white/10 p-3 ring-1 ring-white/10 sm:block"><p className="text-2xl font-black">{members.length}</p><p className="text-xs font-bold text-orange-100">Family tasters</p></div></div>
       </section>
+
+      <div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <section className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-orange-100 dark:bg-white/5 dark:ring-white/10 md:p-6" aria-labelledby="top-rated-dishes-title">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600 dark:text-orange-300">Family favorites</p><h2 id="top-rated-dishes-title" className="mt-1 text-2xl font-black">Highest rated dishes</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">The dishes your family has loved most so far.</p></div><StyledSelect value={ratingFilter} onChange={(event) => setRatingFilter(event.target.value as "all" | DinnerCategory)} className="mt-0 w-40" aria-label="Filter highest rated dishes by category"><option value="all">All types</option>{categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</StyledSelect></div>
+          {loading ? <p role="status" className="mt-6 text-sm font-semibold text-slate-400">Calculating family favorites…</p> : topRatedDishes.length ? <div className="mt-5 space-y-3">{topRatedDishes.map((dish, index) => <article key={`${dish.id}-${dish.dinnerId}`} className="flex min-w-0 items-center gap-3 rounded-2xl bg-orange-50 p-3 dark:bg-orange-400/10"><span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-sm font-black text-orange-700 shadow-sm dark:bg-white/10 dark:text-orange-200">{index + 1}</span><DinnerPhoto url={dish.photoUrl} title={dish.title} className="size-14 shrink-0" /><div className="min-w-0 flex-1"><h3 className="truncate font-black">{dish.title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-300">{categoryLabel(dish.category)}{dish.dinnerDate ? ` · ${shortDate(dish.dinnerDate)}` : ""}</p></div><div className="shrink-0 text-right"><p className="text-lg font-black text-orange-700 dark:text-orange-200">{dish.average.toFixed(1)}</p><p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{dish.ratings.length} {dish.ratings.length === 1 ? "rating" : "ratings"}</p></div></article>)}</div> : <div className="mt-5 rounded-2xl border-2 border-dashed border-orange-200 px-4 py-7 text-center dark:border-orange-300/20"><p className="text-sm font-black">No rated dishes in this category yet.</p><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Record a dinner and add everyone&apos;s ratings to build this list.</p></div>}
+        </section>
+
+        <section className="rounded-[2rem] bg-gradient-to-br from-amber-100 via-orange-50 to-yellow-50 p-5 shadow-sm ring-1 ring-orange-100 dark:from-amber-400/15 dark:via-orange-400/10 dark:to-yellow-400/10 dark:ring-white/10 md:p-6" aria-labelledby="dinner-ideas-title">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700 dark:text-orange-200">Keep for later</p><h2 id="dinner-ideas-title" className="mt-1 text-2xl font-black">Dinner Ideas</h2><p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">The same shared list, shaped for meal planning.</p></div>{dinnerIdeasList && <button type="button" onClick={() => onAddListItem(dinnerIdeasList.id)} className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white hover:bg-orange-700"><AppIcon name="plus" className="size-4" />Add idea</button>}</div>
+          {dinnerIdeasList ? <div className="mt-5 space-y-2">{dinnerIdeasList.items.length ? dinnerIdeasList.items.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-2xl bg-white/80 px-3 py-3 text-sm font-bold text-slate-700 dark:bg-white/10 dark:text-slate-100"><button type="button" onClick={() => onToggleListItem(dinnerIdeasList.id, item.id)} aria-label={`${item.done ? "Mark" : "Complete"} ${item.title}`} className={`grid size-6 shrink-0 place-items-center rounded-lg border-2 ${item.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-orange-300 text-transparent dark:border-orange-200/60"}`}><AppIcon name="check" className="size-4" /></button><span className={`min-w-0 flex-1 truncate ${item.done ? "line-through opacity-50" : ""}`}>{item.title}</span><button type="button" onClick={() => onDeleteListItem(dinnerIdeasList.id, item.id)} aria-label={`Delete ${item.title}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-400/10"><AppIcon name="trash" className="size-4" /></button></div>) : <div className="rounded-2xl border-2 border-dashed border-orange-200 px-4 py-7 text-center dark:border-orange-300/20"><p className="text-sm font-black">Your Dinner Ideas list is empty.</p><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Add ideas here and they&apos;ll also appear in Shared Lists.</p></div>}{dinnerIdeasList.items.length > 0 && <button type="button" onClick={onOpenSharedLists} className="mt-3 text-xs font-black text-orange-700 underline underline-offset-2 hover:text-orange-900 dark:text-orange-200">Open in Shared Lists</button>}</div> : <div className="mt-5 rounded-2xl border-2 border-dashed border-orange-200 px-4 py-7 text-center dark:border-orange-300/20"><p className="text-sm font-black">Create a shared list called &quot;Dinner Ideas&quot;.</p><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Once it exists, it will appear here automatically.</p><button type="button" onClick={onOpenSharedLists} className="mt-3 rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white hover:bg-orange-700">Open Shared Lists</button></div>}
+        </section>
+      </div>
 
       {showForm && <form onSubmit={saveDinner} className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-orange-100 dark:bg-white/5 dark:ring-white/10 md:p-7"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600 dark:text-orange-300">{editingDinnerId ? "Edit memory" : "New memory"}</p><h2 className="mt-1 text-2xl font-black">{editingDinnerId ? "Edit family dinner" : "What did you make?"}</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Add the dishes, a date if you remember it, and everyone&apos;s rating.</p></div><label className="text-sm font-black">Date <span className="font-medium text-slate-500 dark:text-slate-300">(optional)</span><input type="date" value={eatenOn} onChange={(event) => setEatenOn(event.target.value)} className="mt-1 block rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white" /></label></div><label className="mt-5 block text-sm font-bold">Dinner notes <span className="font-medium text-slate-500 dark:text-slate-300">(optional)</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} rows={3} placeholder="What made this dinner special? Any recipe notes?" className="mt-2 block w-full resize-y rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white" /><span className="mt-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">{notes.length}/1000</span></label><div className="mt-5 grid gap-4 md:grid-cols-2">{dishDrafts.map((dish, dishIndex) => <article key={dish.id ?? dishIndex} className="rounded-2xl bg-orange-50 p-4 dark:bg-orange-400/10"><div className="flex items-center justify-between gap-3"><h3 className="font-black">Dish {dishIndex + 1}</h3>{dishDrafts.length > 1 && <button type="button" onClick={() => setDishDrafts((current) => current.filter((_, index) => index !== dishIndex))} className="text-xs font-black text-rose-600 hover:underline">Remove</button>}</div><label className="mt-3 block text-sm font-bold">Title<input required maxLength={120} value={dish.title} onChange={(event) => updateDish(dishIndex, { title: event.target.value })} placeholder="e.g. Grandma&apos;s lasagna" className="mt-1 w-full rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white" /></label><label className="mt-3 block text-sm font-bold">Category<StyledSelect value={dish.category} onChange={(event) => updateDish(dishIndex, { category: event.target.value as DinnerCategory })}>{categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</StyledSelect></label><div className="mt-3"><span className="block text-sm font-bold">Dish photo <span className="font-medium text-slate-500 dark:text-slate-300">(optional)</span></span><div className="mt-2 flex items-center gap-3"><DinnerPhoto url={dish.photoUrl} title={dish.title || "Dish"} className="size-20 shrink-0" /><div className="min-w-0"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700 shadow-sm ring-1 ring-orange-200 hover:bg-orange-100 dark:bg-white/10 dark:text-orange-200 dark:ring-white/10"><AppIcon name="plus" className="size-4" />{dish.photoUrl ? "Replace photo" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => void choosePhoto(dishIndex, event)} className="sr-only" /></label>{dish.photoUrl && <button type="button" onClick={() => updateDish(dishIndex, { photoFile: null, photoUrl: null, photoRemoved: true })} className="ml-2 text-xs font-black text-rose-600 hover:underline">Remove</button>}<p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">JPG, PNG, or WebP · prepared to 1600px · max 3 MB</p></div></div></div><div className="mt-4 border-t border-orange-200/70 pt-3 dark:border-white/10"><p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-200">Everyone&apos;s rating</p><div className="mt-2 grid gap-2">{members.map((member) => <label key={member.id} className="flex items-center gap-2 text-sm font-bold"><span className="min-w-0 flex-1 truncate">{member.name}</span><StyledSelect className="mt-0 w-28" aria-label={`${member.name}'s rating for ${dish.title || `dish ${dishIndex + 1}`}`} value={dish.ratings[String(member.id)] ?? ""} onChange={(event) => updateRating(dishIndex, String(member.id), event.target.value)}><option value="">Rating</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => <option key={rating} value={rating}>{rating} / 10</option>)}</StyledSelect></label>)}</div></div></article>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={() => setDishDrafts((current) => [...current, blankDish()])} className="inline-flex items-center gap-2 rounded-xl bg-orange-100 px-3 py-2 text-sm font-black text-orange-700 hover:bg-orange-200 dark:bg-orange-400/20 dark:text-orange-200"><AppIcon name="plus" className="size-4" />Add another dish</button><div className="flex items-center gap-2"><button type="button" onClick={resetForm} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">Cancel</button><button type="submit" disabled={saving || !members.length} className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-orange-700 disabled:cursor-wait disabled:opacity-60">{saving ? "Saving…" : editingDinnerId ? "Save changes" : "Save dinner"}</button></div></div>{message && <p role="alert" className="mt-3 text-sm font-bold text-rose-600 dark:text-rose-300">{message}</p>}<p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Photos are private to your household and are kept within the app&apos;s 3 MB per-dish limit.</p></form>}
 
