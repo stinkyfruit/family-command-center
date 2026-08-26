@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestUser, serverSupabase } from "@/lib/google-calendar";
 import { buildMorningDigest, currentHouseholdDateTime } from "@/lib/morning-digest";
-import { sendPushToEndpoint, sendPushToHousehold } from "@/lib/push-server";
+import { sendPushToHousehold } from "@/lib/push-server";
 
 export const runtime = "nodejs";
 
@@ -10,27 +10,26 @@ function authorizedCron(request: NextRequest) {
   return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
 }
 
-async function sendPreview(request: NextRequest, body: { householdId?: string; endpoint?: string }) {
+async function sendPreview(request: NextRequest, body: { householdId?: string }) {
   const user = await requestUser(request.headers.get("authorization"));
   if (!user) return NextResponse.json({ error: "Sign in before previewing the morning digest." }, { status: 401 });
   const householdId = body.householdId ?? request.nextUrl.searchParams.get("householdId");
-  const endpoint = body.endpoint;
-  if (!householdId || !endpoint) return NextResponse.json({ error: "A household and device are required." }, { status: 400 });
+  if (!householdId) return NextResponse.json({ error: "A household is required." }, { status: 400 });
   const admin = serverSupabase();
   const { data: actor } = await admin.from("members").select("id").eq("household_id", householdId).eq("user_id", user.id).maybeSingle();
   if (!actor) return NextResponse.json({ error: "You do not have access to this household." }, { status: 403 });
-  const { data: device } = await admin.from("notification_devices").select("id").eq("household_id", householdId).eq("member_id", actor.id).eq("endpoint", endpoint).eq("enabled", true).maybeSingle();
-  if (!device) return NextResponse.json({ error: "This device is not enabled for phone notifications. Turn Family updates off, then back on, to re-register it." }, { status: 400 });
+  const { data: optedInDevice } = await admin.from("notification_devices").select("id").eq("household_id", householdId).eq("member_id", actor.id).eq("enabled", true).eq("morning_digest_enabled", true).limit(1).maybeSingle();
+  if (!optedInDevice) return NextResponse.json({ error: "Turn on the morning digest for this device before sending a preview." }, { status: 400 });
   const { data: household } = await admin.from("households").select("timezone").eq("id", householdId).single();
   const timeZone = household?.timezone ?? "America/Chicago";
   const today = currentHouseholdDateTime(new Date(), timeZone).date;
   const digest = await buildMorningDigest(admin, householdId, today, timeZone);
-  return NextResponse.json(await sendPushToEndpoint(endpoint, digest.title, digest.body, "morning-digest-preview"));
+  return NextResponse.json(await sendPushToHousehold(householdId, digest.title, digest.body, "morning-digest-preview"));
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as { event?: string; householdId?: string; endpoint?: string };
+    const body = await request.json() as { event?: string; householdId?: string };
     if (body.event !== "morning_digest_preview") return NextResponse.json({ error: "Unsupported notification event." }, { status: 400 });
     return await sendPreview(request, body);
   } catch (error) {

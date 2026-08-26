@@ -16,7 +16,6 @@ export function NotificationSettings({ householdId, currentMember }: { household
   const [testing, setTesting] = useState(false);
   const [digestEnabled, setDigestEnabled] = useState(false);
   const [digestTime, setDigestTime] = useState("08:00");
-  const [digestLoading, setDigestLoading] = useState(() => Boolean(supabase));
   const [digestSaving, setDigestSaving] = useState(false);
   const [digestPreviewing, setDigestPreviewing] = useState(false);
   const supported = isPushSupported();
@@ -62,10 +61,16 @@ export function NotificationSettings({ householdId, currentMember }: { household
         setDigestEnabled(Boolean(deviceDigestResult?.data?.morning_digest_enabled));
       }
       setLoading(false);
-      setDigestLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setEnabled(false);
+      setDeviceEndpoint(null);
+      setDigestEnabled(false);
+      setLoading(false);
+      notify("Could not check this device&apos;s notification settings. Try the toggle again.", "warning");
     });
     return () => { active = false; };
-  }, [currentMember.id, resolvedHouseholdId, supported]);
+  }, [currentMember.id, notify, resolvedHouseholdId, supported]);
 
   async function saveDigestTime(time: string) {
     if (!resolvedHouseholdId || !supabase) return;
@@ -75,14 +80,14 @@ export function NotificationSettings({ householdId, currentMember }: { household
     if (error) notify(`Could not save the morning digest setting: ${error.message}`);
   }
 
-  async function saveDigestDevice(enabledValue: boolean) {
-    if (!resolvedHouseholdId || !supabase || !deviceEndpoint) {
+  async function saveDigestDevice(enabledValue: boolean, endpoint = deviceEndpoint) {
+    if (!resolvedHouseholdId || !supabase || !endpoint) {
       setDigestEnabled(false);
       notify("Enable phone notifications on this device first.", "warning");
       return;
     }
     setDigestSaving(true);
-    const { error } = await supabase.from("notification_devices").update({ morning_digest_enabled: enabledValue }).eq("household_id", resolvedHouseholdId).eq("member_id", currentMember.id).eq("endpoint", deviceEndpoint);
+    const { error } = await supabase.from("notification_devices").update({ morning_digest_enabled: enabledValue }).eq("household_id", resolvedHouseholdId).eq("member_id", currentMember.id).eq("endpoint", endpoint);
     setDigestSaving(false);
     if (error) {
       setDigestEnabled(!enabledValue);
@@ -91,18 +96,19 @@ export function NotificationSettings({ householdId, currentMember }: { household
   }
 
   async function enable() {
-    if (!resolvedHouseholdId) return;
+    if (!resolvedHouseholdId) return null;
     setSaving(true);
     const result = await enablePushNotifications(resolvedHouseholdId, currentMember.id);
     setSaving(false);
     if (result.error) {
       notify(result.error, "warning");
-      return;
+      return null;
     }
     setEnabled(true);
     setDeviceEndpoint(result.endpoint ?? null);
     setDigestEnabled(false);
     notify("Phone notifications are enabled on this device.", "success");
+    return result.endpoint ?? null;
   }
 
   async function disable() {
@@ -130,18 +136,33 @@ export function NotificationSettings({ householdId, currentMember }: { household
 
   async function sendDigestPreview() {
     if (!resolvedHouseholdId) return;
-    if (!deviceEndpoint) return;
+    if (!enabled || !deviceEndpoint) {
+      notify("Enable Family updates on this device before sending a preview.", "warning");
+      return;
+    }
     setDigestPreviewing(true);
-    const result = await requestPushNotification({ event: "morning_digest_preview", householdId: resolvedHouseholdId, endpoint: deviceEndpoint });
+    const result = await requestPushNotification({ event: "morning_digest_preview", householdId: resolvedHouseholdId });
     setDigestPreviewing(false);
     if (result.error) {
-      if (result.error.includes("not enabled for phone notifications")) {
+      if (result.error.includes("morning digest for this device")) {
         setEnabled(false);
         setDigestEnabled(false);
         notify("Turn Family updates off, then back on, to re-register this device.", "warning");
       } else notify(result.error);
     }
     else notify("Morning digest preview sent.", "success");
+  }
+
+  async function toggleDigest(enabledValue: boolean) {
+    if (!enabledValue) {
+      setDigestEnabled(false);
+      await saveDigestDevice(false);
+      return;
+    }
+    const endpoint = deviceEndpoint ?? await enable();
+    if (!endpoint) return;
+    setDigestEnabled(true);
+    await saveDigestDevice(true, endpoint);
   }
 
   return <article className="rounded-2xl bg-emerald-50 p-5 dark:bg-emerald-400/10">
@@ -166,11 +187,11 @@ export function NotificationSettings({ householdId, currentMember }: { household
         <div className="flex items-start gap-3">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-100"><AppIcon name="calendar" className="size-4" /></span>
           <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">Daily morning digest</p>{digestEnabled && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-100">On this device</span>}</div><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Get today&apos;s calendar events and open tasks due today.</p></div>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm font-bold"><input type="checkbox" checked={digestEnabled} disabled={!enabled || digestLoading || digestSaving} onChange={(event) => { setDigestEnabled(event.target.checked); void saveDigestDevice(event.target.checked); }} className="size-4 accent-emerald-600" /><span>{digestEnabled ? "On" : "Off"}</span></label>
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm font-bold"><input type="checkbox" checked={digestEnabled} disabled={digestSaving || saving} onChange={(event) => void toggleDigest(event.target.checked)} className="size-4 accent-emerald-600" /><span>{digestSaving ? "Saving…" : digestEnabled ? "On" : "Off"}</span></label>
         </div>
         {digestEnabled && <div className="mt-4 flex flex-wrap items-end gap-3">
           <label className="text-sm font-bold">Household sends at<StyledSelect value={digestTime} disabled={digestSaving} onChange={(event) => { setDigestTime(event.target.value); void saveDigestTime(event.target.value); }}><option value="06:00">6:00 AM</option><option value="07:00">7:00 AM</option><option value="08:00">8:00 AM</option><option value="09:00">9:00 AM</option><option value="10:00">10:00 AM</option></StyledSelect></label>
-          <button type="button" onClick={() => void sendDigestPreview()} disabled={!enabled || digestPreviewing} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-50">{digestPreviewing ? "Sending…" : "Send a preview"}</button>
+          <button type="button" onClick={() => void sendDigestPreview()} disabled={digestPreviewing} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-50">{digestPreviewing ? "Sending…" : "Send preview to opted-in devices"}</button>
         </div>}
         <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">Choose whether this device receives the household digest. The schedule uses your household timezone.</p>
       </section>}
