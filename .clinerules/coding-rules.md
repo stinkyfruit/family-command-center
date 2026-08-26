@@ -6,6 +6,10 @@ This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript
 
 Treat Supabase Free and Vercel Hobby as hard constraints. Before implementing anything that introduces a new external service, paid API, AI inference, object/file storage, image transformation, video upload, background job, cron, polling loop, or potentially unbounded bandwidth, explicitly warn the user that it may create cost or quota risk. Verify current official limits/pricing, give a rough usage estimate and explain the overage or restriction behavior, then ask for confirmation before proceeding. Do not add billing-enabled providers, paid dependencies, or “free tier” services based only on an assumption that the family’s usage will stay small. Prefer existing project capabilities and local assets. For photo features in particular, design bounded uploads (format, dimensions, file-size limit, retention, and download behavior) and surface those limits before implementation; never silently upload original-resolution photos or add image transformations.
 
+## Setup instruction guardrail
+
+Whenever a feature needs an API key, access token, secret, environment variable, account connection, migration, or other user-side setup, always provide step-by-step setup instructions. Identify the exact official page or location where the value is obtained, distinguish similarly named credentials (for example, API key versus read-access token), show the exact variable name and `.env.local` line, explain whether the development server must be restarted, remind the user not to share or commit secrets, and state any relevant cost, quota, attribution, or plan implications.
+
 ## Non-negotiable workflow
 
 1. **Read the docs first.** Before implementing or modifying code, consult the relevant documentation and follow its stated best practices, code patterns, and deprecation notices. Do not improvise APIs or configuration from memory.
