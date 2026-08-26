@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 export type PushNotificationRequest =
   | { event: "test"; householdId: string }
   | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
+  | { event: "task_completed"; householdId: string; taskTitle: string }
   | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null }
   | { event: "mood_changed"; householdId: string; memberId: string; mood: string }
   | { event: "morning_digest_preview"; householdId: string };

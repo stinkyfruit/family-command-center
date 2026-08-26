@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 type NotificationBody =
   | { event: "test"; householdId: string }
   | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
+  | { event: "task_completed"; householdId: string; taskTitle: string }
   | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null }
   | { event: "mood_changed"; householdId: string; memberId: string; mood: string };
 
@@ -52,6 +53,14 @@ export async function POST(request: NextRequest) {
       const dueDate = text(body.dueDate, 40);
       const dueText = dueDate ? ` Due ${dueDate}.` : "";
       return NextResponse.json(await sendPushToMembers([target.id], "New task assigned", `${taskTitle}.${dueText}`, "task-assigned"));
+    }
+
+    if (body.event === "task_completed") {
+      const taskTitle = text(body.taskTitle, 200);
+      if (!taskTitle) return NextResponse.json({ error: "The completed task title is required." }, { status: 400 });
+      const { data: adults } = await admin.from("members").select("id").eq("household_id", householdId).eq("role", "adult").neq("id", actor.id);
+      const actorName = actor.display_name ?? "A family member";
+      return NextResponse.json(await sendPushToMembers((adults ?? []).map((adult) => adult.id), "Task completed", `${actorName} completed: ${taskTitle}.`, "task-completed"));
     }
 
     if (body.event === "family_activity") {

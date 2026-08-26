@@ -956,6 +956,17 @@ export default function Home() {
     else if ((result.failed ?? 0) > 0) notify(`Saved, but ${result.failed} family activity notification${result.failed === 1 ? "" : "s"} failed.`, "warning");
   }
 
+  async function notifyTaskCompletion(title: string) {
+    if (!householdId) return;
+    const result = await requestPushNotification({ event: "task_completed", householdId, taskTitle: title });
+    if (result.error) {
+      notify(`Task completed, but the completion notification could not be sent: ${result.error}`, "warning");
+      return;
+    }
+    if (result.sent === 0) notify("Task completed, but no other adult has an active phone notification device.", "warning");
+    else if ((result.failed ?? 0) > 0) notify(`Task completed, but ${result.failed} completion notification${result.failed === 1 ? "" : "s"} failed.`, "warning");
+  }
+
   async function saveTodo(event: FormEvent) {
     event.preventDefault();
     const title = todoTitle.trim();
@@ -1122,9 +1133,13 @@ export default function Home() {
     const done = !target.done;
     const checkbox = Array.from(document.querySelectorAll<HTMLButtonElement>("button[aria-label^='Complete ']"))
       .find((button) => button.getAttribute("aria-label") === `Complete ${target.title}`);
-    const finish = () => {
+    const finish = async () => {
       setTodos((items) => items.map((todo) => todo.id === id ? { ...todo, done } : todo));
-      if (supabase && householdId) supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId).then(() => undefined);
+      if (supabase && householdId) {
+        const { error } = await supabase.from("todos").update({ status: done ? "completed" : "open", completed_at: done ? new Date().toISOString() : null }).eq("id", id).eq("household_id", householdId);
+        if (error) notify(`Could not update this task: ${error.message}`);
+        else if (done) void notifyTaskCompletion(target.title);
+      }
       checkbox?.classList.remove("task-checking");
       setCompletingTodoId(null);
       setCelebratingTaskId(null);
