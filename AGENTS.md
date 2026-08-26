@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Project Rules — Reference Documentation for Best Practices
 
+**Deployment constraint:** This project runs on the Vercel Hobby plan. Future architecture and scheduling decisions must remain compatible with Hobby and avoid paid-only Vercel features or paid external services unless the user explicitly changes this constraint.
+
 This project runs a cutting-edge stack (Next.js 16 App Router, React, TypeScript, Tailwind, Supabase) whose APIs and conventions can differ from typical training data. **Always reference the authoritative documentation before writing code** and follow its best practices — do not improvise APIs or configuration from memory.
 
 - **Next.js:** read the version-exact guide in `node_modules/next/dist/docs/` (e.g. `01-app`, `03-api-reference`) before writing routes, layouts, or metadata — either read the files directly or via the `nextjs-docs-local` MCP server (filesystem server scoped to that directory). Heed deprecation notices (mandated above).
