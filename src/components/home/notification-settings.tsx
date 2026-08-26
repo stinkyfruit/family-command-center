@@ -49,15 +49,15 @@ export function NotificationSettings({ householdId, currentMember }: { household
       client.from("households").select("morning_digest_time").eq("id", resolvedHouseholdId).single(),
     ]).then(async ([pushValue, endpoint, digestResult]) => {
       if (!active) return;
-      setEnabled(pushValue);
       setDeviceEndpoint(endpoint);
       if (!digestResult.error) {
         setDigestTime(String(digestResult.data?.morning_digest_time ?? "08:00").slice(0, 5));
       }
       const deviceDigestResult = endpoint
-        ? await client.from("notification_devices").select("morning_digest_enabled").eq("household_id", resolvedHouseholdId).eq("member_id", currentMember.id).eq("endpoint", endpoint).maybeSingle()
+        ? await client.from("notification_devices").select("enabled, morning_digest_enabled").eq("household_id", resolvedHouseholdId).eq("member_id", currentMember.id).eq("endpoint", endpoint).maybeSingle()
         : null;
       if (!active) return;
+      setEnabled(pushValue && Boolean(deviceDigestResult?.data?.enabled));
       if (!deviceDigestResult?.error) {
         setDigestEnabled(Boolean(deviceDigestResult?.data?.morning_digest_enabled));
       }
@@ -134,7 +134,13 @@ export function NotificationSettings({ householdId, currentMember }: { household
     setDigestPreviewing(true);
     const result = await requestPushNotification({ event: "morning_digest_preview", householdId: resolvedHouseholdId, endpoint: deviceEndpoint });
     setDigestPreviewing(false);
-    if (result.error) notify(result.error);
+    if (result.error) {
+      if (result.error.includes("not enabled for phone notifications")) {
+        setEnabled(false);
+        setDigestEnabled(false);
+        notify("Turn Family updates off, then back on, to re-register this device.", "warning");
+      } else notify(result.error);
+    }
     else notify("Morning digest preview sent.", "success");
   }
 

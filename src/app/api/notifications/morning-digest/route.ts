@@ -20,7 +20,7 @@ async function sendPreview(request: NextRequest, body: { householdId?: string; e
   const { data: actor } = await admin.from("members").select("id").eq("household_id", householdId).eq("user_id", user.id).maybeSingle();
   if (!actor) return NextResponse.json({ error: "You do not have access to this household." }, { status: 403 });
   const { data: device } = await admin.from("notification_devices").select("id").eq("household_id", householdId).eq("member_id", actor.id).eq("endpoint", endpoint).eq("enabled", true).maybeSingle();
-  if (!device) return NextResponse.json({ error: "This device is not enabled for phone notifications." }, { status: 400 });
+  if (!device) return NextResponse.json({ error: "This device is not enabled for phone notifications. Turn Family updates off, then back on, to re-register it." }, { status: 400 });
   const { data: household } = await admin.from("households").select("timezone").eq("id", householdId).single();
   const timeZone = household?.timezone ?? "America/Chicago";
   const today = currentHouseholdDateTime(new Date(), timeZone).date;
