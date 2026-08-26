@@ -9,12 +9,12 @@
 
 ## Daily morning digest
 
-1. Run `supabase/migrations/20260825_add_morning_digest_notifications.sql` in the Supabase SQL Editor.
+1. Run `supabase/migrations/20260825_add_morning_digest_notifications.sql`, then `supabase/migrations/20260825_move_morning_digest_opt_in_to_devices.sql` in the Supabase SQL Editor.
 2. Add a long random `CRON_SECRET` to `.env.local` and to the production environment. Keep it server-only.
 3. Deploy the project to Vercel. The checked-in `vercel.json` calls `/api/notifications/morning-digest` once per hour; the route sends each enabled household digest when its local clock reaches the configured hour and uses a delivery ledger to avoid duplicates.
-4. In Settings → Notifications, enable **Daily morning digest**, choose a time (8:00 AM by default), and use **Send a preview** to verify the current device.
+4. In Settings → Notifications, enable **Family updates** on each device, then choose whether that device receives the **Daily morning digest**. The household send time is 8:00 AM by default. Use **Send a preview** to verify the current device.
 
-The digest includes today’s imported/app calendar events and open to-dos due today. It is sent to every enabled phone in the household. Vercel Cron Jobs run only on production deployments, so local development requires calling the route manually with `Authorization: Bearer $CRON_SECRET` if you want to test the scheduled path.
+The digest includes today’s imported/app calendar events and open to-dos due today. It is sent only to devices that opted in, while the send time remains household-wide. Vercel Cron Jobs run only on production deployments, so local development requires calling the route manually with `Authorization: Bearer $CRON_SECRET` if you want to test the scheduled path.
 
 On iPhone or iPad, first add the site to the Home Screen. Task assignment notifications are sent after a task is assigned to another household member; future notification types can be added to the same server sender.
 

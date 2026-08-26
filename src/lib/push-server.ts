@@ -49,7 +49,20 @@ export async function sendPushToHousehold(householdId: string, title: string, bo
     .from("notification_devices")
     .select("id, endpoint, p256dh, auth")
     .eq("household_id", householdId)
-    .eq("enabled", true);
+    .eq("enabled", true)
+    .eq("morning_digest_enabled", true);
+  if (error) throw error;
+  return sendPushToDevices(devices, title, body, tag);
+}
+
+export async function sendPushToEndpoint(endpoint: string, title: string, body: string, tag: string) {
+  const admin = serverSupabase();
+  const { data: devices, error } = await admin
+    .from("notification_devices")
+    .select("id, endpoint, p256dh, auth")
+    .eq("endpoint", endpoint)
+    .eq("enabled", true)
+    .limit(1);
   if (error) throw error;
   return sendPushToDevices(devices, title, body, tag);
 }

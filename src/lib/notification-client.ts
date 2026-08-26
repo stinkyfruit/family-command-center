@@ -5,7 +5,7 @@ export type PushNotificationRequest =
   | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
   | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null }
   | { event: "mood_changed"; householdId: string; memberId: string; mood: string }
-  | { event: "morning_digest_preview"; householdId: string };
+  | { event: "morning_digest_preview"; householdId: string; endpoint: string };
 
 export async function requestPushNotification(payload: PushNotificationRequest) {
   if (!supabase) return { error: "Supabase is not configured." };
@@ -72,7 +72,7 @@ export async function enablePushNotifications(householdId: string, memberId: str
     updated_at: new Date().toISOString(),
   }, { onConflict: "endpoint" });
   if (error) return { error: error.message };
-  return { enabled: true };
+  return { enabled: true, endpoint: subscription.endpoint };
 }
 
 export async function disablePushNotifications(memberId: string | number) {
@@ -91,4 +91,11 @@ export async function getPushEnabled() {
   if (!isPushSupported() || Notification.permission !== "granted") return false;
   const registration = await navigator.serviceWorker.getRegistration("/");
   return Boolean(await registration?.pushManager.getSubscription());
+}
+
+export async function getPushDeviceEndpoint() {
+  if (!isPushSupported() || Notification.permission !== "granted") return null;
+  const registration = await navigator.serviceWorker.getRegistration("/");
+  const subscription = await registration?.pushManager.getSubscription();
+  return subscription?.endpoint ?? null;
 }
