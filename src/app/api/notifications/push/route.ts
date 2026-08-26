@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 
 type NotificationBody =
   | { event: "test"; householdId: string }
-  | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null };
+  | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
+  | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null };
 
 function text(value: unknown, maxLength: number) {
   return typeof value === "string" && value.trim().length > 0 && value.length <= maxLength ? value.trim() : null;
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!householdId || !body.event) return NextResponse.json({ error: "A household and notification event are required." }, { status: 400 });
 
     const admin = serverSupabase();
-    const { data: actor } = await admin.from("members").select("id").eq("household_id", householdId).eq("user_id", user.id).maybeSingle();
+    const { data: actor } = await admin.from("members").select("id, display_name").eq("household_id", householdId).eq("user_id", user.id).maybeSingle();
     if (!actor) return NextResponse.json({ error: "You do not have access to this household." }, { status: 403 });
 
     if (body.event === "test") {
@@ -38,6 +39,21 @@ export async function POST(request: NextRequest) {
       const dueDate = text(body.dueDate, 40);
       const dueText = dueDate ? ` Due ${dueDate}.` : "";
       return NextResponse.json(await sendPushToMembers([target.id], "New task assigned", `${taskTitle}.${dueText}`, "task-assigned"));
+    }
+
+    if (body.event === "family_activity") {
+      const title = text(body.title, 200);
+      const listTitle = text(body.listTitle, 120);
+      if (body.activity !== "task_created" && body.activity !== "list_created" && body.activity !== "list_item_added") return NextResponse.json({ error: "The family activity type is invalid." }, { status: 400 });
+      if (!title) return NextResponse.json({ error: "The family activity title is required." }, { status: 400 });
+      if ((body.activity === "list_created" || body.activity === "list_item_added") && !listTitle) return NextResponse.json({ error: "The shared list title is required." }, { status: 400 });
+      const { data: adults } = await admin.from("members").select("id").eq("household_id", householdId).eq("role", "adult").neq("id", actor.id);
+      const excludedMemberId = body.assigneeMemberId ? text(body.assigneeMemberId, 80) : null;
+      const recipients = (adults ?? []).map((adult) => adult.id).filter((memberId) => memberId !== excludedMemberId);
+      const actorName = actor.display_name ?? "A family member";
+      if (body.activity === "task_created") return NextResponse.json(await sendPushToMembers(recipients, "New family task", `${actorName} added a task: ${title}.`, "family-task"));
+      if (body.activity === "list_created") return NextResponse.json(await sendPushToMembers(recipients, "New shared list", `${actorName} created the ${listTitle} list.`, "family-list"));
+      return NextResponse.json(await sendPushToMembers(recipients, "Shared list updated", `${actorName} added ${title} to ${listTitle}.`, "family-list-item"));
     }
 
     return NextResponse.json({ error: "Unsupported notification event." }, { status: 400 });

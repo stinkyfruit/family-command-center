@@ -939,6 +939,17 @@ export default function Home() {
     notify(`Task saved and notification sent to ${targetName}.`, "success");
   }
 
+  async function notifyFamilyActivity(activity: "task_created" | "list_created" | "list_item_added", title: string, listTitle?: string, assigneeMemberId?: string | null) {
+    if (!householdId) return;
+    const result = await requestPushNotification({ event: "family_activity", householdId, activity, title, listTitle, assigneeMemberId });
+    if (result.error) {
+      notify(`Saved, but the family activity notification could not be sent: ${result.error}`, "warning");
+      return;
+    }
+    if (result.sent === 0) notify("Saved, but no other adult has an active phone notification device.", "warning");
+    else if ((result.failed ?? 0) > 0) notify(`Saved, but ${result.failed} family activity notification${result.failed === 1 ? "" : "s"} failed.`, "warning");
+  }
+
   async function saveTodo(event: FormEvent) {
     event.preventDefault();
     const title = todoTitle.trim();
@@ -959,6 +970,7 @@ export default function Home() {
       if (error) { notify(`Could not add this task: ${error.message}`); return; }
       if (data) setTodos((items) => [...items, { id: data.id, title, due: data.due_at ? new Date(data.due_at).toLocaleDateString([], { weekday: "short" }) : "", dueAt: data.due_at, done: false, assigneeMemberId: data.assignee_member_id }]);
       if (data && changedToAnotherMember) void notifyTaskAssignment(String(assigneeMemberId), title, todoDueDate || null);
+      if (data) void notifyFamilyActivity("task_created", title, undefined, assigneeMemberId);
     } else {
       setTodos((items) => [...items, { id: Date.now().toString(), title, due: dueAt ? new Date(dueAt).toLocaleDateString([], { weekday: "short" }) : "", dueAt, done: false, assigneeMemberId }]);
     }
@@ -1216,16 +1228,19 @@ export default function Home() {
       const { data, error } = await supabase.from("lists").insert({ household_id: householdId, created_by: user.id, title: title.trim(), icon }).select("id, title, icon").single();
       if (error) { notify(error.message); return; }
       if (data) setSharedLists((items) => items.some((item) => String(item.id) === String(data.id)) ? items : [...items, { ...data, items: [] }]);
+      if (data) void notifyFamilyActivity("list_created", data.title);
     } else setSharedLists((items) => [...items, { id: Date.now().toString(), title: title.trim(), icon, items: [] }]);
   }
 
   async function addListItem(listId: string | number, titleOverride?: string) {
     const title = titleOverride ?? await prompt("What should this list item say?", "", { title: "Add a list item", confirmLabel: "Add item" });
     if (!title?.trim()) return;
+    const list = sharedLists.find((item) => String(item.id) === String(listId));
     if (supabase) {
       const { data, error } = await supabase.from("list_items").insert({ list_id: listId, title: title.trim() }).select("id, title, completed").single();
       if (error) { notify(error.message); return; }
       if (data) setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: list.items.some((item) => String(item.id) === String(data.id)) ? list.items : [...list.items, { id: data.id, title: data.title, done: data.completed }] } : list));
+      if (data) void notifyFamilyActivity("list_item_added", data.title, list?.title);
     } else setSharedLists((lists) => lists.map((list) => list.id === listId ? { ...list, items: [...list.items, { id: Date.now().toString(), title: title.trim(), done: false }] } : list));
   }
 
