@@ -4,7 +4,8 @@ export type PushNotificationRequest =
   | { event: "test"; householdId: string }
   | { event: "task_assigned"; householdId: string; targetMemberId: string; taskTitle: string; dueDate?: string | null }
   | { event: "family_activity"; householdId: string; activity: "task_created" | "list_created" | "list_item_added"; title: string; listTitle?: string; assigneeMemberId?: string | null }
-  | { event: "mood_changed"; householdId: string; memberId: string; mood: string };
+  | { event: "mood_changed"; householdId: string; memberId: string; mood: string }
+  | { event: "morning_digest_preview"; householdId: string };
 
 export async function requestPushNotification(payload: PushNotificationRequest) {
   if (!supabase) return { error: "Supabase is not configured." };
@@ -13,7 +14,10 @@ export async function requestPushNotification(payload: PushNotificationRequest) 
   if (!accessToken) return { error: "Your session has expired. Please sign in again." };
 
   try {
-    const response = await fetch("/api/notifications/push", {
+    const endpoint = payload.event === "morning_digest_preview"
+      ? `/api/notifications/morning-digest?householdId=${encodeURIComponent(payload.householdId)}`
+      : "/api/notifications/push";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(payload),

@@ -7,6 +7,15 @@
 5. Generate a VAPID key pair with `npx web-push generate-vapid-keys`, then add the public key, private key, and a `mailto:` subject to `.env.local` using the three `WEB_PUSH` variables in `.env.example`. Keep the private key server-only.
 6. Restart `npm run dev`. Open Settings → Notifications, enable notifications on each phone, and send a test notification.
 
+## Daily morning digest
+
+1. Run `supabase/migrations/20260825_add_morning_digest_notifications.sql` in the Supabase SQL Editor.
+2. Add a long random `CRON_SECRET` to `.env.local` and to the production environment. Keep it server-only.
+3. Deploy the project to Vercel. The checked-in `vercel.json` calls `/api/notifications/morning-digest` once per hour; the route sends each enabled household digest when its local clock reaches the configured hour and uses a delivery ledger to avoid duplicates.
+4. In Settings → Notifications, enable **Daily morning digest**, choose a time (8:00 AM by default), and use **Send a preview** to verify the current device.
+
+The digest includes today’s imported/app calendar events and open to-dos due today. It is sent to every enabled phone in the household. Vercel Cron Jobs run only on production deployments, so local development requires calling the route manually with `Authorization: Bearer $CRON_SECRET` if you want to test the scheduled path.
+
 On iPhone or iPad, first add the site to the Home Screen. Task assignment notifications are sent after a task is assigned to another household member; future notification types can be added to the same server sender.
 
 ## Chore behavior — source of truth
@@ -35,7 +44,7 @@ This section defines the household chore model. Existing and future features mus
 4. Add the five server-only Google/Supabase variables shown in `.env.example` to `.env.local`. Never prefix these variables with `NEXT_PUBLIC_` and never commit `.env.local`.
 5. Restart `npm run dev`, then use **Connect Google Calendar** on the dashboard. The first version imports the signed-in adult's primary Google Calendar as read-only events.
 
-Once connected, the dashboard refreshes Google Calendar when it opens if the most recent sync is over 10 minutes old. **Sync now** always requests an immediate refresh. A 15-minute server schedule should be enabled only after deployment to an always-on host; for example, Vercel Hobby permits only daily cron jobs, while its paid plans permit more frequent schedules.
+Once connected, the dashboard refreshes Google Calendar when it opens if the most recent sync is over 10 minutes old. **Sync now** always requests an immediate refresh. A frequent server schedule should be enabled only after deployment to an always-on host.
 
 Imported event rows are a local projection of Google/iCloud. The external calendar controls whether an event exists; deleting an imported row in this app only removes it until the next sync. Family assignments are stored separately and remain attached when the external event is synced again.
 

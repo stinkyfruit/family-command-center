@@ -11,16 +11,9 @@ function configureWebPush() {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
-export async function sendPushToMembers(memberIds: string[], title: string, body: string, tag: string) {
-  if (!memberIds.length) return { sent: 0, failed: 0 };
+async function sendPushToDevices(devices: NotificationDevice[] | null | undefined, title: string, body: string, tag: string) {
   configureWebPush();
   const admin = serverSupabase();
-  const { data: devices, error } = await admin
-    .from("notification_devices")
-    .select("id, endpoint, p256dh, auth")
-    .eq("enabled", true)
-    .in("member_id", memberIds);
-  if (error) throw error;
 
   const results = await Promise.allSettled((devices ?? []).map(async (device: NotificationDevice) => {
     try {
@@ -36,4 +29,27 @@ export async function sendPushToMembers(memberIds: string[], title: string, body
     sent: results.filter((result) => result.status === "fulfilled").length,
     failed: results.filter((result) => result.status === "rejected").length,
   };
+}
+
+export async function sendPushToMembers(memberIds: string[], title: string, body: string, tag: string) {
+  if (!memberIds.length) return { sent: 0, failed: 0 };
+  const admin = serverSupabase();
+  const { data: devices, error } = await admin
+    .from("notification_devices")
+    .select("id, endpoint, p256dh, auth")
+    .eq("enabled", true)
+    .in("member_id", memberIds);
+  if (error) throw error;
+  return sendPushToDevices(devices, title, body, tag);
+}
+
+export async function sendPushToHousehold(householdId: string, title: string, body: string, tag: string) {
+  const admin = serverSupabase();
+  const { data: devices, error } = await admin
+    .from("notification_devices")
+    .select("id, endpoint, p256dh, auth")
+    .eq("household_id", householdId)
+    .eq("enabled", true);
+  if (error) throw error;
+  return sendPushToDevices(devices, title, body, tag);
 }
