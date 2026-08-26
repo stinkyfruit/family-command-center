@@ -7,6 +7,17 @@ type TmdbMovie = {
 
 const MAX_MOVIE_RESULTS = 20;
 
+function normalizeMovieTitle(value: string) {
+  return value
+    .replace(/¢/g, "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function movieResult(movie: TmdbMovie) {
   if (typeof movie.id !== "number" || typeof movie.title !== "string") return null;
   const releaseDate = typeof movie.release_date === "string" ? movie.release_date : "";
@@ -40,13 +51,13 @@ export async function GET(request: Request) {
     });
     if (!response.ok) return Response.json({ error: response.status === 429 ? "Movie lookup is temporarily rate-limited. Try again in a moment." : "Movie lookup is unavailable right now." }, { status: response.status === 429 ? 429 : 502 });
     const payload = await response.json() as { results?: TmdbMovie[] };
-    const normalizedQuery = query.toLocaleLowerCase();
+    const normalizedQuery = normalizeMovieTitle(query);
     const results = (payload.results ?? [])
       .map(movieResult)
       .filter((movie): movie is NonNullable<ReturnType<typeof movieResult>> => Boolean(movie))
       .sort((first, second) => {
-        const firstTitle = first.title.toLocaleLowerCase();
-        const secondTitle = second.title.toLocaleLowerCase();
+        const firstTitle = normalizeMovieTitle(first.title);
+        const secondTitle = normalizeMovieTitle(second.title);
         const firstExact = firstTitle === normalizedQuery ? 0 : firstTitle.startsWith(normalizedQuery) ? 1 : 2;
         const secondExact = secondTitle === normalizedQuery ? 0 : secondTitle.startsWith(normalizedQuery) ? 1 : 2;
         return firstExact - secondExact;
