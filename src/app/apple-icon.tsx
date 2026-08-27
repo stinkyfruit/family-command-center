@@ -5,13 +5,21 @@ export const contentType = "image/png";
 
 export default function AppleIcon() {
   return new ImageResponse(
-    <div style={{ background: "#7c3aed", borderRadius: 42, display: "flex", height: "100%", position: "relative", width: "100%" }}>
-      <div style={{ background: "#f8fafc", height: 86, left: 47, position: "absolute", top: 34, transform: "rotate(45deg)", width: 86 }} />
-      <div style={{ background: "#f8fafc", borderRadius: 20, height: 104, left: 31, position: "absolute", top: 65, width: 118 }} />
-      <div style={{ background: "#fb7185", borderRadius: 8, height: 18, left: 46, position: "absolute", top: 91, width: 18 }} />
-      <div style={{ background: "#0ea5e9", borderRadius: 8, height: 18, left: 116, position: "absolute", top: 91, width: 18 }} />
-      <div style={{ background: "#7c3aed", borderRadius: "12px 12px 0 0", bottom: 0, height: 48, left: 68, position: "absolute", width: 44 }} />
-    </div>,
+    <svg width="180" height="180" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="17" fill="#7C3AED" />
+      <defs>
+        <linearGradient id="checkbox" x1="23" y1="32" x2="41" y2="47" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FB7185" />
+          <stop offset="0.5" stopColor="#A855F7" />
+          <stop offset="1" stopColor="#0EA5E9" />
+        </linearGradient>
+      </defs>
+      <path d="M10 31L23 19C28 14.3 36 14.3 41 19L54 31V51C54 54.314 51.314 57 48 57H16C12.686 57 10 54.314 10 51V31Z" fill="#F8FAFC" />
+      <path d="M10 31L23 19C28 14.3 36 14.3 41 19L54 31" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="23" y="32" width="18" height="15" rx="4" fill="url(#checkbox)" />
+      <path d="M27 39L31 43L37 36" stroke="#F8FAFC" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M28 57V50C28 48.343 29.343 47 31 47H33C34.657 47 36 48.343 36 50V57H28Z" fill="#7C3AED" />
+    </svg>,
     size,
   );
 }
