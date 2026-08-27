@@ -11,7 +11,7 @@ self.addEventListener("push", (event) => {
   const options = {
     body: typeof data.body === "string" ? data.body : "You have a new family update.",
     icon: "/apple-icon?v=3",
-    badge: "/icon.svg?v=3",
+    badge: "/notification-badge.svg?v=1",
     tag: typeof data.tag === "string" ? data.tag : "family-command-center",
     data: { url: typeof data.url === "string" ? data.url : "/" },
   };
