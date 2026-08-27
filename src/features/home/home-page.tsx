@@ -709,9 +709,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let weatherRefreshInFlight = false;
+    let lastWeatherRefreshAt = 0;
+
     async function loadWeather(latitude: number, longitude: number) {
       try {
-        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m,wind_gusts_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset,wind_speed_10m_max,wind_gusts_10m_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&timeformat=unixtime`);
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m,wind_gusts_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset,wind_speed_10m_max,wind_gusts_10m_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&timeformat=unixtime`, { cache: "no-store" });
         if (!weatherResponse.ok) throw new Error("Weather request failed");
         const data = await weatherResponse.json();
         const currentWindSpeedMph = nullableWeatherNumber(data.current.wind_speed_10m);
@@ -757,8 +761,8 @@ export default function Home() {
           return result;
         });
         const [airQualityResult, alertsResult, pollenResult] = await Promise.allSettled([
-          fetch(airQualityUrl),
-          fetch(`/api/weather-alerts?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`),
+          fetch(airQualityUrl, { cache: "no-store" }),
+          fetch(`/api/weather-alerts?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`, { cache: "no-store" }),
           pollenRequest,
         ]);
         let airQuality: WeatherInsights["airQuality"] = null;
@@ -785,7 +789,7 @@ export default function Home() {
         setWeatherInsights({ airQuality, uvIndex, pollen, alerts, alertsAvailable });
 
         try {
-          const auroraResponse = await fetch("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json");
+          const auroraResponse = await fetch("https://services.swpc.noaa.gov/json/ovation_aurora_latest.json", { cache: "no-store" });
           if (!auroraResponse.ok) throw new Error("Aurora request failed");
           setAuroraActivity(auroraActivityForLocation(await auroraResponse.json(), latitude, longitude));
         } catch {
@@ -793,7 +797,7 @@ export default function Home() {
         }
 
         try {
-          const cometResponse = await fetch("https://ssd-api.jpl.nasa.gov/cad.api?comet=true&neo=false&date-max=%2B365&dist-max=0.1&h-max=18&sort=date&limit=1&fullname=true");
+          const cometResponse = await fetch("https://ssd-api.jpl.nasa.gov/cad.api?comet=true&neo=false&date-max=%2B365&dist-max=0.1&h-max=18&sort=date&limit=1&fullname=true", { cache: "no-store" });
           if (!cometResponse.ok) throw new Error("Comet request failed");
           setCometCloseApproach(cometCloseApproachForPayload(await cometResponse.json()));
         } catch {
@@ -809,13 +813,42 @@ export default function Home() {
           const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.suburb ?? address.city_district ?? address.county;
           if (city) setWeather((current) => current ? { ...current, location: city } : current);
         } catch { /* Keep the useful "Local forecast" fallback. */ }
-      } catch { setWeather(null); setWeatherForecast(null); setWeatherInsights(null); }
+      } catch {
+        // Keep the last usable weather visible if a resume refresh fails.
+      }
     }
-    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
-      (position) => loadWeather(position.coords.latitude, position.coords.longitude),
-      () => { setWeather(null); setWeatherForecast(null); setWeatherInsights(null); },
-      { maximumAge: 900000, timeout: 8000 },
-    );
+
+    function refreshWeather() {
+      if (cancelled || !navigator.geolocation) return;
+      const now = Date.now();
+      if (weatherRefreshInFlight || now - lastWeatherRefreshAt < 30_000) return;
+      lastWeatherRefreshAt = now;
+      weatherRefreshInFlight = true;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          void loadWeather(position.coords.latitude, position.coords.longitude).finally(() => {
+            weatherRefreshInFlight = false;
+          });
+        },
+        () => {
+          weatherRefreshInFlight = false;
+        },
+        { maximumAge: 900000, timeout: 8000 },
+      );
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshWeather();
+    };
+    window.addEventListener("focus", refreshWeather);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    refreshWeather();
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshWeather);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {
