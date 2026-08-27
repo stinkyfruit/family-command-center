@@ -5,14 +5,12 @@ export const contentType = "image/png";
 
 export default function AppleIcon() {
   return new ImageResponse(
-    <div style={{ alignItems: "center", background: "#7c3aed", borderRadius: 42, display: "flex", height: "100%", justifyContent: "center", position: "relative", width: "100%" }}>
-      <div style={{ alignItems: "center", background: "#f8fafc", borderRadius: 20, display: "flex", flexDirection: "column", height: 112, justifyContent: "center", overflow: "hidden", width: 118 }}>
-        <div style={{ background: "#fb7185", height: 25, marginTop: -73, position: "absolute", width: 118 }} />
-        <div style={{ color: "#7c3aed", display: "flex", fontSize: 31, fontWeight: 800, gap: 8, marginTop: 38 }}>● ● ●</div>
-        <div style={{ background: "#7c3aed", borderRadius: 8, height: 10, marginTop: 8, width: 42 }} />
-      </div>
-      <div style={{ background: "#f8fafc", borderRadius: 5, height: 19, left: 38, position: "absolute", top: 19, width: 12 }} />
-      <div style={{ background: "#f8fafc", borderRadius: 5, height: 19, position: "absolute", right: 38, top: 19, width: 12 }} />
+    <div style={{ background: "#7c3aed", borderRadius: 42, display: "flex", height: "100%", position: "relative", width: "100%" }}>
+      <div style={{ background: "#f8fafc", height: 86, left: 47, position: "absolute", top: 34, transform: "rotate(45deg)", width: 86 }} />
+      <div style={{ background: "#f8fafc", borderRadius: 20, height: 104, left: 31, position: "absolute", top: 65, width: 118 }} />
+      <div style={{ background: "#fb7185", borderRadius: 8, height: 18, left: 46, position: "absolute", top: 91, width: 18 }} />
+      <div style={{ background: "#0ea5e9", borderRadius: 8, height: 18, left: 116, position: "absolute", top: 91, width: 18 }} />
+      <div style={{ background: "#7c3aed", borderRadius: "12px 12px 0 0", bottom: 0, height: 48, left: 68, position: "absolute", width: 44 }} />
     </div>,
     size,
   );
