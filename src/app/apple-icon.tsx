@@ -14,10 +14,11 @@ export default function AppleIcon() {
           <stop offset="1" stopColor="#0EA5E9" />
         </linearGradient>
       </defs>
-      <path d="M9 31L27 14C29.8 11.3 34.2 11.3 37 14L55 31V51C55 54.314 52.314 57 49 57H15C11.686 57 9 54.314 9 51V31Z" fill="#F8FAFC" />
-      <path d="M9 31L27 14C29.8 11.3 34.2 11.3 37 14L55 31" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="23" y="32" width="18" height="18" rx="4" fill="url(#checkbox)" />
-      <path d="M27 41L31 45L37 38" stroke="#F8FAFC" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="41" y="11" width="7" height="14" rx="2" fill="#FB7185" />
+      <path d="M9 29L27 12C29.8 9.3 34.2 9.3 37 12L55 29V49C55 52.314 52.314 55 49 55H15C11.686 55 9 52.314 9 49V29Z" fill="#F8FAFC" />
+      <path d="M9 29L27 12C29.8 9.3 34.2 9.3 37 12L55 29" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="23" y="33" width="18" height="18" rx="4" fill="url(#checkbox)" />
+      <path d="M27 42L31 46L37 39" stroke="#F8FAFC" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     size,
   );
