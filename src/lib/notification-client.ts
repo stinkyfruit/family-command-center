@@ -91,12 +91,14 @@ export async function disablePushNotifications(memberId: string | number) {
 export async function getPushEnabled() {
   if (!isPushSupported() || Notification.permission !== "granted") return false;
   const registration = await navigator.serviceWorker.getRegistration("/");
+  try { await registration?.update(); } catch { /* Keep reading the existing registration if offline. */ }
   return Boolean(await registration?.pushManager.getSubscription());
 }
 
 export async function getPushDeviceEndpoint() {
   if (!isPushSupported() || Notification.permission !== "granted") return null;
   const registration = await navigator.serviceWorker.getRegistration("/");
+  try { await registration?.update(); } catch { /* Keep reading the existing registration if offline. */ }
   const subscription = await registration?.pushManager.getSubscription();
   return subscription?.endpoint ?? null;
 }
