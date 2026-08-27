@@ -63,10 +63,10 @@ function buildNotices({ weather, forecast, insights, auroraActivity, cometCloseA
   });
 
   const nextHours = forecast?.hours.filter((hour) => hour.time >= Date.now() / 1000 - 60 * 60).slice(0, 12) ?? [];
-  const currentThunderstorms = weather?.code !== undefined && weather.code >= 95;
+  const currentThunderstorms = (weather?.code !== undefined && weather.code >= 95) || /thunderstorm|lightning/i.test(weather?.summary ?? "");
   const thunderstormsSoon = currentThunderstorms || nextHours.some((hour) => hour.code >= 95);
   if (thunderstormsSoon && !alerts.some((alert) => /thunderstorm|lightning/i.test(`${alert.event} ${alert.headline}`))) {
-    notices.push({ id: "thunderstorms", title: "Thunderstorms in the forecast", detail: currentThunderstorms ? "Storms are happening now." : "Check the forecast before outdoor plans.", tone: "violet", icon: "warning" });
+    notices.push({ id: "thunderstorms", title: currentThunderstorms ? weather?.summary ?? "Thunderstorms happening now" : "Thunderstorms in the forecast", detail: currentThunderstorms ? "Storms are happening now. Stay indoors and check local alerts." : "Check the forecast before outdoor plans.", tone: "violet", icon: "warning" });
   }
 
   const today = forecast?.days[0];

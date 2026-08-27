@@ -39,9 +39,9 @@ export function pickCelebrationAnimation() {
 
 export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
-export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean };
-export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number };
-export type WeatherForecastDay = { date: number; high: number; low: number; summary: string; code: number; precipitationProbability: number; sunrise: number; sunset: number };
+export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean; windSpeedMph?: number | null; windGustsMph?: number | null; conditionSource?: "forecast" | "observation" };
+export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number; windSpeedMph?: number | null; windGustsMph?: number | null };
+export type WeatherForecastDay = { date: number; high: number; low: number; summary: string; code: number; precipitationProbability: number; sunrise: number; sunset: number; windSpeedMaxMph?: number | null; windGustsMaxMph?: number | null };
 export type WeatherForecast = { hours: WeatherForecastHour[]; days: WeatherForecastDay[] };
 export type WeatherAlert = { id: string; event: string; headline: string; severity: string; urgency: string; certainty: string; description: string; instruction: string; onset: string | null; expires: string | null; url: string | null };
 export type WeatherPollenType = { code: string; name: string; inSeason: boolean; value: number | null; category: string | null; description: string | null; indexDescription: string | null };
@@ -337,19 +337,40 @@ export function familyHolidaysForYear(year: number): Event[] {
 
 
 export function weatherLabel(code: number) {
-  if (code <= 1) return "Clear";
-  if (code <= 3) return "Cloudy";
-  if (code <= 67) return "Rain";
-  if (code <= 77) return "Snow";
-  return "Showers";
+  if (code === 0) return "Clear";
+  if (code === 1) return "Mostly clear";
+  if (code === 2) return "Partly cloudy";
+  if (code === 3) return "Overcast";
+  if (code === 45 || code === 48) return "Foggy";
+  if (code === 51 || code === 53 || code === 55) return "Drizzle";
+  if (code === 56 || code === 57) return "Freezing drizzle";
+  if (code === 61 || code === 63 || code === 65) return "Rain";
+  if (code === 66 || code === 67) return "Freezing rain";
+  if (code === 71 || code === 73 || code === 75 || code === 77) return "Snow";
+  if (code === 80 || code === 81 || code === 82) return "Rain showers";
+  if (code === 85 || code === 86) return "Snow showers";
+  if (code === 95) return "Thunderstorms";
+  if (code === 96) return "Thunderstorms with hail";
+  if (code === 99) return "Thunderstorms with heavy hail";
+  return "Unknown conditions";
 }
 
 export function weatherSummary(code: number) {
-  if (code <= 1) return "Clear";
-  if (code <= 3) return "Cloudy";
-  if (code <= 67) return "Rain";
-  if (code <= 77) return "Snow";
-  return "Showers";
+  return weatherLabel(code);
+}
+
+export function weatherSummaryForConditions(code: number, windSpeedMph?: number | null, windGustsMph?: number | null) {
+  const summary = weatherSummary(code);
+  const strongestWind = Math.max(windSpeedMph ?? 0, windGustsMph ?? 0);
+  // Fast-moving storms are sometimes returned as rain/showers before the model emits a thunderstorm code.
+  if (!/freezing/i.test(summary) && /rain|drizzle|showers/i.test(summary) && strongestWind >= 30) return "Thunderstorms with strong winds";
+  return /thunderstorm/i.test(summary) && strongestWind >= 30 ? `${summary} with strong winds` : summary;
+}
+
+export function weatherWindLabel(weather: Pick<Weather, "windSpeedMph" | "windGustsMph">) {
+  const wind = typeof weather.windSpeedMph === "number" ? `Wind ${Math.round(weather.windSpeedMph)} mph` : null;
+  const gusts = typeof weather.windGustsMph === "number" ? `gusts ${Math.round(weather.windGustsMph)} mph` : null;
+  return [wind, gusts].filter(Boolean).join(" · ") || null;
 }
 
 export function weatherOrbClass(weather: Weather | null) {

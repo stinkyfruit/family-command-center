@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
-import { weatherAnimation, weatherLabel, type Weather, type WeatherAlert, type WeatherForecast, type WeatherForecastDay, type WeatherInsights, type WeatherPollenType } from "@/features/home/model";
+import { weatherAnimation, weatherLabel, weatherWindLabel, type Weather, type WeatherAlert, type WeatherForecast, type WeatherForecastDay, type WeatherInsights, type WeatherPollenType } from "@/features/home/model";
 
 type WeatherForecastOverlayProps = {
   weather: Weather | null;
@@ -55,7 +55,7 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
 function TodayForecast({ weather, today, hours, insights }: { weather: Weather | null; today: WeatherForecastDay | null; hours: WeatherForecast["hours"]; insights: WeatherInsights | null }) {
   return <div className="mt-6">
     <div className="flex items-center justify-between gap-4 rounded-2xl bg-sky-50 p-4 dark:bg-sky-400/10">
-      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-sky-700 dark:text-sky-200">Today</p><p className="mt-1 text-3xl font-black text-slate-900 dark:text-white">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-bold text-slate-600 dark:text-slate-200">{weather?.summary ?? "Current conditions unavailable"}</p></div>
+      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-sky-700 dark:text-sky-200">Today</p><p className="mt-1 text-3xl font-black text-slate-900 dark:text-white">{weather ? `${weather.temperature}°` : "—"}</p><p className="text-sm font-bold text-slate-600 dark:text-slate-200">{weather?.summary ?? "Current conditions unavailable"}</p>{weather && weatherWindLabel(weather) && <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">{weatherWindLabel(weather)}{weather.conditionSource === "observation" ? " · Live observation" : ""}</p>}</div>
       <div className="text-right text-sm font-bold text-slate-600 dark:text-slate-200"><p>High <span className="text-slate-900 dark:text-white">{today ? `${today.high}°` : "—"}</span></p><p className="mt-1">Low <span className="text-slate-900 dark:text-white">{today ? `${today.low}°` : "—"}</span></p><p className="mt-1 text-xs font-semibold text-sky-700 dark:text-sky-200">{today ? `${today.precipitationProbability}% chance of rain` : "—"}</p></div>
     </div>
     <p className="mt-6 text-xs font-black uppercase tracking-wide text-slate-400">Next 12 hours</p>
@@ -78,7 +78,7 @@ function WeatherGlyph({ code, isDay = true, label, className }: { code: number; 
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  const fallback = code >= 95 ? "⛈️" : code >= 71 && code <= 77 ? "❄️" : code >= 45 && code <= 67 ? "🌧️" : code === 3 ? "☁️" : isDay ? "☀️" : "🌙";
+  const fallback = code >= 95 ? "⛈️" : code >= 71 && code <= 86 ? "❄️" : code >= 51 && code <= 67 || code >= 80 ? "🌧️" : code === 45 || code === 48 ? "🌫️" : code >= 2 ? "☁️" : isDay ? "☀️" : "🌙";
   return reduceMotion ? <span className={`${className} grid place-items-center text-2xl leading-none`} role="img" aria-label={label}>{fallback}</span> : <AccessibleLottie src={weatherAnimation(code, isDay)} label={label} wrapperClassName={className} className="size-full" autoplay controls={false} />;
 }
 

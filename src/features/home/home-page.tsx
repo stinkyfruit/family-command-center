@@ -34,6 +34,7 @@ import {
   moodOption,
   starterEvents,
   weatherSummary,
+  weatherSummaryForConditions,
 } from "@/features/home/model";
 import { useAppNotifications } from "@/components/home/shared-ui";
 import { eventOccursOn as calendarEventOccursOn, isBirthdayEvent } from "@/components/home/calendar";
@@ -88,6 +89,41 @@ async function loadCalendarEventRows(householdId: string) {
 
 function nullableWeatherNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+type CurrentWeatherObservation = {
+  available?: boolean;
+  textDescription?: unknown;
+  temperatureF?: unknown;
+  windSpeedMph?: unknown;
+  windGustsMph?: unknown;
+};
+
+function observationWeatherSummary(description: unknown, fallback: string, windSpeedMph: number | null, windGustsMph: number | null) {
+  const text = typeof description === "string" ? description.toLowerCase() : "";
+  if (/tornado|funnel cloud/.test(text)) return "Tornado nearby";
+  const strongestWind = Math.max(windSpeedMph ?? 0, windGustsMph ?? 0);
+  const windQualifier = strongestWind >= 30 ? " with strong winds" : "";
+  if (/thunder|lightning/.test(text) && /hail/.test(text)) return `Thunderstorms with hail${windQualifier}`;
+  if (/thunder|lightning/.test(text)) return `Thunderstorms${windQualifier}`;
+  if (/freezing rain|ice pellets/.test(text)) return "Freezing rain";
+  // Station observations can say "light rain" while the wind sensor is already showing the storm.
+  if (/rain|shower|drizzle/.test(text) && strongestWind >= 30) return "Thunderstorms with strong winds";
+  if (/snow|sleet/.test(text)) return "Snow";
+  if (/rain|shower|drizzle/.test(text)) return "Rain";
+  if (/fog/.test(text)) return "Foggy";
+  if (strongestWind >= 40) return "Very windy";
+  if (strongestWind >= 25) return "Windy";
+  return fallback;
+}
+
+function weatherCodeForDisplay(summary: string, fallbackCode: number) {
+  if (/tornado|thunderstorm|lightning/i.test(summary)) return 95;
+  if (/freezing rain/i.test(summary)) return 66;
+  if (/snow|sleet/i.test(summary)) return 73;
+  if (/rain|shower|drizzle/i.test(summary)) return 63;
+  if (/foggy/i.test(summary)) return 45;
+  return fallbackCode;
 }
 
 function parseWeatherAlerts(payload: unknown): WeatherAlert[] {
@@ -675,15 +711,38 @@ export default function Home() {
   useEffect(() => {
     async function loadWeather(latitude: number, longitude: number) {
       try {
-        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset&forecast_days=7&temperature_unit=fahrenheit&timezone=auto&timeformat=unixtime`);
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m,wind_gusts_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset,wind_speed_10m_max,wind_gusts_10m_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&timeformat=unixtime`);
         if (!weatherResponse.ok) throw new Error("Weather request failed");
         const data = await weatherResponse.json();
-        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: weatherSummary(data.current.weather_code), location: "Local forecast", code: data.current.weather_code, isDay: Boolean(data.current.is_day) });
+        const currentWindSpeedMph = nullableWeatherNumber(data.current.wind_speed_10m);
+        const currentWindGustsMph = nullableWeatherNumber(data.current.wind_gusts_10m);
+        const forecastSummary = weatherSummaryForConditions(data.current.weather_code, currentWindSpeedMph, currentWindGustsMph);
+        setWeather({ temperature: Math.round(data.current.temperature_2m), high: Math.round(data.daily.temperature_2m_max[0]), low: Math.round(data.daily.temperature_2m_min[0]), summary: forecastSummary, location: "Local forecast", code: weatherCodeForDisplay(forecastSummary, data.current.weather_code), isDay: Boolean(data.current.is_day), windSpeedMph: currentWindSpeedMph, windGustsMph: currentWindGustsMph, conditionSource: "forecast" });
         setWeatherForecast({
-          hours: (data.hourly?.time ?? []).map((time: number, index: number) => ({ time, temperature: Math.round(data.hourly.temperature_2m[index]), code: data.hourly.weather_code[index], precipitationProbability: data.hourly.precipitation_probability[index] ?? 0 })),
-          days: (data.daily?.time ?? []).map((date: number, index: number) => ({ date, high: Math.round(data.daily.temperature_2m_max[index]), low: Math.round(data.daily.temperature_2m_min[index]), summary: weatherSummary(data.daily.weather_code[index]), code: data.daily.weather_code[index], precipitationProbability: data.daily.precipitation_probability_max[index] ?? 0, sunrise: data.daily.sunrise[index] * 1000, sunset: data.daily.sunset[index] * 1000 })),
+          hours: (data.hourly?.time ?? []).map((time: number, index: number) => ({ time, temperature: Math.round(data.hourly.temperature_2m[index]), code: data.hourly.weather_code[index], precipitationProbability: data.hourly.precipitation_probability[index] ?? 0, windSpeedMph: nullableWeatherNumber(data.hourly.wind_speed_10m?.[index]), windGustsMph: nullableWeatherNumber(data.hourly.wind_gusts_10m?.[index]) })),
+          days: (data.daily?.time ?? []).map((date: number, index: number) => ({ date, high: Math.round(data.daily.temperature_2m_max[index]), low: Math.round(data.daily.temperature_2m_min[index]), summary: weatherSummary(data.daily.weather_code[index]), code: data.daily.weather_code[index], precipitationProbability: data.daily.precipitation_probability_max[index] ?? 0, sunrise: data.daily.sunrise[index] * 1000, sunset: data.daily.sunset[index] * 1000, windSpeedMaxMph: nullableWeatherNumber(data.daily.wind_speed_10m_max?.[index]), windGustsMaxMph: nullableWeatherNumber(data.daily.wind_gusts_10m_max?.[index]) })),
         });
         if (data.daily.sunrise?.[0] && data.daily.sunset?.[0]) setSunTimes({ sunrise: data.daily.sunrise[0] * 1000, sunset: data.daily.sunset[0] * 1000 });
+
+        void fetch(`/api/weather-observation?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`, { cache: "no-store" }).then(async (response) => {
+          if (!response.ok) return null;
+          return await response.json() as CurrentWeatherObservation;
+        }).then((observation) => {
+          if (!observation?.available) return;
+          const temperatureF = nullableWeatherNumber(observation.temperatureF);
+          const windSpeedMph = nullableWeatherNumber(observation.windSpeedMph);
+          const windGustsMph = nullableWeatherNumber(observation.windGustsMph);
+          const summary = observationWeatherSummary(observation.textDescription, forecastSummary, windSpeedMph, windGustsMph);
+          setWeather((current) => current ? {
+            ...current,
+            temperature: temperatureF === null ? current.temperature : Math.round(temperatureF),
+            summary,
+            code: weatherCodeForDisplay(summary, current.code),
+            windSpeedMph: windSpeedMph ?? current.windSpeedMph,
+            windGustsMph: windGustsMph ?? current.windGustsMph,
+            conditionSource: "observation",
+          } : current);
+        }).catch(() => { /* Open-Meteo remains the fallback outside NWS coverage. */ });
 
         const airQualityUrl = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
         airQualityUrl.searchParams.set("latitude", String(latitude));
@@ -717,6 +776,10 @@ export default function Home() {
           const alertsData = await alertsResult.value.json() as { available?: boolean; features?: unknown };
           alerts = parseWeatherAlerts(alertsData);
           alertsAvailable = alertsData.available === true;
+        }
+        const activeThunderstormWarning = alerts.some((alert) => /thunderstorm.*warning|warning.*thunderstorm/i.test(`${alert.event} ${alert.headline}`));
+        if (activeThunderstormWarning) {
+          setWeather((current) => current ? { ...current, summary: "Thunderstorms with strong winds", code: 95, conditionSource: "observation" } : current);
         }
         if (pollenResult.status === "fulfilled") pollen = pollenResult.value;
         setWeatherInsights({ airQuality, uvIndex, pollen, alerts, alertsAvailable });

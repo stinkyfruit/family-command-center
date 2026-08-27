@@ -2,10 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type SelectHTMLAttributes } from "react";
 import Image from "next/image";
-import { BellIcon, CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, ClipboardTextIcon, FilmSlateIcon, ForkKnifeIcon, GiftIcon, HouseIcon, InfoIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PauseIcon, PencilSimpleIcon, PlayIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
+import { BellIcon, CalendarBlankIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, CloudLightningIcon, ClipboardTextIcon, FilmSlateIcon, ForkKnifeIcon, GiftIcon, HouseIcon, InfoIcon, ListBulletsIcon, MicrophoneIcon, MoonIcon, PauseIcon, PencilSimpleIcon, PlayIcon, PlusIcon, SignOutIcon, SlidersHorizontalIcon, StopCircleIcon, SunIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { notoIconPath } from "@/features/home/model";
 
-export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "familyDinners" | "bell" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop" | "play" | "pause" | "check" | "info" | "warning";
+export type IconName = "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "familyDinners" | "bell" | "plus" | "close" | "trash" | "edit" | "chevronLeft" | "chevronRight" | "chevronDown" | "sun" | "moon" | "signOut" | "microphone" | "stop" | "play" | "pause" | "check" | "info" | "warning" | "storm";
 
 const navigationIconStyles: Record<Extract<IconName, "home" | "calendar" | "tasks" | "chores" | "lists" | "settings" | "wishlist" | "movieNight" | "familyDinners">, { tile: string; icon: string; activeIcon: string }> = {
   home: { tile: "bg-amber-100 dark:bg-amber-400/20", icon: "text-amber-600 dark:text-amber-200", activeIcon: "text-amber-700" },
@@ -48,6 +48,7 @@ export function AppIcon({ name, className = "size-5", variant = "default", activ
     check: CheckIcon,
     info: InfoIcon,
     warning: WarningCircleIcon,
+    storm: CloudLightningIcon,
   }[name];
 
   if (variant === "nav" && name in navigationIconStyles) {
