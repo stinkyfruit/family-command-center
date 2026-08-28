@@ -3,9 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 
 type OAuthState = { householdId: string; userId: string; expiresAt: number };
 
+export function isBirthdayTitle(title: string) {
+  return /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(title);
+}
+
 export function calendarEventCategory(title: string) {
   const text = title.toLowerCase();
-  if (/\b(birthday|bday|birth day)\b/.test(text)) return "Birthday";
+  if (isBirthdayTitle(title)) return "Birthday";
   if (/\b(soccer|football|baseball|softball|basketball|volleyball|tennis|swim|swimming|gymnastics|dance|practice|game|match|tournament)\b/.test(text)) return "Sports";
   if (/\b(test|exam|quiz|project|assignment|homework|school due|due date)\b/.test(text)) return "School Test/Project Due";
   if (/\b(vacation|vacay|trip|travel|flight|hotel|cruise)\b/.test(text)) return "Vacation";
@@ -102,7 +106,7 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     const memberIdsOverride = Boolean(existing?.member_ids_override) || Boolean(eventMemberIds !== undefined && seriesExternalId);
     const title = item.summary || "Untitled event";
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
-    const isBirthday = category === "Birthday";
+    const isBirthday = category.trim().toLowerCase() === "birthday" || isBirthdayTitle(title);
     return {
     household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, series_external_id: seriesExternalId, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,

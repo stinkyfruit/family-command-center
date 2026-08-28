@@ -24,7 +24,7 @@ export function eventOccursOn(event: Event, day: Date) {
   const startsAt = new Date(event.startsAt);
   if (event.allDay) {
     const startDate = allDayCalendarDate(startsAt);
-    const endDate = event.endsAt ? allDayCalendarDate(new Date(event.endsAt)) : startDate + 86_400_000;
+    const endDate = isBirthdayEvent(event) ? startDate + 86_400_000 : event.endsAt ? allDayCalendarDate(new Date(event.endsAt)) : startDate + 86_400_000;
     const dayDate = visibleCalendarDate(day);
     return dayDate >= startDate && dayDate < endDate;
   }
@@ -66,7 +66,7 @@ export function eventBlockBackground(event: Event, members: Member[]) {
 // the UI too, so those cards stay festive immediately rather than waiting for
 // a future sync to update their saved category.
 export function isBirthdayEvent(event: Event) {
-  return event.category === "Birthday" || /\b(birthday|bday|birth day)\b/i.test(event.title);
+  return event.category?.trim().toLocaleLowerCase() === "birthday" || /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(event.title);
 }
 
 export function holidayEmoji(title: string) {
@@ -131,6 +131,30 @@ function timedEventLabel(event: Event) {
   if (!event.endsAt) return start;
   const end = new Date(event.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${start}–${end}`;
+}
+
+type AllDayEventLayout = { event: Event; columnStart: number; columnSpan: number; row: number };
+
+function allDayEventLayouts(events: Event[], days: Date[]) {
+  const dayLength = 86_400_000;
+  const weekStart = visibleCalendarDate(days[0]);
+  const weekEnd = visibleCalendarDate(days[days.length - 1]) + dayLength;
+  const layouts: AllDayEventLayout[] = events.flatMap((event) => {
+    if (!event.allDay) return [];
+    const eventStart = allDayCalendarDate(new Date(event.startsAt));
+    const eventEnd = isBirthdayEvent(event) ? eventStart + dayLength : event.endsAt ? allDayCalendarDate(new Date(event.endsAt)) : eventStart + dayLength;
+    const start = Math.max(eventStart, weekStart);
+    const end = Math.min(eventEnd, weekEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+    return [{ event, columnStart: Math.round((start - weekStart) / dayLength) + 1, columnSpan: Math.round((end - start) / dayLength), row: 0 }];
+  }).sort((first, second) => first.columnStart - second.columnStart || second.columnSpan - first.columnSpan || String(first.event.id).localeCompare(String(second.event.id)));
+  const rowEnds: number[] = [];
+  for (const layout of layouts) {
+    const availableRow = rowEnds.findIndex((rowEnd) => rowEnd <= layout.columnStart);
+    layout.row = availableRow === -1 ? rowEnds.length : availableRow;
+    rowEnds[layout.row] = layout.columnStart + layout.columnSpan;
+  }
+  return { layouts, rowCount: Math.max(1, rowEnds.length) };
 }
 
 type TimedEventLayout = ReturnType<typeof timedEventPosition> & { left: number; width: number };
@@ -240,7 +264,8 @@ export function EventEditor({ event, members, onClose, onSave, onApplySeries, on
 export function WeekCalendar({ anchor, events, members, onEdit, onOpenDay, onCreate }: { anchor: Date; events: Event[]; members: Member[]; onEdit: (event: Event) => void; onOpenDay: (date: Date) => void; onCreate?: (day: Date, time: string) => void }) {
   const first = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div className="overflow-x-auto"><div className="min-w-[920px] overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><div/>{days.map((day) => { const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex items-baseline justify-center gap-1 border-l border-slate-100 px-2 py-3 dark:border-white/10 ${isToday ? "bg-violet-600 text-white" : "hover:bg-violet-50 dark:hover:bg-white/5"}`}><span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></button>; })}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><span className="px-2 py-2 text-[10px] font-bold uppercase text-slate-400">All day</span>{days.map((day) => <div key={day.toISOString()} className="min-h-10 space-y-1 border-l border-slate-100 p-1 dark:border-white/10">{events.filter((event) => event.allDay && eventOccursOn(event, day)).slice(0, 2).map((event) => <button key={event.id} onClick={() => onEdit(event)} className="w-full"><EventChip event={event} members={members} compact /></button>)}</div>)}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]"><div style={{ height: timelineHeight }} className="relative bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour + 1 }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>{days.map((day) => <TimelineColumn key={day.toISOString()} date={day} events={events} members={members} onEdit={onEdit} onCreate={onCreate} />)}</div></div></div>;
+  const { layouts: allDayLayouts, rowCount: allDayRowCount } = allDayEventLayouts(events, days);
+  return <div className="overflow-x-auto"><div className="min-w-[920px] overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10"><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><div/>{days.map((day) => { const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} className={`flex items-baseline justify-center gap-1 border-l border-slate-100 px-2 py-3 dark:border-white/10 ${isToday ? "bg-violet-600 text-white" : "hover:bg-violet-50 dark:hover:bg-white/5"}`}><span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/75" : "text-slate-400"}`}>{day.toLocaleDateString([], { weekday: "short" })}</span><span className="text-xl font-black leading-none">{day.getDate()}</span></button>; })}</div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-white/10"><span className="px-2 py-2 text-[10px] font-bold text-slate-400">All day</span><div className="relative col-span-7 grid min-h-10 gap-y-0.5 border-l border-slate-100 p-1 dark:border-white/10" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gridTemplateRows: `repeat(${allDayRowCount}, minmax(1.5rem, auto))` }}>{days.slice(1).map((day, index) => <span key={day.toISOString()} aria-hidden="true" style={{ left: `${((index + 1) / 7) * 100}%` }} className="pointer-events-none absolute inset-y-0 border-l border-slate-100 dark:border-white/10" />)}{allDayLayouts.map(({ event, columnStart, columnSpan, row }) => <button key={event.id} type="button" onClick={() => onEdit(event)} style={{ gridColumn: `${columnStart} / span ${columnSpan}`, gridRow: row + 1, marginInline: "0.125rem" }} className="z-10 min-w-0 text-left"><EventChip event={event} members={members} compact /></button>)}</div></div><div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]"><div style={{ height: timelineHeight }} className="relative bg-slate-50/60 dark:bg-white/[.02]">{Array.from({ length: timelineEndHour - timelineStartHour + 1 }, (_, index) => <span key={index} style={{ top: index * timelineHourHeight - 7 }} className="absolute right-2 text-xs font-bold text-slate-400">{new Date(2000, 0, 1, timelineStartHour + index).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>{days.map((day) => <TimelineColumn key={day.toISOString()} date={day} events={events} members={members} onEdit={onEdit} onCreate={onCreate} />)}</div></div></div>;
 }
 
 export function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {

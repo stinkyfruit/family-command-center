@@ -233,12 +233,25 @@ export function isHexColor(value: string): boolean {
 export function displayEventsOnce(events: Event[]) {
   const unique = new Map<string, Event>();
   const score = (event: Event) => ({ app: 30, google: 20, apple: 10 }[event.source ?? "app"] ?? 0) + (event.notes?.length ?? 0) + (event.location?.length ?? 0) + (event.memberIds?.length ?? 0);
+  const calendarDay = (event: Event) => {
+    const startsAt = new Date(event.startsAt);
+    const values = event.allDay
+      ? [startsAt.getUTCFullYear(), startsAt.getUTCMonth(), startsAt.getUTCDate()]
+      : [startsAt.getFullYear(), startsAt.getMonth(), startsAt.getDate()];
+    return values.join("-");
+  };
+  const birthdayName = (title: string) => title
+    .replace(/\b(?:birthday|bday|birth[\s-]+day)\b/gi, " ")
+    .replace(/[’']s\b/gi, " ")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLocaleLowerCase();
   for (const event of events) {
     if (event.generatedHoliday) { unique.set(String(event.id), event); continue; }
     const startsAt = new Date(event.startsAt);
-    const birthdayDay = [startsAt.getFullYear(), startsAt.getMonth(), startsAt.getDate()].join("-");
-    const key = event.category === "Birthday"
-      ? ["birthday", event.title.trim().toLocaleLowerCase(), birthdayDay].join("|")
+    const isBirthday = event.category?.trim().toLocaleLowerCase() === "birthday" || /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(event.title);
+    const key = isBirthday
+      ? ["birthday", birthdayName(event.title) || event.title.trim().toLocaleLowerCase(), calendarDay(event)].join("|")
       : [event.title.trim().toLocaleLowerCase(), startsAt.getTime(), event.endsAt ? new Date(event.endsAt).getTime() : "", Boolean(event.allDay)].join("|");
     const current = unique.get(key);
     if (!current || score(event) > score(current)) unique.set(key, event);
