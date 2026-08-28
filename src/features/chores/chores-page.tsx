@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
 import type { ChoreEntry, ChoreRewardMode, Member } from "@/features/home/model";
 import { choreIcon, choreRoutines, isDailyRoutineChore, isVisibleRoutineChore, notoIconPath } from "@/features/home/model";
 import { ChoreCelebration } from "@/features/chores/chore-celebration";
 
-export function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
+export const ChoresPage = memo(function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
   return <><WeekdayChoresBoard members={members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={onToggle} /><TemporaryRoutineChores members={members} chores={chores} mode={choreRewardMode} onToggle={onToggle} /> </>;
-}
+});
 
 function formatReward(cents: number, stars: number, mode: ChoreRewardMode) {
   return mode === "money" ? `$${(cents / 100).toFixed(2)}` : `${stars} ${stars === 1 ? "star" : "stars"}`;

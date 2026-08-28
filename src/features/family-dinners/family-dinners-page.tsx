@@ -3,7 +3,7 @@
 /* Photos are resized in the browser before they reach Supabase Storage. */
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { memo, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
 import type { Member, SharedList } from "@/features/home/model";
 import { supabase } from "@/lib/supabase";
@@ -107,7 +107,7 @@ function DinnerPhoto({ url, title, className = "h-44 w-full", fit = "cover" }: {
   return <div className={`flex items-center justify-center overflow-hidden rounded-2xl bg-orange-100 text-orange-600 dark:bg-orange-400/20 dark:text-orange-200 ${className}`}>{url ? <img src={url} alt={`${title} photo`} className={fit === "natural" ? "block max-h-80 max-w-[92%] object-contain" : fit === "contain" ? "block max-h-full max-w-full object-contain" : "size-full object-cover object-center"} loading="lazy" /> : <AppIcon name="familyDinners" className="size-10" />}</div>;
 }
 
-export function FamilyDinnersPage({ householdId, members, currentUserId, sharedLists, onAddListItem, onToggleListItem, onDeleteListItem, onOpenSharedLists }: FamilyDinnersPageProps) {
+export const FamilyDinnersPage = memo(function FamilyDinnersPage({ householdId, members, currentUserId, sharedLists, onAddListItem, onToggleListItem, onDeleteListItem, onOpenSharedLists }: FamilyDinnersPageProps) {
   const { notify, confirm } = useAppNotifications();
   const [dinners, setDinners] = useState<Dinner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -328,4 +328,4 @@ export function FamilyDinnersPage({ householdId, members, currentUserId, sharedL
 
     {selectedDinner && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedDinner(null); }}><article role="dialog" aria-modal="true" aria-labelledby="selected-dinner-title" className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] bg-white p-5 shadow-2xl dark:bg-[#202031] md:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600 dark:text-orange-300">Family dish</p><h2 id="selected-dinner-title" className="mt-1 text-2xl font-black">{formatDate(selectedDinner.eatenOn)}</h2></div><button type="button" onClick={() => setSelectedDinner(null)} aria-label="Close dinner details" className="grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>{selectedDinner.notes && <div className="mt-6 rounded-2xl bg-amber-50 p-4 dark:bg-amber-400/10"><p className="text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-100">Dish notes</p><p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-slate-700 dark:text-slate-200">{selectedDinner.notes}</p></div>}<div className="mt-6 grid gap-4">{selectedDinner.dishes.slice(0, 1).map((dish) => <section key={dish.id} className="rounded-2xl bg-orange-50 p-4 dark:bg-orange-400/10"><div className="grid gap-4 sm:grid-cols-[9rem_1fr]"><DinnerPhoto url={dish.photoUrl} title={dish.title} className="h-36 w-full sm:h-36" /><div><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wide text-orange-600 dark:text-orange-200">{categoryLabel(dish.category)}</p><h3 className="mt-1 text-xl font-black">{dish.title}</h3>{dish.madeByMemberName && <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">Made by {dish.madeByMemberName}</p>}</div><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-black text-amber-800 dark:bg-amber-400/20 dark:text-amber-100">Family average {averageRating(dish).toFixed(1)} / 10</span></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{dish.ratings.map((rating) => <div key={rating.id} className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2 text-sm font-bold dark:bg-white/10"><span>{rating.memberName}</span><span className="text-orange-700 dark:text-orange-200">{rating.rating} / 10</span></div>)}</div></div></div></section>)}</div></article></div>}
   </section>;
-}
+});

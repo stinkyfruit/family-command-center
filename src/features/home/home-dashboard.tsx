@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { AuroraActivity, CometCloseApproach, Event, Member, MoodCheckin, MoodKey, Todo, Weather, WeatherForecast, WeatherInsights } from "@/features/home/model";
 import { FamilyMoodCard } from "@/components/home/mood";
 import { PhoneHomeCalendar } from "@/components/home/calendar";
@@ -36,7 +37,7 @@ type HomeDashboardProps = {
   calendarAnchor: Date;
 };
 
-export function HomeDashboard({
+export const HomeDashboard = memo(function HomeDashboard({
   weather,
   weatherForecast,
   weatherInsights,
@@ -73,4 +74,4 @@ export function HomeDashboard({
     </section>
     <CalendarPreview anchor={calendarAnchor} events={visibleCalendarEvents} members={members} onOpenCalendar={onOpenCalendar} onOpenDay={onOpenCalendarDay} onOpenEvent={onOpenEvent} />
   </>;
-}
+});

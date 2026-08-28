@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, memo, useEffect, useMemo, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { supabase } from "@/lib/supabase";
 import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
@@ -18,7 +18,7 @@ const gingerbreadAnimation = christmasAnimations.find((src) => src.includes("Gin
 const snowmanAnimation = christmasAnimations.find((src) => src.includes("snowman")) ?? "/animations/holidays/christmas/Happy%20snowman%20jumping%20and%20waving%20his%20hand.json";
 const santaSleighAnimation = christmasAnimations.find((src) => src.includes("santa%20sleigh")) ?? "/animations/holidays/christmas/santa%20sleigh.json";
 
-export default function ChristmasWishlistPage({ householdId: householdIdProp = null, members = [], voiceDraft = null }: { householdId?: string | null; members?: Member[]; voiceDraft?: WishlistVoiceDraft | null } = {}) {
+export default memo(function ChristmasWishlistPage({ householdId: householdIdProp = null, members = [], voiceDraft = null }: { householdId?: string | null; members?: Member[]; voiceDraft?: WishlistVoiceDraft | null } = {}) {
   const [kids, setKids] = useState<Kid[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [wishlists, setWishlists] = useState<WishlistByKid>({});
@@ -217,7 +217,7 @@ export default function ChristmasWishlistPage({ householdId: householdIdProp = n
       {celebrating && <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-violet-950/10 p-6" role="status" aria-label="Wish added"><ChristmasLottie src={santaSleighAnimation} fallback="🎅" className="size-64" loop={false} label="Animated Santa sleigh" /><p className="absolute mt-64 rounded-full bg-white/95 px-4 py-2 font-black text-emerald-700 shadow-xl">Wish added! 🎁</p></div>}
     </section>
   );
-}
+});
 
 function ChristmasLottie({ src, fallback, className, label, loop = true }: { src: string; fallback: string; className: string; label: string; loop?: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(false);

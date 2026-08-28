@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, type FormEvent } from "react";
+import { memo, type ChangeEvent, type FormEvent } from "react";
 import type { Event, Member } from "@/features/home/model";
 import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
 import { CalendarPersonFilter, DayCalendar, MonthGrid, WeekCalendar } from "@/components/home/calendar";
@@ -48,7 +48,7 @@ type CalendarPageProps = {
   onToggleEventMember: (memberId: string) => void;
 };
 
-export function CalendarPage({
+export const CalendarPage = memo(function CalendarPage({
   anchor,
   events,
   members,
@@ -99,4 +99,4 @@ export function CalendarPage({
       {showEventForm ? <form onSubmit={onSubmitEvent} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-500/10"><div className="flex items-center justify-between"><p className="font-bold text-violet-800 dark:text-violet-100">Add a family event</p><button type="button" onClick={onCloseEventForm} className="text-lg font-bold text-violet-500">×</button></div><div className="mt-3"><input required autoFocus value={title} onChange={handleInputChange(onTitleChange)} placeholder="What&apos;s happening?" className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-violet-500"/></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Date<input required type="date" value={eventDate} onChange={handleInputChange(onDateChange)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Starts<input disabled={eventAllDay} required type="time" value={eventTime} onChange={handleInputChange(onTimeChange)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Ends<input disabled={eventAllDay} required type="time" value={eventEndTime} onChange={handleInputChange(onEndTimeChange)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-sm text-slate-800 disabled:opacity-50" /></label></div><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Category<StyledSelect value={eventCategory} onChange={(event) => onCategoryChange(event.target.value)}><option>General</option><option>School Test/Project Due</option><option>Sports</option><option>Birthday</option><option>Vacation</option><option>Holiday</option></StyledSelect></label><label className="text-xs font-bold text-violet-800 dark:text-violet-200">Location<input value={eventLocation} onChange={handleInputChange(onLocationChange)} placeholder="e.g. Backyard or 123 Main St" className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800"/></label></div><fieldset className="mt-3"><legend className="text-xs font-bold text-violet-800 dark:text-violet-200">Who is this for?</legend><div className="mt-1 flex flex-wrap gap-2">{members.map((member) => { const id = String(member.id); const selected = eventMemberIds.includes(id); return <label key={id} className={`cursor-pointer rounded-full px-3 py-1 text-xs font-bold ${selected ? "bg-violet-600 text-white" : "bg-white text-violet-700 ring-1 ring-violet-200"}`}><input className="sr-only" type="checkbox" checked={selected} onChange={() => onToggleEventMember(id)}/>{member.name}</label>; })}</div></fieldset><div className="mt-4 flex items-center justify-between"><label className="flex gap-2 text-sm font-bold text-violet-800 dark:text-violet-200"><input type="checkbox" checked={eventAllDay} onChange={(event) => onAllDayChange(event.target.checked)} className="size-4 accent-violet-600" />All day</label><button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white">Save event</button></div></form> : <div className="flex justify-center"><button onClick={onShowEventForm} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-violet-700">+ Add event</button></div>}
     </div>
   </section>;
-}
+});

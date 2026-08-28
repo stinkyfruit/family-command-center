@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, memo, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { AppIcon } from "@/components/home/shared-ui";
@@ -53,7 +53,7 @@ export function SeasonalScreensaver({ onExit }: { onExit: () => void }) {
   </main>;
 }
 
-export function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[]; members: Member[]; onAdd: () => void; onToggle: (id: string | number) => void; onEdit: (todo: Todo) => void }) {
+export const TasksPage = memo(function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: Todo[]; members: Member[]; onAdd: () => void; onToggle: (id: string | number) => void; onEdit: (todo: Todo) => void }) {
   const urgency = (todo: Todo) => {
     if (!todo.dueAt) return 4;
     const due = new Date(todo.dueAt);
@@ -126,7 +126,7 @@ export function TasksPage({ todos, members, onAdd, onToggle, onEdit }: { todos: 
       </div>
     </section>
   );
-}
+});
 
 export function TaskEditor({ title, dueDate, assigneeMemberId, members, editing, onTitleChange, onDueDateChange, onAssigneeChange, onClose, onSave }: { title: string; dueDate: string; assigneeMemberId: string; members: Member[]; editing: boolean; onTitleChange: (value: string) => void; onDueDateChange: (value: string) => void; onAssigneeChange: (value: string) => void; onClose: () => void; onSave: (event: FormEvent) => void }) {
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-5 backdrop-blur-sm"><form onSubmit={onSave} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435]"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold text-violet-600">FAMILY TASK</p><h2 className="text-2xl font-bold">{editing ? "Edit task" : "Add a to-do"}</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">×</button></div><label className="mt-5 block text-sm font-bold">What needs to get done?<input required autoFocus value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="e.g. Pick up groceries" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500" /></label><label className="mt-5 block text-sm font-bold">Deadline <span className="font-normal text-slate-400">(optional)</span><input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-800 outline-violet-500" /></label><fieldset className="mt-5"><legend className="text-sm font-bold">Assign to <span className="font-normal text-slate-400">(optional)</span></legend><div className="mt-2 flex flex-wrap gap-2"><label className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${!assigneeMemberId ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-200"}`}><input className="sr-only" type="radio" name="task-assignee" checked={!assigneeMemberId} onChange={() => onAssigneeChange("")} />Anyone</label>{members.map((member) => <label key={member.id} className={`cursor-pointer rounded-full px-3 py-2 text-sm font-bold ${assigneeMemberId === String(member.id) ? "text-white" : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"}`} style={assigneeMemberId === String(member.id) ? { backgroundColor: member.color ?? "#8b5cf6" } : undefined}><input className="sr-only" type="radio" name="task-assignee" checked={assigneeMemberId === String(member.id)} onChange={() => onAssigneeChange(String(member.id))} />{member.name}</label>)}</div></fieldset><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button><button className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700">{editing ? "Save task" : "Add task"}</button></div></form></div>;

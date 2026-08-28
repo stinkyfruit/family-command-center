@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ChoreCreationOptions, ChoreEntry, ChoreRewardMode } from "@/features/home/model";
 import { AccountSettings, ChoreSettingsSection, type ChoreSettingsTab } from "@/features/settings/chore-settings";
@@ -23,7 +23,7 @@ export type SettingsPageProps = SettingsPageContentProps & {
   onEmojiChange?: (chore: ChoreEntry, emoji: string) => void;
 };
 
-export function SettingsPage({ choreRewardMode, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onClearAll, onAddChore, onDeleteChore, onRewardModeChange, chores, onUpdateChore, onReorderChores, onEmojiChange, ...props }: SettingsPageProps) {
+export const SettingsPage = memo(function SettingsPage({ choreRewardMode, earnedCentsByMember, paidOutCentsByMember, onPayOut, onResetToday, onClearAll, onAddChore, onDeleteChore, onRewardModeChange, chores, onUpdateChore, onReorderChores, onEmojiChange, ...props }: SettingsPageProps) {
   const [settingsUnlocked, setSettingsUnlocked] = useState(!supabase);
   const [choreSettingsTab, setChoreSettingsTab] = useState<ChoreSettingsTab>("rewards");
   const currentMember = props.members.find((member) => props.currentUserId && String(member.userId) === props.currentUserId);
@@ -36,4 +36,4 @@ export function SettingsPage({ choreRewardMode, earnedCentsByMember, paidOutCent
       {supabase && <AccountSettings onSignOut={props.onSignOut} />}
     </>}
   </>;
-}
+});

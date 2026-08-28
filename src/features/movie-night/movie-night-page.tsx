@@ -5,7 +5,7 @@
 /* eslint-disable @next/next/no-img-element */
 /* eslint-disable jsx-a11y/role-has-required-aria-props */
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
 import type { Member } from "@/features/home/model";
 import { supabase } from "@/lib/supabase";
@@ -110,7 +110,7 @@ function movieNightFromRows(night: { id: string; watched_on: string; notes: stri
   };
 }
 
-export function MovieNightPage({ householdId, members, currentUserId }: { householdId: string | null; members: Member[]; currentUserId: string | null }) {
+export const MovieNightPage = memo(function MovieNightPage({ householdId, members, currentUserId }: { householdId: string | null; members: Member[]; currentUserId: string | null }) {
   const { notify, confirm } = useAppNotifications();
   const [nights, setNights] = useState<MovieNight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -387,4 +387,4 @@ export function MovieNightPage({ householdId, members, currentUserId }: { househ
 
     {selectedNight && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-5 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedNight(null); }}><article role="dialog" aria-modal="true" aria-labelledby="movie-night-dialog-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#242435] md:p-8"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Family movie night</p><h2 id="movie-night-dialog-title" className="mt-1 text-2xl font-black">{formatDate(selectedNight.watchedOn)}</h2></div><button type="button" onClick={() => setSelectedNight(null)} aria-label="Close movie night details" className="grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"><AppIcon name="close" className="size-5" /></button></div>{selectedNight.notes && <div className="mt-6 rounded-2xl bg-amber-50 p-4 dark:bg-amber-400/10"><p className="text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-100">Night notes</p><p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-slate-700 dark:text-slate-200">{selectedNight.notes}</p></div>}<div className="mt-6 grid gap-4">{selectedNight.movies.map((movie) => <section key={movie.id} className="rounded-2xl bg-violet-50 p-4 dark:bg-violet-400/10"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wide text-violet-600 dark:text-violet-300">Movie {movie.position}</p><h3 className="mt-1 text-xl font-black">{movie.title}</h3><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-300">Watched in {movieNightLocationLabel(movie.location)}</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-black text-amber-800 dark:bg-amber-400/20 dark:text-amber-100">Family average {ratingLabel(averageRating(movie))}</span></div><p className="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Picked by <span className="font-black">{movie.pickerName ?? "a family member"}</span></p><div className="mt-4 grid gap-2 sm:grid-cols-2">{movie.ratings.map((rating) => <div key={rating.id} className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2 text-sm font-bold dark:bg-white/10"><span className="flex items-center gap-2"><span>{rating.memberName}</span>{rating.firstTimeWatching && <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-fuchsia-700 dark:bg-fuchsia-400/20 dark:text-fuchsia-200">First time</span>}</span><span className="text-amber-700 dark:text-amber-200">{rating.rating} / 5</span></div>)}</div></section>)}</div></article></div>}
   </section>;
-}
+});
