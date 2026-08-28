@@ -28,6 +28,7 @@ import {
   choreIcon,
   displayEventsOnce,
   familyHolidaysForYear,
+  skyEventsForYear,
   isMoodKey,
   listIcon,
   localDateInputValue,
@@ -865,7 +866,7 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [themeMode, sunTimes]);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
-  const calendarEvents = useMemo(() => [...events, ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap(familyHolidaysForYear)], [events, calendarAnchor]);
+  const calendarEvents = useMemo(() => [...events, ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap((year) => [...familyHolidaysForYear(year), ...skyEventsForYear(year)])], [events, calendarAnchor]);
   const visibleCalendarEvents = useMemo(() => {
     if (!selectedCalendarMemberIds.length && !showFamilyEvents) return calendarEvents;
     return calendarEvents.filter((event) => {

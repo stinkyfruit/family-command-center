@@ -17,6 +17,7 @@ import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.js
 import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
 import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
+import { skyEventForCalendarDate, skyEventsForYear as skyEventsForYearData } from "@/lib/sky-events";
 
 export const halloweenScreensaverVideos = [
   "/animations/holidays/halloween/screensavers/halloween-screensaver-1.mp4",
@@ -37,7 +38,7 @@ export function pickCelebrationAnimation() {
   return animation;
 }
 
-export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; source?: "app" | "google" | "apple" };
+export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; generatedSkyEvent?: boolean; skyEventKind?: "solar" | "lunar"; source?: "app" | "google" | "apple" };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean; windSpeedMph?: number | null; windGustsMph?: number | null; conditionSource?: "forecast" | "observation" };
 export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number; windSpeedMph?: number | null; windGustsMph?: number | null };
@@ -106,18 +107,9 @@ export function nextMeteorShower(date = new Date()): MeteorShower {
   return candidates.sort((first, second) => first.peakDate.getTime() - second.peakDate.getTime()).find((shower) => shower.peakDate >= today) ?? candidates[0];
 }
 
-const notableEclipses = [
-  { year: 2026, month: 1, day: 17, title: "Annular solar eclipse", detail: "Visible mainly from Antarctica" },
-  { year: 2026, month: 2, day: 3, title: "Total lunar eclipse", detail: "Visible across much of Asia, Australia, the Pacific, and the Americas" },
-  { year: 2026, month: 7, day: 12, title: "Total solar eclipse", detail: "Totality crosses Greenland, Iceland, Spain, and northern Russia" },
-  { year: 2026, month: 7, day: 28, title: "Partial lunar eclipse", detail: "Visible from the Americas, Europe, Africa, and the Pacific" },
-  { year: 2027, month: 1, day: 6, title: "Annular solar eclipse", detail: "Visible from parts of South America and Africa" },
-  { year: 2027, month: 1, day: 20, title: "Penumbral lunar eclipse", detail: "Visible across much of the world" },
-  { year: 2027, month: 7, day: 2, title: "Total solar eclipse", detail: "Totality crosses southern Spain, North Africa, and the Middle East" },
-] as const;
-
 function eclipseForDate(date = new Date()): NotableSkyEvent | null {
-  return notableEclipses.map((eclipse) => ({ ...eclipse, date: new Date(eclipse.year, eclipse.month, eclipse.day) })).find((eclipse) => isSameCalendarDate(eclipse.date, date)) ?? null;
+  const event = skyEventForCalendarDate(localDateInputValue(date));
+  return event ? { ...event, date: new Date(`${event.date}T12:00:00`) } : null;
 }
 
 export function cometCloseApproachForPayload(payload: unknown): CometCloseApproach | null {
@@ -332,6 +324,22 @@ export function familyHolidaysForYear(year: number): Event[] {
     ["New Year’s Day", new Date(year, 0, 1), "🎉 A fresh family year"], ["Valentine’s Day", new Date(year, 1, 14), "💌 Share the love"], ["Martin Luther King Jr. Day", nthWeekday(year, 0, 1, 3), "A day of service"], ["Presidents’ Day", nthWeekday(year, 1, 1, 3), "Family holiday"], ["St. Patrick’s Day", new Date(year, 2, 17), "🍀 Wear green"], ["Easter", easterSunday(year), "🐣 Family celebration"], ["Mother’s Day", nthWeekday(year, 4, 0, 2), "💐 Celebrate Mom"], ["Memorial Day", lastWeekday(year, 4, 1), "Family holiday"], ["Father’s Day", nthWeekday(year, 5, 0, 3), "🧡 Celebrate Dad"], ["Juneteenth", new Date(year, 5, 19), "Family holiday"], ["Independence Day", new Date(year, 6, 4), "🎆 Fireworks!"], ["Labor Day", nthWeekday(year, 8, 1, 1), "Family holiday"], ["Halloween", new Date(year, 9, 31), "🎃 Costume day"], ["Veterans Day", new Date(year, 10, 11), "Family holiday"], ["Thanksgiving", nthWeekday(year, 10, 4, 4), "🦃 Give thanks"], ["Christmas Eve", new Date(year, 11, 24), "🎄 Family time"], ["Christmas Day", new Date(year, 11, 25), "🎁 Merry Christmas"], ["New Year’s Eve", new Date(year, 11, 31), "✨ Countdown!"],
   ];
   return entries.map(([title, date, notes]) => ({ id: `holiday-${year}-${title}`, title, notes, time: "All day", person: "Family", color: "bg-amber-300", startsAt: new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())).toISOString(), allDay: true, category: "Holiday", generatedHoliday: true }));
+}
+
+export function skyEventsForYear(year: number): Event[] {
+  return skyEventsForYearData(year).map((event) => ({
+    id: `sky-${event.kind}-${event.date}`,
+    title: event.title,
+    notes: `${event.detail}${event.kind === "solar" ? ". Use certified eclipse glasses; never look directly at the Sun." : ""}`,
+    time: "All day",
+    person: "Everyone",
+    color: "bg-violet-300",
+    startsAt: `${event.calendarDate}T00:00:00.000Z`,
+    allDay: true,
+    category: "Sky event",
+    generatedSkyEvent: true,
+    skyEventKind: event.kind,
+  }));
 }
 
 

@@ -1,4 +1,5 @@
 import { serverSupabase } from "@/lib/google-calendar";
+import { skyEventForCalendarDate } from "@/lib/sky-events";
 
 type ServerSupabase = ReturnType<typeof serverSupabase>;
 type LocalDateTime = { date: string; hour: number; minute: number };
@@ -64,10 +65,16 @@ export async function buildMorningDigest(admin: ServerSupabase, householdId: str
 
   const events = (eventResult.data ?? []).map((event) => `${formatEventTime(event.starts_at, Boolean(event.all_day), timeZone)} ${event.title}`);
   const tasks = (todoResult.data ?? []).map((todo) => todo.title);
+  const skyEvent = skyEventForCalendarDate(localDate);
   const total = events.length + tasks.length;
+  const body = [
+    events.length ? `Events: ${capList(events).join(" · ")}` : "Events: none",
+    tasks.length ? `Due today: ${capList(tasks).join(" · ")}` : "Due today: no tasks",
+    skyEvent ? `Sky watch: ${skyEvent.title} — ${skyEvent.detail}${skyEvent.kind === "solar" ? ". Use certified eclipse glasses; never look directly at the Sun." : ""}` : null,
+  ].filter((line): line is string => Boolean(line)).join("\n");
   return {
-    title: total ? `Good morning · ${total} today` : "Good morning · A clear day",
-    body: [events.length ? `Events: ${capList(events).join(" · ")}` : "Events: none", tasks.length ? `Due today: ${capList(tasks).join(" · ")}` : "Due today: no tasks"].join("\n"),
+    title: skyEvent ? `Good morning · ${skyEvent.title}` : total ? `Good morning · ${total} today` : "Good morning · A clear day",
+    body,
     eventCount: events.length,
     taskCount: tasks.length,
   };
