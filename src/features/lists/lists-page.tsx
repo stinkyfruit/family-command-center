@@ -4,12 +4,7 @@ import { useState } from "react";
 import { AppIcon, useAppNotifications } from "@/components/home/shared-ui";
 import type { SharedList, SharedListItem } from "@/features/home/model";
 import { supabase } from "@/lib/supabase";
-
-export type ListKind = "shared" | "private";
-
-export function listPreferenceKey(kind: ListKind, listId: string | number) {
-  return `${kind}:${String(listId)}`;
-}
+import { listPreferenceKey, type ListKind } from "@/features/lists/model";
 
 export type ListsPageProps = {
   lists: SharedList[];

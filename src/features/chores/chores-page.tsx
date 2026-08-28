@@ -4,20 +4,8 @@ import { useEffect, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
 import type { ChoreEntry, ChoreRewardMode, Member } from "@/features/home/model";
-import { choreIcon, choreRoutines, isDailyRoutineChore, isVisibleRoutineChore, notoIconPath, pickCelebrationAnimation } from "@/features/home/model";
-
-export function ChoreCelebration({ animationSrc, label = "Chore complete" }: { animationSrc?: string; label?: string }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [animation] = useState(() => animationSrc ?? pickCelebrationAnimation());
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduceMotion(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return <div className="pointer-events-auto fixed inset-0 z-50 grid place-items-center overflow-hidden bg-violet-950/35 p-6 backdrop-blur-sm" role="status" aria-label={label}><div className="w-full max-w-xl">{reduceMotion ? <div className="grid aspect-square place-items-center text-8xl">✨</div> : <AccessibleLottie src={animation} label={label} loop={false} wrapperClassName="h-[min(70vh,38rem)] w-full drop-shadow-2xl" className="size-full" />}</div></div>;
-}
+import { choreIcon, choreRoutines, isDailyRoutineChore, isVisibleRoutineChore, notoIconPath } from "@/features/home/model";
+import { ChoreCelebration } from "@/features/chores/chore-celebration";
 
 export function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
   return <><WeekdayChoresBoard members={members} chores={chores} mode={choreRewardMode} targetCents={choreRewardTargetCents} targetStars={choreRewardTargetStars} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={onToggle} /><TemporaryRoutineChores members={members} chores={chores} mode={choreRewardMode} onToggle={onToggle} /> </>;

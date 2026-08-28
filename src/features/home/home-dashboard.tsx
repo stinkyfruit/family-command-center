@@ -3,7 +3,7 @@
 import type { AuroraActivity, CometCloseApproach, Event, Member, MoodCheckin, MoodKey, Todo, Weather, WeatherForecast, WeatherInsights } from "@/features/home/model";
 import { FamilyMoodCard } from "@/components/home/mood";
 import { PhoneHomeCalendar } from "@/components/home/calendar";
-import { CalendarPreview } from "@/features/calendar/calendar-page";
+import { CalendarPreview } from "@/features/calendar/calendar-preview";
 import { WeatherCard } from "@/features/weather/weather-card";
 import { WeatherNoticeBanner } from "@/features/weather/weather-notice-banner";
 

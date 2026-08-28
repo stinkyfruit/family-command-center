@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import type { Event, ChoreRewardMode, Member, SharedList, Todo, Weather, WeatherForecast, WeatherInsights } from "@/features/home/model";
 import { EventDetails, EventEditor } from "@/components/home/calendar";
 import { TaskEditor } from "@/components/home/task-components";
-import { ChoreCelebration } from "@/features/chores/chores-page";
+import { ChoreCelebration } from "@/features/chores/chore-celebration";
 import { VoiceChoreEditor, VoiceListEditor, WeekendChoreEditor, type VoiceChoreDraft, type VoiceListDraft, type WeekendChoreDraft } from "@/features/voice/voice-command-editors";
 import { WeatherForecastOverlay } from "@/features/weather/weather-forecast";
 
