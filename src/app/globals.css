@@ -115,7 +115,12 @@ article .mt-5.space-y-2 > button > span:first-child.text-emerald-500::after {
 /* Weather card: let the forecast become a small night sky after sunset. */
 .weather-card {
   isolation: isolate;
+  /* Reserve the fully populated mobile footprint before weather requests settle. */
+  min-height: 23rem;
   transition: background 500ms ease, box-shadow 500ms ease;
+}
+@media (min-width: 48rem) {
+  .weather-card { min-height: 21rem; }
 }
 .weather-card-day {
   background: linear-gradient(135deg, #7dd3fc, #60a5fa 52%, #818cf8);
