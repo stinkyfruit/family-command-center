@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         const memberIds = eventMemberIds ?? (existing?.member_ids_override ? existing.member_ids ?? [] : seriesMemberIds ?? existing?.member_ids ?? []);
         const memberIdsOverride = Boolean(existing?.member_ids_override) || Boolean(eventMemberIds !== undefined && seriesExternalId);
         const category = existing?.category_override ? existing.category : calendarEventCategory(event.title);
-        const isBirthday = category.trim().toLowerCase() === "birthday" || isBirthdayTitle(event.title);
+        const isBirthday = isBirthdayTitle(event.title);
         return { household_id: feed.household_id, created_by: feed.created_by, calendar_feed_id: feed.id, series_external_id: seriesExternalId, title: event.title, notes: event.notes, location: event.location, starts_at: event.startsAt, ends_at: isBirthday ? null : event.endsAt, all_day: isBirthday || event.allDay, color: "#ec4899", source: "apple", external_id: externalId, category, category_override: existing?.category_override ?? false, member_ids: memberIds, member_ids_override: memberIdsOverride };
       });
       if (events.length) {

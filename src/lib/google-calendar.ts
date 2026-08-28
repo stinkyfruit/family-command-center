@@ -106,7 +106,7 @@ export async function importGoogleEvents(connection: { id: string; household_id:
     const memberIdsOverride = Boolean(existing?.member_ids_override) || Boolean(eventMemberIds !== undefined && seriesExternalId);
     const title = item.summary || "Untitled event";
     const category = existing?.category_override ? existing.category : calendarEventCategory(title);
-    const isBirthday = category.trim().toLowerCase() === "birthday" || isBirthdayTitle(title);
+    const isBirthday = isBirthdayTitle(title);
     return {
     household_id: connection.household_id, created_by: connection.connected_by, google_calendar_connection_id: connection.id, series_external_id: seriesExternalId, title: item.summary || "Untitled event", notes: item.description ?? null, location: item.location ?? null,
     starts_at: item.start?.dateTime ?? `${item.start?.date}T00:00:00.000Z`, ends_at: isBirthday ? null : (item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null)), all_day: isBirthday || Boolean(item.start?.date), color: "#4285f4", source: "google", external_id: item.id,
