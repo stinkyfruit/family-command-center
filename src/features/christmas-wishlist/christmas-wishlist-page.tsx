@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { supabase } from "@/lib/supabase";
 import { AppIcon, StyledSelect } from "@/components/home/shared-ui";
+import type { Member } from "@/features/home/model";
 import { christmasAnimations } from "@/generated/animation-manifest";
 
 type Kid = { id: string; name: string; color: string; emoji: string };
@@ -17,7 +18,7 @@ const gingerbreadAnimation = christmasAnimations.find((src) => src.includes("Gin
 const snowmanAnimation = christmasAnimations.find((src) => src.includes("snowman")) ?? "/animations/holidays/christmas/Happy%20snowman%20jumping%20and%20waving%20his%20hand.json";
 const santaSleighAnimation = christmasAnimations.find((src) => src.includes("santa%20sleigh")) ?? "/animations/holidays/christmas/santa%20sleigh.json";
 
-export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraft?: WishlistVoiceDraft | null } = {}) {
+export default function ChristmasWishlistPage({ householdId: householdIdProp = null, members = [], voiceDraft = null }: { householdId?: string | null; members?: Member[]; voiceDraft?: WishlistVoiceDraft | null } = {}) {
   const [kids, setKids] = useState<Kid[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [wishlists, setWishlists] = useState<WishlistByKid>({});
@@ -51,41 +52,35 @@ export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraf
 
     async function loadFamilyWishlist() {
       try {
-        if (!supabase) return;
-        const { data: userResult } = await supabase.auth.getUser();
-        if (!userResult.user) {
-          setKids([]);
-          setWishlists({});
-          setSelectedKidId(null);
-          return;
-        }
-        const { data: membership } = await supabase.from("members").select("household_id").eq("user_id", userResult.user.id).limit(1).maybeSingle();
-        if (!membership?.household_id) {
-          setHouseholdId(null);
-          setKids([]);
-          setWishlists({});
-          setSelectedKidId(null);
-          return;
-        }
-
-        const [{ data: memberRows }, { data: wishRows }] = await Promise.all([
-          supabase.from("members").select("id, display_name, role, color").eq("household_id", membership.household_id).eq("role", "child").order("created_at"),
-          supabase.from("christmas_wishlist_items").select("id, member_id, title, note, category, priority, created_at").eq("household_id", membership.household_id).order("created_at"),
-        ]);
-        if (cancelled) return;
-
-        const loadedKids = (memberRows ?? []).map((member, index) => ({
+        setIsLoading(true);
+        setHouseholdId(householdIdProp);
+        const loadedKids = members.filter((member) => member.role === "child").map((member, index) => ({
           id: String(member.id),
-          name: member.display_name,
+          name: member.name,
           color: member.color ?? ["#e85d75", "#2d9a79", "#7c65d8", "#e39b3d"][index % 4],
           emoji: ["🦌", "⛄", "🧸", "🛷"][index % 4],
         }));
+        if (!supabase || !householdIdProp) {
+          setKids([]);
+          setWishlists({});
+          setSelectedKidId(null);
+          return;
+        }
+
+        const { data: wishRows, error } = await supabase.from("christmas_wishlist_items").select("id, member_id, title, note, category, priority, created_at").eq("household_id", householdIdProp).order("created_at");
+        if (cancelled) return;
+        if (error) {
+          setKids(loadedKids);
+          setWishlists(Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid);
+          setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0]?.id ?? null);
+          setSyncMessage(`Could not load wish lists: ${error.message}`);
+          return;
+        }
         const loadedWishlists = Object.fromEntries(loadedKids.map((kid) => [kid.id, [] as WishItem[]])) as WishlistByKid;
         for (const wish of wishRows ?? []) {
           const memberId = String(wish.member_id);
           if (loadedWishlists[memberId]) loadedWishlists[memberId].push({ id: wish.id, title: wish.title, note: wish.note ?? "", category: wish.category ?? "Surprise", priority: Boolean(wish.priority), createdAt: wish.created_at });
         }
-        setHouseholdId(membership.household_id);
         setKids(loadedKids);
         setWishlists(loadedWishlists);
         setSelectedKidId((current) => loadedKids.some((kid) => kid.id === current) ? current : loadedKids[0]?.id ?? null);
@@ -97,7 +92,7 @@ export default function ChristmasWishlistPage({ voiceDraft = null }: { voiceDraf
 
     void loadFamilyWishlist();
     return () => { cancelled = true; };
-  }, []);
+  }, [householdIdProp, members]);
 
   useEffect(() => {
     const handleMemberRemoved = (event: Event) => {
