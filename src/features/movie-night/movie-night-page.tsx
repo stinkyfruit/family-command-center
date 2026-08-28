@@ -369,7 +369,7 @@ export const MovieNightPage = memo(function MovieNightPage({ householdId, member
     }
   }
 
-  return <section className="mx-auto max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8">
+  return <section className="w-full min-w-0">
     <div className="mx-auto max-w-6xl space-y-5">
       <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-950 via-violet-900 to-fuchsia-800 p-6 text-white shadow-sm md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">

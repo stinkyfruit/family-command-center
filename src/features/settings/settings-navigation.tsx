@@ -40,14 +40,14 @@ export function SettingsNavigation({ showChores, showAccount }: { showChores: bo
   }, [visibleSections]);
 
   return <>
-    <section className="mx-auto max-w-6xl px-5 pb-5 md:px-9" aria-labelledby="settings-page-title">
+    <section className="mx-auto w-full min-w-0 max-w-6xl px-5 md:px-9" aria-labelledby="settings-page-title">
       <div className="rounded-[2rem] bg-indigo-50 p-5 shadow-sm ring-1 ring-indigo-100 dark:bg-indigo-400/10 dark:ring-indigo-300/20">
         <p className="text-sm font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-200">SETTINGS</p>
         <h2 id="settings-page-title" className="mt-1 text-3xl font-black text-slate-900 dark:text-white">Make your family home fit your family</h2>
         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600 dark:text-slate-300">Choose a section below. Changes save as you make them.</p>
       </div>
     </section>
-    <div className="sticky top-3 z-30 mx-auto mt-3 max-w-6xl px-5 md:px-9">
+    <div className="sticky top-3 z-30 mx-auto mt-3 w-full min-w-0 max-w-6xl px-5 md:px-9">
       <div className="rounded-[1.5rem] bg-indigo-50/95 p-2 shadow-lg shadow-indigo-950/10 ring-1 ring-indigo-100 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10">
         <nav aria-label="Settings sections" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {visibleSections.map((section) => <a key={section.id} href={`#${section.id}`} aria-controls={section.id} aria-current={renderedActiveSection === section.id ? "location" : undefined} className={`group flex min-w-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left ring-1 transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${renderedActiveSection === section.id ? "bg-indigo-600 text-white shadow-sm ring-indigo-600 dark:bg-indigo-500 dark:ring-indigo-500" : "bg-white/85 ring-indigo-100 hover:bg-white dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15"}`}>

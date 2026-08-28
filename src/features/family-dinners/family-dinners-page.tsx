@@ -302,7 +302,7 @@ export const FamilyDinnersPage = memo(function FamilyDinnersPage({ householdId, 
     }
   }
 
-  return <section className="mx-auto w-full min-w-0 max-w-[1800px] px-5 pb-24 md:px-9 lg:pb-8">
+  return <section className="w-full min-w-0">
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5">
       <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-950 via-orange-800 to-amber-600 p-6 text-white shadow-sm md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5"><div className="max-w-2xl"><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-100">Family dishes</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Pass the memories</h1><p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-orange-50">Keep the dishes, recipes, and family opinions worth remembering.</p></div><button type="button" onClick={() => { if (showForm) resetForm(); else { setEditingDinnerId(null); setMessage(""); setShowForm(true); } }} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-orange-900 shadow-sm hover:bg-orange-50"><AppIcon name="plus" className="size-4" />{showForm ? "Close form" : "Record a dish"}</button></div>

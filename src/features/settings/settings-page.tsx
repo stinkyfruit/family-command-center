@@ -28,12 +28,12 @@ export const SettingsPage = memo(function SettingsPage({ choreRewardMode, earned
   const [choreSettingsTab, setChoreSettingsTab] = useState<ChoreSettingsTab>("rewards");
   const currentMember = props.members.find((member) => props.currentUserId && String(member.userId) === props.currentUserId);
 
-  return <>
+  return <div className="w-full min-w-0 space-y-5">
     {settingsUnlocked && <SettingsNavigation showChores={props.showChoresTab} showAccount={Boolean(supabase)} />}
-    <SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} />
+    <div className="px-5 md:px-9"><SettingsPageContent {...props} onUnlocked={() => setSettingsUnlocked(true)} /></div>
     {settingsUnlocked && <>
       {props.showChoresTab && <ChoreSettingsSection activeTab={choreSettingsTab} onTabChange={setChoreSettingsTab} choreRewardMode={choreRewardMode} earnedCentsByMember={earnedCentsByMember} paidOutCentsByMember={paidOutCentsByMember} onPayOut={onPayOut} onResetToday={onResetToday} onClearAll={onClearAll} onAddChore={onAddChore} onDeleteChore={onDeleteChore} onRewardModeChange={onRewardModeChange} chores={chores} onUpdateChore={onUpdateChore} onReorderChores={onReorderChores} onEmojiChange={onEmojiChange} members={props.members} currentMember={currentMember} />}
       {supabase && <AccountSettings onSignOut={props.onSignOut} />}
     </>}
-  </>;
+  </div>;
 });
