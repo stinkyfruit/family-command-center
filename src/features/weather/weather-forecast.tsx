@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
-import { weatherAnimation, weatherLabel, weatherWindLabel, type Weather, type WeatherAlert, type WeatherForecast, type WeatherForecastDay, type WeatherInsights, type WeatherPollenType } from "@/features/home/model";
+import { notableSkyEventForDate, weatherAnimation, weatherLabel, weatherWindLabel, type NotableSkyEvent, type Weather, type WeatherAlert, type WeatherForecast, type WeatherForecastDay, type WeatherInsights, type WeatherPollenType } from "@/features/home/model";
 
 type WeatherForecastOverlayProps = {
   weather: Weather | null;
@@ -18,6 +18,7 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
   const [view, setView] = useState<ForecastView>("today");
   const [currentTime] = useState(() => Date.now() / 1000);
   const today = forecast?.days[0] ?? null;
+  const skyEvent = notableSkyEventForDate(new Date());
   const nextHours = useMemo(() => {
     return (forecast?.hours ?? []).filter((hour) => hour.time >= currentTime - 60 * 60).slice(0, 12);
   }, [currentTime, forecast]);
@@ -46,10 +47,17 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
           {(["today", "week"] as const).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => setView(option)} className={`rounded-xl px-3 py-2.5 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${view === option ? "bg-white text-sky-700 shadow-sm dark:bg-white/15 dark:text-sky-200" : "text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white"}`}>{option === "today" ? "Today" : "7 days"}</button>)}
         </div>
 
+        {skyEvent && <SkyEventDetails event={skyEvent} />}
+
         {!forecast ? <div className="mt-6 rounded-2xl bg-slate-50 p-6 text-center dark:bg-white/5"><p className="font-black text-slate-700 dark:text-white">Forecast unavailable</p><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Allow location access and try again to load the extended forecast.</p></div> : view === "today" ? <TodayForecast weather={weather} today={today} hours={nextHours} insights={insights} /> : <WeekForecast days={forecast.days} />}
       </div>
     </section>
   </div>;
+}
+
+function SkyEventDetails({ event }: { event: NotableSkyEvent }) {
+  const solar = event.kind === "solar";
+  return <section className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-400/25 dark:bg-violet-400/10" aria-labelledby="weather-sky-event-title"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/80 text-violet-700 dark:bg-white/10 dark:text-violet-200"><AppIcon name={solar ? "sun" : "moon"} className="size-5" /></span><div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-violet-700 dark:text-violet-200">Sky watch</p><h3 id="weather-sky-event-title" className="mt-1 text-lg font-black text-slate-900 dark:text-white">{event.title}</h3><p className="mt-1 text-sm font-semibold leading-relaxed text-slate-600 dark:text-slate-200">{event.detail}.</p>{solar && <p className="mt-2 text-xs font-bold leading-relaxed text-violet-800 dark:text-violet-100">Use certified eclipse glasses and never look directly at the Sun.</p>}</div></div></section>;
 }
 
 function TodayForecast({ weather, today, hours, insights }: { weather: Weather | null; today: WeatherForecastDay | null; hours: WeatherForecast["hours"]; insights: WeatherInsights | null }) {

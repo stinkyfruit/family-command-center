@@ -96,7 +96,7 @@ function buildNotices({ weather, forecast, insights, auroraActivity, cometCloseA
   const date = new Date();
   const skyEvent = notableSkyEventForDate(date, cometCloseApproach);
   const phase = moonPhase(date);
-  if (skyEvent) notices.push({ id: "sky-event", title: skyEvent.title, detail: skyEvent.detail, tone: "violet", icon: "moon" });
+  if (skyEvent) notices.push({ id: "sky-event", title: skyEvent.title, detail: skyEvent.detail, tone: "violet", icon: skyEvent.kind === "solar" ? "sun" : "moon" });
   if (!skyEvent && (phase.key === "full" || phase.key === "new")) {
     notices.push({ id: "moon-phase", title: `${phase.name} tonight`, detail: `${phase.illumination}% illuminated`, tone: "violet", icon: "moon" });
   }
@@ -119,7 +119,7 @@ export function WeatherNoticeBanner({ weather, forecast, insights, auroraActivit
   if (!notices.length) return null;
 
   const primary = notices[0];
-  return <section aria-labelledby="weather-notice-title" className={`flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border px-3 py-2 shadow-sm sm:gap-3 sm:px-4 ${toneClasses(primary.tone)}`}>
+  return <section aria-labelledby="weather-notice-title" className={`relative z-50 flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border px-3 py-2 shadow-sm sm:gap-3 sm:px-4 ${toneClasses(primary.tone)}`}>
     <h2 id="weather-notice-title" className="sr-only">Weather and sky notices</h2>
     <span className="grid size-7 shrink-0 place-items-center rounded-xl bg-white/70 dark:bg-white/10"><AppIcon name={primary.icon} className="size-4" /></span>
     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap text-xs sm:text-sm">

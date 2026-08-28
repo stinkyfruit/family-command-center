@@ -11,6 +11,7 @@ export type SkyCalendarEvent = CalendarSkyEvent & {
 
 type SkyEventDefinition = CalendarSkyEvent & {
   visibleDates: readonly string[];
+  expiresAt?: string;
 };
 
 // The August 2026 eclipse reaches maximum on August 28 UTC, but it is an
@@ -42,6 +43,7 @@ const skyEvents: readonly SkyEventDefinition[] = [
     title: "Deep partial lunar eclipse",
     date: "2026-08-28",
     visibleDates: ["2026-08-27", "2026-08-28"],
+    expiresAt: "2026-08-28T07:02:00Z",
     detail: "Visible from the Americas, Europe, Africa, and the Pacific",
   },
   {
@@ -67,9 +69,10 @@ const skyEvents: readonly SkyEventDefinition[] = [
   },
 ];
 
-export function skyEventForCalendarDate(calendarDate: string): CalendarSkyEvent | null {
+export function skyEventForCalendarDate(calendarDate: string, now = new Date()): CalendarSkyEvent | null {
   const event = skyEvents.find((candidate) => candidate.visibleDates.includes(calendarDate));
   if (!event) return null;
+  if (event.expiresAt && now.getTime() >= Date.parse(event.expiresAt)) return null;
   return { kind: event.kind, title: event.title, date: event.date, detail: event.detail };
 }
 

@@ -53,7 +53,7 @@ export type MoonPhase = { key: MoonPhaseKey; name: string; illumination: number 
 export type MeteorShower = { name: string; peakDate: Date; activeStart: Date; activeEnd: Date };
 export type AuroraActivity = { probability: number; forecastTime: string | null };
 export type CometCloseApproach = { name: string; date: Date; distanceAu: number | null };
-export type NotableSkyEvent = { title: string; date: Date; detail: string };
+export type NotableSkyEvent = { title: string; date: Date; detail: string; kind?: "solar" | "lunar" };
 
 const synodicMonth = 29.530588853;
 const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
@@ -62,12 +62,16 @@ export function moonPhase(date = new Date()): MoonPhase {
   const daysSinceKnownNewMoon = (date.getTime() - knownNewMoon) / 86_400_000;
   const fraction = ((daysSinceKnownNewMoon % synodicMonth) + synodicMonth) % synodicMonth / synodicMonth;
   const illumination = Math.round((1 - Math.cos(fraction * Math.PI * 2)) / 2 * 100);
-  const key: MoonPhaseKey = fraction < 0.03 || fraction >= 0.97 ? "new"
-    : fraction < 0.22 ? "waxing-crescent"
-      : fraction < 0.28 ? "first-quarter"
-        : fraction < 0.47 ? "waxing-gibbous"
-          : fraction < 0.53 ? "full"
-            : fraction < 0.72 ? "waning-gibbous"
+  // Phase labels are directional: once the new/full moon moment has passed,
+  // stop calling it "tonight" and move into the next visible phase.
+  const key: MoonPhaseKey = fraction >= 0.97 ? "new"
+      : fraction < 0.22 ? "waxing-crescent"
+        : fraction < 0.28 ? "first-quarter"
+          : fraction < 0.47 ? "waxing-gibbous"
+            // The simple synodic estimate runs a little early in 2026; keep
+            // the full-moon label through the observed Aug 28, 04:13 UTC peak.
+            : fraction < 0.503 ? "full"
+              : fraction < 0.72 ? "waning-gibbous"
               : fraction < 0.78 ? "last-quarter"
                 : "waning-crescent";
   const names: Record<MoonPhaseKey, string> = {
@@ -108,7 +112,7 @@ export function nextMeteorShower(date = new Date()): MeteorShower {
 }
 
 function eclipseForDate(date = new Date()): NotableSkyEvent | null {
-  const event = skyEventForCalendarDate(localDateInputValue(date));
+  const event = skyEventForCalendarDate(localDateInputValue(date), date);
   return event ? { ...event, date: new Date(`${event.date}T12:00:00`) } : null;
 }
 
