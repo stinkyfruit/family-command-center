@@ -17,7 +17,7 @@ import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.js
 import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
 import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
-import { skyEventForCalendarDate, skyEventsForYear as skyEventsForYearData } from "@/lib/sky-events";
+import { fullMoonsForYear as fullMoonsForYearData, skyEventForCalendarDate, skyEventsForYear as skyEventsForYearData } from "@/lib/sky-events";
 
 export const halloweenScreensaverVideos = [
   "/animations/holidays/halloween/screensavers/halloween-screensaver-1.mp4",
@@ -338,6 +338,22 @@ export function skyEventsForYear(year: number): Event[] {
     time: "All day",
     person: "Everyone",
     color: "bg-violet-300",
+    startsAt: `${event.calendarDate}T00:00:00.000Z`,
+    allDay: true,
+    category: "Sky event",
+    generatedSkyEvent: true,
+    skyEventKind: event.kind,
+  }));
+}
+
+export function fullMoonsForYear(year: number): Event[] {
+  return fullMoonsForYearData(year).map((event) => ({
+    id: `sky-full-moon-${event.date}`,
+    title: event.title,
+    notes: event.detail,
+    time: "All day",
+    person: "Everyone",
+    color: "bg-indigo-300",
     startsAt: `${event.calendarDate}T00:00:00.000Z`,
     allDay: true,
     category: "Sky event",
