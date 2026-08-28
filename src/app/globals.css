@@ -116,11 +116,17 @@ article .mt-5.space-y-2 > button > span:first-child.text-emerald-500::after {
 .weather-card {
   isolation: isolate;
   /* Reserve the fully populated mobile footprint before weather requests settle. */
-  min-height: 23rem;
+  min-height: 24rem;
   transition: background 500ms ease, box-shadow 500ms ease;
 }
 @media (min-width: 48rem) {
-  .weather-card { min-height: 21rem; }
+  .weather-card { min-height: 22rem; }
+}
+.weather-sky-details {
+  min-height: 7rem;
+}
+@media (min-width: 40rem) {
+  .weather-sky-details { min-height: 4.5rem; }
 }
 .weather-card-day {
   background: linear-gradient(135deg, #7dd3fc, #60a5fa 52%, #818cf8);
