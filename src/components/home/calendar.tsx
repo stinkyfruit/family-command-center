@@ -7,12 +7,27 @@ export function sameDate(first: Date, second: Date) {
   return first.getFullYear() === second.getFullYear() && first.getMonth() === second.getMonth() && first.getDate() === second.getDate();
 }
 
+function allDayCalendarDate(date: Date) {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function visibleCalendarDate(date: Date) {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 // Google represents all-day dates as midnight UTC. Compare those with the
 // visible local calendar date using UTC fields so they never slide a day when
-// the dashboard is used outside UTC.
+// the dashboard is used outside UTC. Google and iCalendar use an exclusive
+// end date for all-day events, so an event from June 10 through June 13 is
+// visible on June 10, 11, and 12.
 export function eventOccursOn(event: Event, day: Date) {
   const startsAt = new Date(event.startsAt);
-  if (event.allDay) return startsAt.getUTCFullYear() === day.getFullYear() && startsAt.getUTCMonth() === day.getMonth() && startsAt.getUTCDate() === day.getDate();
+  if (event.allDay) {
+    const startDate = allDayCalendarDate(startsAt);
+    const endDate = event.endsAt ? allDayCalendarDate(new Date(event.endsAt)) : startDate + 86_400_000;
+    const dayDate = visibleCalendarDate(day);
+    return dayDate >= startDate && dayDate < endDate;
+  }
   return sameDate(startsAt, day);
 }
 
