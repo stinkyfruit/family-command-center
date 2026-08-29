@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseIcal } from "@/lib/ical";
+import { expandIcalEvent, parseIcal } from "@/lib/ical";
 import { calendarEventCategory, isBirthdayTitle, requestUser, serverSupabase } from "@/lib/google-calendar";
 
 function errorMessage(error: unknown) {
@@ -15,17 +15,10 @@ function appleFeedUrl(value: string) {
 }
 
 function appleOccurrences(event: ReturnType<typeof parseIcal>[number]) {
-  if (!event.recurrenceRule?.includes("FREQ=YEARLY")) return [{ ...event, occurrenceId: event.uid, seriesUid: event.recurrenceRule ? event.uid : null }];
-  const start = new Date(event.startsAt);
-  const end = event.endsAt ? new Date(event.endsAt) : null;
-  const duration = end ? end.getTime() - start.getTime() : null;
   const currentYear = new Date().getFullYear();
-  return Array.from({ length: 4 }, (_, index) => {
-    const year = currentYear - 1 + index;
-    const occurrenceStart = new Date(start);
-    occurrenceStart.setUTCFullYear(year);
-    const occurrenceEnd = duration === null ? null : new Date(occurrenceStart.getTime() + duration);
-    return { ...event, uid: `${event.uid}:${year}`, startsAt: occurrenceStart.toISOString(), endsAt: occurrenceEnd?.toISOString() ?? null, occurrenceId: `${event.uid}:${year}`, seriesUid: event.uid };
+  return expandIcalEvent(event, {
+    start: new Date(Date.UTC(currentYear - 1, 0, 1)),
+    end: new Date(Date.UTC(currentYear + 3, 0, 1)),
   });
 }
 
