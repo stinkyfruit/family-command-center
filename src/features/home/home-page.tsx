@@ -74,7 +74,7 @@ const LazySettingsPage = dynamic(() => import("@/features/settings/settings-page
 const LazyListsPage = dynamic(() => import("@/features/lists/lists-page").then((module) => module.ListsPage), { loading: () => <TabLoading label="lists" /> });
 const WEATHER_POLLEN_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
 const CALENDAR_EVENT_PAGE_SIZE = 500;
-const CALENDAR_EVENT_COLUMNS = "id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source";
+const CALENDAR_EVENT_COLUMNS = "id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source, created_by, google_calendar_connection_id, calendar_feed_id";
 
 type CalendarEventRow = {
   id: string;
@@ -90,7 +90,23 @@ type CalendarEventRow = {
   external_id: string | null;
   series_external_id: string | null;
   source: "app" | "google" | "apple";
+  created_by: string;
+  google_calendar_connection_id: string | null;
+  calendar_feed_id: string | null;
 };
+
+type CalendarSourceNameMaps = {
+  memberNamesByUserId: Map<string, string>;
+  googleNamesById: Map<string, string>;
+  appleNamesById: Map<string, string>;
+};
+
+function calendarSourceName(event: CalendarEventRow, names: CalendarSourceNameMaps) {
+  if (event.source !== "google" && event.source !== "apple") return null;
+  return names.memberNamesByUserId.get(event.created_by)
+    ?? (event.source === "google" ? names.googleNamesById.get(event.google_calendar_connection_id ?? "") : names.appleNamesById.get(event.calendar_feed_id ?? ""))
+    ?? null;
+}
 
 async function loadCalendarEventRows(householdId: string) {
   if (!supabase) return { data: null, error: new Error("Supabase is not configured.") };
@@ -490,8 +506,13 @@ export default function Home() {
         return;
       }
       const assignmentByEvent = new Map((eventAssignmentResult.data ?? []).map((assignment) => [`${assignment.source}:${assignment.external_id}`, assignment.member_ids]));
+      const calendarSourceNames: CalendarSourceNameMaps = {
+        memberNamesByUserId: new Map((memberResult.data ?? []).flatMap((member) => member.user_id ? [[member.user_id, member.display_name] as [string, string]] : [])),
+        googleNamesById: new Map((connectionResult.data ?? []).map((connection) => [connection.id, connection.display_name])),
+        appleNamesById: new Map((appleFeedResult.data ?? []).map((feed) => [feed.id, feed.display_name])),
+      };
       if (eventResult.data) setEvents(displayEventsOnce(eventResult.data.map((event) => ({
-        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source,
+        id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source, sourceName: calendarSourceName(event, calendarSourceNames),
         time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       }))));
       if (todoResult.data) {
@@ -1146,11 +1167,16 @@ export default function Home() {
       supabase.from("calendar_event_member_assignments").select("source, external_id, member_ids").eq("household_id", householdId),
     ]);
     const assignmentByEvent = new Map((assignments ?? []).map((assignment) => [`${assignment.source}:${assignment.external_id}`, assignment.member_ids]));
+    const calendarSourceNames: CalendarSourceNameMaps = {
+      memberNamesByUserId: new Map(members.flatMap((member) => member.userId ? [[member.userId, member.name] as [string, string]] : [])),
+      googleNamesById: new Map(googleConnections.map((connection) => [connection.id, connection.name])),
+      appleNamesById: new Map(appleFeeds.map((feed) => [feed.id, feed.name])),
+    };
     if (data) setEvents(displayEventsOnce(data.map((event) => ({
-      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source,
+      id: event.id, title: event.title, person: "Family", color: "bg-violet-400", startsAt: event.starts_at, endsAt: event.ends_at, notes: event.notes, location: event.location, category: event.category, allDay: event.all_day, memberIds: assignmentByEvent.get(`${event.source}:${event.external_id}`) ?? event.member_ids, externalId: event.external_id, seriesExternalId: event.series_external_id, source: event.source, sourceName: calendarSourceName(event, calendarSourceNames),
       time: event.all_day ? "All day" : new Date(event.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     }))));
-  }, [householdId]);
+  }, [appleFeeds, googleConnections, householdId, members]);
 
   const syncGoogleCalendar = useCallback(async (force = true) => {
     if (!supabase || !householdId || syncingGoogleRef.current) return;

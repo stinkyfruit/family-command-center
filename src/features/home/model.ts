@@ -39,7 +39,7 @@ export function pickCelebrationAnimation() {
   return animation;
 }
 
-export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; generatedSkyEvent?: boolean; skyEventKind?: "solar" | "lunar"; source?: "app" | "google" | "apple" };
+export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; generatedSkyEvent?: boolean; skyEventKind?: "solar" | "lunar"; source?: "app" | "google" | "apple"; sourceName?: string | null };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean; windSpeedMph?: number | null; windGustsMph?: number | null; conditionSource?: "forecast" | "observation" };
 export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number; windSpeedMph?: number | null; windGustsMph?: number | null };
