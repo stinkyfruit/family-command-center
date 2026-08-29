@@ -1,11 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { isBirthdayTitle } from "./calendar-event-utils";
+
+export { isBirthdayTitle } from "./calendar-event-utils";
 
 type OAuthState = { householdId: string; userId: string; expiresAt: number };
-
-export function isBirthdayTitle(title: string) {
-  return /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(title);
-}
 
 export function calendarEventCategory(title: string) {
   const text = title.toLowerCase();

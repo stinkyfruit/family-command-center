@@ -16,6 +16,7 @@ import excitedMoodAnimation from "../../../public/animations/general/moods/1f929
 import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.json";
 import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
 import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
+import { isBirthdayEventTitle } from "@/lib/calendar-event-utils";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 import { fullMoonsForYear as fullMoonsForYearData, skyEventForCalendarDate, skyEventsForYear as skyEventsForYearData } from "@/lib/sky-events";
 
@@ -249,7 +250,7 @@ export function displayEventsOnce(events: Event[]) {
   for (const event of events) {
     if (event.generatedHoliday) { unique.set(String(event.id), event); continue; }
     const startsAt = new Date(event.startsAt);
-    const isBirthday = event.category?.trim().toLocaleLowerCase() === "birthday" || /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(event.title);
+    const isBirthday = isBirthdayEventTitle(event.title, event.category);
     const key = isBirthday
       ? ["birthday", birthdayName(event.title) || event.title.trim().toLocaleLowerCase(), calendarDay(event)].join("|")
       : [event.title.trim().toLocaleLowerCase(), startsAt.getTime(), event.endsAt ? new Date(event.endsAt).getTime() : "", Boolean(event.allDay)].join("|");

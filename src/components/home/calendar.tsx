@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import type { Event, Member } from "@/features/home/model";
 import { defaultMemberColor, localDateInputValue, weekdays } from "@/features/home/model";
+import { isBirthdayEventTitle, isBirthdayTitle } from "@/lib/calendar-event-utils";
 import { AppIcon, NotoEmoji, StyledSelect } from "@/components/home/shared-ui";
 
 export function sameDate(first: Date, second: Date) {
@@ -66,11 +67,11 @@ export function eventBlockBackground(event: Event, members: Member[]) {
 // the UI too, so those cards stay festive immediately rather than waiting for
 // a future sync to update their saved category.
 export function isBirthdayEvent(event: Event) {
-  return event.category?.trim().toLocaleLowerCase() === "birthday" || /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(event.title);
+  return isBirthdayEventTitle(event.title, event.category);
 }
 
 function hasBirthdayTitle(event: Event) {
-  return /\b(?:birthday|bday|birth[\s-]+day)\b/i.test(event.title);
+  return isBirthdayTitle(event.title);
 }
 
 export function holidayEmoji(title: string) {
