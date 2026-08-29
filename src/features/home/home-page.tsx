@@ -941,21 +941,6 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [view, calendarAnchor, visibleCalendarEvents]);
 
-  function openEventFormAt(day: Date, time = "09:00") {
-    const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-    const [hours, minutes] = time.split(":").map(Number);
-    const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes + 60);
-    setNewItem("");
-    setEventDate(date);
-    setEventTime(time);
-    setEventEndTime(`${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`);
-    setEventAllDay(false);
-    setEventLocation("");
-    setEventCategory("General");
-    setEventMemberIds([]);
-    setShowEventForm(true);
-  }
-
   const navigateToTab = useCallback((tab: HomeTab) => {
     if (tab !== "settings" && window.location.hash.startsWith("#settings-")) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
@@ -1610,7 +1595,6 @@ export default function Home() {
   const stableOpenCalendarDay = useStableCallback((day: Date) => { setCalendarAnchor(day); setView("Day"); navigateToTab("calendar"); });
   const stableMoodMemberChange = useStableCallback((memberId: string) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); });
   const stableSaveMood = useStableCallback(saveMoodCheckin);
-  const stableOpenEventFormAt = useStableCallback(openEventFormAt);
   const stableToggleCalendarMemberFilter = useStableCallback(toggleCalendarMemberFilter);
   const stableAddEvent = useStableCallback(addEvent);
   const stableShowEventForm = useStableCallback(() => setShowEventForm(true));
@@ -1681,7 +1665,7 @@ export default function Home() {
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         <div className={`mx-auto w-full min-w-0 max-w-[1800px] space-y-5 pb-24 lg:pb-8 ${activeTab === "settings" ? "" : "px-5 md:px-9"}`}>
           {visitedTabs.has("home") && <div hidden={activeTab !== "home"}><HomeDashboard weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} onOpenWeatherForecast={stableOpenWeatherForecast} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={stableAddTodo} onToggleTodo={stableToggleTodo} onOpenTasks={stableOpenTasks} onOpenCalendar={stableOpenCalendar} onOpenCalendarDay={stableOpenCalendarDay} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={stableMoodMemberChange} onMoodChange={setSelectedMood} onSaveMood={stableSaveMood} calendarAnchor={calendarAnchor} /></div>}
-          {visitedTabs.has("calendar") && <div hidden={activeTab !== "calendar"}><LazyCalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={stableCalendarSync} view={view} onViewChange={setView} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={stableToggleCalendarMemberFilter} onToggleFamily={stableToggleFamilyEvents} onEditEvent={setSelectedEvent} onOpenDay={stableOpenCalendarDayFromCalendar} onCreateEvent={stableOpenEventFormAt} showEventForm={showEventForm} onShowEventForm={stableShowEventForm} onCloseEventForm={stableCloseEventForm} onSubmitEvent={stableAddEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={stableToggleEventMember} /></div>}
+          {visitedTabs.has("calendar") && <div hidden={activeTab !== "calendar"}><LazyCalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={stableCalendarSync} view={view} onViewChange={setView} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={stableToggleCalendarMemberFilter} onToggleFamily={stableToggleFamilyEvents} onEditEvent={setSelectedEvent} onOpenDay={stableOpenCalendarDayFromCalendar} showEventForm={showEventForm} onShowEventForm={stableShowEventForm} onCloseEventForm={stableCloseEventForm} onSubmitEvent={stableAddEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={stableToggleEventMember} /></div>}
         {visitedTabs.has("tasks") && <div hidden={activeTab !== "tasks"}><TasksPage todos={todos} members={members} onAdd={stableAddTodo} onToggle={stableToggleTodo} onEdit={stableEditTodo} /></div>}
         {visitedTabs.has("chores") && <div hidden={activeTab !== "chores"}><LazyChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={stableToggleChore} /></div>}
         {visitedTabs.has("wishlist") && <div hidden={activeTab !== "wishlist"}><LazyWishlistPage householdId={householdId} members={members} voiceDraft={voiceWishlistDraft} /></div>}
