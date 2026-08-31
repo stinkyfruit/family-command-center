@@ -40,7 +40,6 @@ import {
   weatherSummaryForConditions,
 } from "@/features/home/model";
 import { useAppNotifications } from "@/components/home/shared-ui";
-import { eventOccursOn as calendarEventOccursOn, isBirthdayEvent } from "@/components/home/calendar";
 import { AuthScreen, Screensaver, SeasonalScreensaver, TasksPage } from "@/components/home/task-components";
 import { parseVoiceCommand } from "@/features/home/voice-command";
 import { type ListKind, listPreferenceKey } from "@/features/lists/model";
@@ -288,8 +287,6 @@ export default function Home() {
   const [cometCloseApproach, setCometCloseApproach] = useState<CometCloseApproach | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [celebratingBirthdayDate, setCelebratingBirthdayDate] = useState<string | null>(null);
-  const openedBirthdayDate = useRef<string | null>(null);
   const [view, setView] = useState<"Day" | "Week" | "Month">("Week");
   const [selectedCalendarMemberIds, setSelectedCalendarMemberIds] = useState<string[]>([]);
   const [showFamilyEvents, setShowFamilyEvents] = useState(false);
@@ -839,13 +836,11 @@ export default function Home() {
           return await response.json() as CurrentWeatherObservation;
         }).then((observation) => {
           if (!observation?.available) return;
-          const temperatureF = nullableWeatherNumber(observation.temperatureF);
           const windSpeedMph = nullableWeatherNumber(observation.windSpeedMph);
           const windGustsMph = nullableWeatherNumber(observation.windGustsMph);
           const summary = observationWeatherSummary(observation.textDescription, forecastSummary, windSpeedMph, windGustsMph);
           setWeather((current) => current ? {
             ...current,
-            temperature: temperatureF === null ? current.temperature : Math.round(temperatureF),
             summary,
             code: weatherCodeForDisplay(summary, current.code),
             windSpeedMph: windSpeedMph ?? current.windSpeedMph,
@@ -923,23 +918,6 @@ export default function Home() {
       return includesSelectedMember || isFamilyEvent;
     });
   }, [calendarEvents, selectedCalendarMemberIds, showFamilyEvents]);
-
-  useEffect(() => {
-    if (view !== "Day") {
-      openedBirthdayDate.current = null;
-      // Clear a celebration when leaving the day view.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCelebratingBirthdayDate(null);
-      return;
-    }
-    const dateKey = calendarAnchor.toDateString();
-    const hasBirthday = visibleCalendarEvents.some((event) => calendarEventOccursOn(event, calendarAnchor) && isBirthdayEvent(event));
-    if (!hasBirthday || openedBirthdayDate.current === dateKey) return;
-    openedBirthdayDate.current = dateKey;
-    setCelebratingBirthdayDate(dateKey);
-    const timer = window.setTimeout(() => setCelebratingBirthdayDate((date) => date === dateKey ? null : date), 3000);
-    return () => window.clearTimeout(timer);
-  }, [view, calendarAnchor, visibleCalendarEvents]);
 
   const navigateToTab = useCallback((tab: HomeTab) => {
     if (tab !== "settings" && window.location.hash.startsWith("#settings-")) {
@@ -1592,6 +1570,7 @@ export default function Home() {
   const stableEditTodo = useStableCallback(editTodo);
   const stableOpenTasks = useStableCallback(() => navigateToTab("tasks"));
   const stableOpenCalendar = useStableCallback(() => navigateToTab("calendar"));
+  const stableOpenCalendarAndAddEvent = useStableCallback(() => { setShowEventForm(true); navigateToTab("calendar"); });
   const stableOpenCalendarDay = useStableCallback((day: Date) => { setCalendarAnchor(day); setView("Day"); navigateToTab("calendar"); });
   const stableMoodMemberChange = useStableCallback((memberId: string) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); });
   const stableSaveMood = useStableCallback(saveMoodCheckin);
@@ -1652,7 +1631,7 @@ export default function Home() {
   if (supabase && user && householdId && householdDataError && !householdDataLoaded) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section role="alert" className="w-full max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-rose-600">Couldn&apos;t load your home</p><h1 className="mt-4 text-2xl font-bold">Let&apos;s try that again</h1><p className="mt-2 text-slate-500">{householdDataError}</p><button onClick={() => setHouseholdDataRetryKey((key) => key + 1)} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white transition hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2">Try again</button></section></main>;
 
   const visibleNavigationTabs = navigationTabs.filter(([tab]) => tab !== "chores" || showChoresTab).filter(([tab]) => tab !== "wishlist" || showWishlistTab).filter(([tab]) => tab !== "movie-night" || showMovieNightTab).filter(([tab]) => tab !== "family-dinners" || showFamilyDinnersTab);
-  const celebrationActive = celebratingTaskId !== null || celebratingBirthdayDate !== null || celebratingChoreId !== null;
+  const celebrationActive = celebratingTaskId !== null || celebratingChoreId !== null;
 
   return (
     <main ref={mainRef} inert={celebrationActive || undefined} className={`${dark ? "dark " : ""}h-dvh overflow-x-hidden overflow-y-auto overscroll-y-auto`}>
@@ -1664,7 +1643,7 @@ export default function Home() {
         {householdDataLoading && householdDataLoaded && <p role="status" className="mx-auto mt-4 w-[calc(100%-2.5rem)] max-w-[1800px] text-sm text-slate-500 md:w-[calc(100%-4.5rem)]">Refreshing your family home…</p>}
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         <div className={`mx-auto w-full min-w-0 max-w-[1800px] space-y-5 pb-24 lg:pb-8 ${activeTab === "settings" ? "" : "px-5 md:px-9"}`}>
-          {visitedTabs.has("home") && <div hidden={activeTab !== "home"}><HomeDashboard weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} onOpenWeatherForecast={stableOpenWeatherForecast} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={stableAddTodo} onToggleTodo={stableToggleTodo} onOpenTasks={stableOpenTasks} onOpenCalendar={stableOpenCalendar} onOpenCalendarDay={stableOpenCalendarDay} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={stableMoodMemberChange} onMoodChange={setSelectedMood} onSaveMood={stableSaveMood} calendarAnchor={calendarAnchor} /></div>}
+          {visitedTabs.has("home") && <div hidden={activeTab !== "home"}><HomeDashboard weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} onOpenWeatherForecast={stableOpenWeatherForecast} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={stableAddTodo} onToggleTodo={stableToggleTodo} onOpenTasks={stableOpenTasks} onOpenCalendar={stableOpenCalendar} onAddEvent={stableOpenCalendarAndAddEvent} onOpenCalendarDay={stableOpenCalendarDay} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={stableMoodMemberChange} onMoodChange={setSelectedMood} onSaveMood={stableSaveMood} calendarAnchor={calendarAnchor} /></div>}
           {visitedTabs.has("calendar") && <div hidden={activeTab !== "calendar"}><LazyCalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={stableCalendarSync} view={view} onViewChange={setView} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={stableToggleCalendarMemberFilter} onToggleFamily={stableToggleFamilyEvents} onEditEvent={setSelectedEvent} onOpenDay={stableOpenCalendarDayFromCalendar} showEventForm={showEventForm} onShowEventForm={stableShowEventForm} onCloseEventForm={stableCloseEventForm} onSubmitEvent={stableAddEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={stableToggleEventMember} /></div>}
         {visitedTabs.has("tasks") && <div hidden={activeTab !== "tasks"}><TasksPage todos={todos} members={members} onAdd={stableAddTodo} onToggle={stableToggleTodo} onEdit={stableEditTodo} /></div>}
         {visitedTabs.has("chores") && <div hidden={activeTab !== "chores"}><LazyChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={stableToggleChore} /></div>}
@@ -1675,7 +1654,7 @@ export default function Home() {
         {visitedTabs.has("lists") && <div hidden={activeTab !== "lists"}><div className="w-full min-w-0 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8"><LazyListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={stableToggleListExpanded} onAddList={stableAddSharedList} onAddItem={stableAddListItem} onToggleItem={stableToggleListItem} onDeleteItem={stableDeleteListItem} onDeleteList={stableDeleteSharedList} /></div></div>}
         </div>
       </div>
-      <HomeOverlays weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} showWeatherForecast={showWeatherForecast} onCloseWeatherForecast={() => setShowWeatherForecast(false)} selectedEvent={selectedEvent} members={members} onCloseSelectedEvent={() => setSelectedEvent(null)} onEditSelectedEvent={() => { if (!selectedEvent) return; setEditingEvent(selectedEvent); setSelectedEvent(null); }} editingEvent={editingEvent} onCloseEditingEvent={() => setEditingEvent(null)} onSaveEvent={saveEvent} onApplySeries={applySeriesMembers} onDeleteEvent={deleteEvent} showTodoForm={showTodoForm} todoTitle={todoTitle} todoDueDate={todoDueDate} todoAssigneeMemberId={todoAssigneeMemberId} editingTodo={editingTodo} onTodoTitleChange={setTodoTitle} onTodoDueDateChange={setTodoDueDate} onTodoAssigneeChange={setTodoAssigneeMemberId} onCloseTodoForm={() => { setEditingTodo(null); setShowTodoForm(false); }} onSaveTodo={saveTodo} voiceChoreDraft={voiceChoreDraft} onCloseVoiceChore={() => setVoiceChoreDraft(null)} onSaveVoiceChore={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} weekendChoreDraft={weekendChoreDraft} choreRewardMode={choreRewardMode} onCloseWeekendChore={() => setWeekendChoreDraft(null)} onSaveWeekendChore={async (draft) => { await addChore(draft.memberId, "Weekend", draft.title, new Date().toLocaleDateString("en-CA"), draft.reward); setWeekendChoreDraft(null); }} voiceListDraft={voiceListDraft} sharedLists={sharedLists} onCloseVoiceList={() => setVoiceListDraft(null)} onSaveVoiceList={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} celebratingTask={celebratingTaskId !== null} celebratingBirthday={celebratingBirthdayDate !== null} />
+      <HomeOverlays weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} showWeatherForecast={showWeatherForecast} onCloseWeatherForecast={() => setShowWeatherForecast(false)} selectedEvent={selectedEvent} members={members} onCloseSelectedEvent={() => setSelectedEvent(null)} onEditSelectedEvent={() => { if (!selectedEvent) return; setEditingEvent(selectedEvent); setSelectedEvent(null); }} editingEvent={editingEvent} onCloseEditingEvent={() => setEditingEvent(null)} onSaveEvent={saveEvent} onApplySeries={applySeriesMembers} onDeleteEvent={deleteEvent} showTodoForm={showTodoForm} todoTitle={todoTitle} todoDueDate={todoDueDate} todoAssigneeMemberId={todoAssigneeMemberId} editingTodo={editingTodo} onTodoTitleChange={setTodoTitle} onTodoDueDateChange={setTodoDueDate} onTodoAssigneeChange={setTodoAssigneeMemberId} onCloseTodoForm={() => { setEditingTodo(null); setShowTodoForm(false); }} onSaveTodo={saveTodo} voiceChoreDraft={voiceChoreDraft} onCloseVoiceChore={() => setVoiceChoreDraft(null)} onSaveVoiceChore={async (draft) => { await addChore(draft.memberId, draft.routine, draft.title, draft.scheduledFor); setVoiceChoreDraft(null); }} weekendChoreDraft={weekendChoreDraft} choreRewardMode={choreRewardMode} onCloseWeekendChore={() => setWeekendChoreDraft(null)} onSaveWeekendChore={async (draft) => { await addChore(draft.memberId, "Weekend", draft.title, new Date().toLocaleDateString("en-CA"), draft.reward); setWeekendChoreDraft(null); }} voiceListDraft={voiceListDraft} sharedLists={sharedLists} onCloseVoiceList={() => setVoiceListDraft(null)} onSaveVoiceList={async (draft) => { await addListItem(draft.listId, draft.title); setVoiceListDraft(null); }} celebratingTask={celebratingTaskId !== null} />
     </main>
   );
 }

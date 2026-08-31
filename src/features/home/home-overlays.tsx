@@ -47,7 +47,6 @@ type HomeOverlaysProps = {
   onCloseVoiceList: () => void;
   onSaveVoiceList: (draft: VoiceListDraft) => Promise<void>;
   celebratingTask: boolean;
-  celebratingBirthday: boolean;
 };
 
 export function HomeOverlays({
@@ -87,7 +86,6 @@ export function HomeOverlays({
   onCloseVoiceList,
   onSaveVoiceList,
   celebratingTask,
-  celebratingBirthday,
 }: HomeOverlaysProps) {
   return <>
     {showWeatherForecast && <WeatherForecastOverlay weather={weather} forecast={weatherForecast} insights={weatherInsights} onClose={onCloseWeatherForecast} />}
@@ -98,6 +96,5 @@ export function HomeOverlays({
     {weekendChoreDraft && <WeekendChoreEditor draft={weekendChoreDraft} mode={choreRewardMode} memberName={members.find((member) => String(member.id) === weekendChoreDraft.memberId)?.name ?? "Child"} onClose={onCloseWeekendChore} onSave={onSaveWeekendChore} />}
     {voiceListDraft && <VoiceListEditor draft={voiceListDraft} lists={sharedLists} onClose={onCloseVoiceList} onSave={onSaveVoiceList} />}
     {celebratingTask && <ChoreCelebration animationSrc="/animations/general/completions/Celebrations%20Begin.json" />}
-    {celebratingBirthday && <ChoreCelebration animationSrc="/animations/holidays/birthday/birthday.json" />}
   </>;
 }
