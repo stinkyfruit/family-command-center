@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import type { Event, Member } from "@/features/home/model";
-import { defaultMemberColor, localDateInputValue, weekdays } from "@/features/home/model";
+import { defaultMemberColor, localDateInputValue, monthWeekdays, weekdays } from "@/features/home/model";
 import { isBirthdayEventTitle, isBirthdayTitle } from "@/lib/calendar-event-utils";
 import { AppIcon, NotoEmoji, StyledSelect } from "@/components/home/shared-ui";
 
@@ -33,6 +33,14 @@ export function eventOccursOn(event: Event, day: Date) {
 }
 
 export function startOfWeek(date: Date) {
+  const result = new Date(date);
+  const mondayBasedDay = (date.getDay() + 6) % 7;
+  result.setDate(date.getDate() - mondayBasedDay);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function startOfSundayWeek(date: Date) {
   const result = new Date(date);
   result.setDate(date.getDate() - date.getDay());
   result.setHours(0, 0, 0, 0);
@@ -270,7 +278,7 @@ function MobileDayAgenda({ date, events, members, onEdit, onAddEvent }: { date: 
 
 function mobileMonthDays(anchor: Date) {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const first = startOfWeek(firstOfMonth);
+  const first = startOfSundayWeek(firstOfMonth);
   const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
   const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
   return Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
@@ -297,7 +305,8 @@ export function MobileCalendarGrid({ anchor, events, members, view, onEdit, onAd
     return <button key={day.toISOString()} type="button" onClick={() => selectDay(day)} aria-label={`${isSelected ? "Selected, " : ""}${isToday ? "Today, " : ""}${day.toLocaleDateString()}`} aria-pressed={isSelected} className={`flex min-w-0 flex-col items-center rounded-xl border p-1.5 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-violet-600 ${isSelected ? "border-violet-500 bg-violet-50 shadow-sm dark:border-violet-400 dark:bg-violet-500/15" : "border-transparent hover:border-violet-200 hover:bg-violet-50/70 dark:hover:border-white/15 dark:hover:bg-white/5"} ${view === "Month" && !currentMonth(day) ? "text-slate-300 dark:text-slate-600" : ""}`}><span className={`grid size-7 place-items-center rounded-full text-sm font-black ${isToday ? "bg-violet-600 text-white" : isSelected ? "text-violet-700 dark:text-violet-200" : ""}`}>{day.getDate()}</span><span className="mt-1 flex min-h-3 max-w-full items-center justify-center gap-0.5 overflow-hidden">{dayEvents.slice(0, 3).map((event) => <i key={event.id} title={event.title} aria-hidden="true" style={{ background: eventBlockBackground(event, members) }} className="size-1.5 shrink-0 rounded-full" />)}{dayEvents.length > 3 && <span className="ml-0.5 text-[9px] font-black text-violet-600">+{dayEvents.length - 3}</span>}</span></button>;
   };
 
-  return <div className="space-y-3">{view !== "Day" && <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white p-2 dark:border-white/10 dark:bg-[#151522]"><div className="grid grid-cols-7 gap-1 pb-1">{weekdays.map((day) => <span key={day} className="py-1 text-center text-[10px] font-black uppercase tracking-wide text-slate-400">{day.slice(0, 2)}</span>)}</div><div className={`grid grid-cols-7 gap-1 ${view === "Week" ? "rounded-xl bg-slate-50 p-1 dark:bg-white/[.03]" : ""}`}>{days.map(dayButton)}</div></div>}<MobileDayAgenda date={selectedDate} events={events} members={members} onEdit={onEdit} onAddEvent={onAddEvent} /></div>;
+  const dayLabels = view === "Week" ? weekdays : monthWeekdays;
+  return <div className="space-y-3">{view !== "Day" && <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white p-2 dark:border-white/10 dark:bg-[#151522]"><div className="grid grid-cols-7 gap-1 pb-1">{dayLabels.map((day) => <span key={day} className="py-1 text-center text-[10px] font-black uppercase tracking-wide text-slate-400">{day.slice(0, 2)}</span>)}</div><div className={`grid grid-cols-7 gap-1 ${view === "Week" ? "rounded-xl bg-slate-50 p-1 dark:bg-white/[.03]" : ""}`}>{days.map(dayButton)}</div></div>}<MobileDayAgenda date={selectedDate} events={events} members={members} onEdit={onEdit} onAddEvent={onAddEvent} /></div>;
 }
 
 export function EventEditor({ event, members, onClose, onSave, onApplySeries, onDelete }: { event: Event; members: Member[]; onClose: () => void; onSave: (event: Event) => void; onApplySeries: (event: Event, memberIds: string[]) => void; onDelete: (event: Event) => void }) {
@@ -325,11 +334,11 @@ export function WeekCalendar({ anchor, events, members, onEdit, onOpenDay }: { a
 
 export function MonthGrid({ anchor, events, members, onOpenDay }: { anchor: Date; events: Event[]; members: Member[]; onOpenDay: (date: Date) => void }) {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const first = startOfWeek(firstOfMonth);
+  const first = startOfSundayWeek(firstOfMonth);
   const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
   const cellCount = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
   const days = Array.from({ length: cellCount }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
-  return <div><div className="mb-1 grid grid-cols-7 gap-1">{weekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} aria-label={isToday ? `Today, ${day.toLocaleDateString()}` : day.toLocaleDateString()} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${isToday ? "ring-2 ring-violet-500 ring-offset-1 dark:ring-violet-400 dark:ring-offset-[#151522]" : ""}`}><span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-black leading-none ${isToday ? "bg-violet-600 text-white shadow-sm" : "items-start justify-start text-left font-bold"}`}>{day.getDate()}</span><span className="mt-2 block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
+  return <div><div className="mb-1 grid grid-cols-7 gap-1">{monthWeekdays.map((day) => <p key={day} className="p-1 text-center text-xs font-bold text-slate-400">{day}</p>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const dayEvents = events.filter((event) => eventOccursOn(event, day)); const currentMonth = day.getMonth() === anchor.getMonth(); const isToday = sameDate(day, new Date()); return <button key={day.toISOString()} onClick={() => onOpenDay(day)} aria-label={isToday ? `Today, ${day.toLocaleDateString()}` : day.toLocaleDateString()} className={`relative flex aspect-square min-h-0 flex-col items-stretch overflow-hidden rounded-xl p-2 text-left ${currentMonth ? "bg-slate-50 dark:bg-white/5" : "bg-slate-50/40 text-slate-300 dark:bg-white/[.02]"} ${isToday ? "ring-2 ring-violet-500 ring-offset-1 dark:ring-violet-400 dark:ring-offset-[#151522]" : ""}`}><span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-black leading-none ${isToday ? "bg-violet-600 text-white shadow-sm" : "items-start justify-start text-left font-bold"}`}>{day.getDate()}</span><span className="mt-2 block min-h-0 space-y-1 overflow-hidden text-left">{dayEvents.slice(0, 2).map((event) => <EventChip key={event.id} event={event} members={members} compact />)}{dayEvents.length > 2 && <span className="block px-1 text-xs font-bold text-violet-600">+{dayEvents.length - 2} more</span>}</span></button>; })}</div></div>;
 }
 
 export function PhoneHomeCalendar({ anchor, events, members, onOpenCalendar, onOpenEvent, onAddEvent }: { anchor: Date; events: Event[]; members: Member[]; onOpenCalendar: () => void; onOpenEvent: (event: Event) => void; onAddEvent: () => void }) {
