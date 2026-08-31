@@ -74,6 +74,7 @@ const LazyListsPage = dynamic(() => import("@/features/lists/lists-page").then((
 const WEATHER_POLLEN_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
 const CALENDAR_EVENT_PAGE_SIZE = 500;
 const CALENDAR_EVENT_COLUMNS = "id, title, notes, starts_at, ends_at, all_day, color, location, category, member_ids, external_id, series_external_id, source, created_by, google_calendar_connection_id, calendar_feed_id";
+const AUTH_INITIALIZATION_TIMEOUT_MS = 8_000;
 
 type CalendarEventRow = {
   id: string;
@@ -392,17 +393,33 @@ export default function Home() {
       setAuthReady(true);
       return;
     }
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+    let mounted = true;
+    let initialSessionResolved = false;
+    const resolveInitialSession = (sessionUser: User | null) => {
+      if (!mounted) return;
+      setUser(sessionUser);
+      if (initialSessionResolved) return;
+      initialSessionResolved = true;
       setAuthReady(true);
-    }).catch(() => {
-      // A temporary auth/network failure should not leave the app on its
-      // indefinite startup screen.
-      setUser(null);
-      setAuthReady(true);
+    };
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION restores the persisted browser session without
+      // requiring a network-validated getUser() call during app startup.
+      if (event === "INITIAL_SESSION") resolveInitialSession(session?.user ?? null);
+      else if (mounted) setUser(session?.user ?? null);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    return () => listener.subscription.unsubscribe();
+    const timeout = window.setTimeout(() => {
+      if (!initialSessionResolved) {
+        // Auth initialization should never strand the app on its startup
+        // screen. A late INITIAL_SESSION event can still restore the user.
+        resolveInitialSession(null);
+      }
+    }, AUTH_INITIALIZATION_TIMEOUT_MS);
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
