@@ -1355,6 +1355,8 @@ export default function Home() {
     completingChoreIdsRef.current.add(choreKey);
     const choreCard = document.querySelector<HTMLElement>(`[data-chore-id="${String(chore.id)}"]`);
     choreCard?.setAttribute("data-completing", "true");
+    setCelebratingChoreId(chore.id);
+    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 2200);
     const finishCheckboxAnimation = () => new Promise<void>((resolve) => window.setTimeout(() => {
       choreCard?.removeAttribute("data-completing");
       resolve();
@@ -1362,7 +1364,7 @@ export default function Home() {
     let earnedRewardCents = chore.rewardCents;
     if (supabase) {
       const { data, error } = await supabase.from("chore_completions").insert({ chore_id: chore.id, member_id: chore.assigneeMemberId }).select("id, reward_cents, reward_stars").single();
-      if (error) { choreCard?.removeAttribute("data-completing"); completingChoreIdsRef.current.delete(choreKey); notify(error.message); return; }
+      if (error) { choreCard?.removeAttribute("data-completing"); completingChoreIdsRef.current.delete(choreKey); setCelebratingChoreId((id) => id === chore.id ? null : id); notify(error.message); return; }
       earnedRewardCents = data?.reward_cents ?? chore.rewardCents;
       await finishCheckboxAnimation();
       setChores((items) => items.map((item) => item.id === chore.id ? { ...item, completionId: data?.id, completedRewardCents: data?.reward_cents ?? chore.rewardCents, completedRewardStars: data?.reward_stars ?? chore.rewardStars } : item));
@@ -1375,8 +1377,6 @@ export default function Home() {
       setChoreEarnedCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + earnedRewardCents }));
     }
     completingChoreIdsRef.current.delete(choreKey);
-    setCelebratingChoreId(chore.id);
-    window.setTimeout(() => setCelebratingChoreId((id) => id === chore.id ? null : id), 2200);
   }
 
   async function addSharedList() {
