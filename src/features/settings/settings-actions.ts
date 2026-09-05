@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { ChoreEntry, ChoreRewardMode, Event, Member, Todo } from "@/features/home/model";
-import { isHexColor, memberColorOptions } from "@/features/home/model";
+import { isHexColor, isWeeklyChore, memberColorOptions } from "@/features/home/model";
 
 type NotificationOptions = { title?: string; destructive?: boolean };
 type PromptOptions = { title?: string; confirmLabel?: string };
@@ -164,15 +164,18 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     return {};
   }
 
-  async function updateChore(chore: ChoreEntry, title: string, rewardValue: number): Promise<{ error?: string }> {
+  async function updateChore(chore: ChoreEntry, title: string, rewardValue: number, weekdaySchedule: number[] | null): Promise<{ error?: string }> {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return { error: "Enter a chore name." };
     const maximum = choreRewardMode === "money" ? 1000 : 100;
     if (!Number.isInteger(rewardValue) || rewardValue < 0 || rewardValue > maximum) return { error: `Enter a whole number from 0 to ${maximum}.` };
     if (choreRewardMode === "money" && rewardValue % 5 !== 0) return { error: "Money rewards must end in 0 or 5 cents, such as 10 or 15." };
+    const nextWeekdaySchedule = isWeeklyChore(chore) ? [...new Set(weekdaySchedule ?? [])] : chore.weekdaySchedule ?? null;
+    if (isWeeklyChore(chore) && !nextWeekdaySchedule?.length) return { error: "Choose at least one weekday." };
     const previous = chore;
-    const nextValues = choreRewardMode === "money" ? { title: trimmedTitle, reward_cents: rewardValue } : { title: trimmedTitle, reward_stars: rewardValue };
-    const nextChore = choreRewardMode === "money" ? { ...chore, title: trimmedTitle, rewardCents: rewardValue } : { ...chore, title: trimmedTitle, rewardStars: rewardValue };
+    const rewardValues = choreRewardMode === "money" ? { reward_cents: rewardValue } : { reward_stars: rewardValue };
+    const nextValues = { title: trimmedTitle, weekday_schedule: nextWeekdaySchedule, ...rewardValues };
+    const nextChore = choreRewardMode === "money" ? { ...chore, title: trimmedTitle, weekdaySchedule: nextWeekdaySchedule, rewardCents: rewardValue } : { ...chore, title: trimmedTitle, weekdaySchedule: nextWeekdaySchedule, rewardStars: rewardValue };
     setChores((items) => items.map((item) => item.id === chore.id ? nextChore : item));
     if (supabase && householdId) {
       const { error } = await supabase.from("chores").update(nextValues).eq("id", chore.id).eq("household_id", householdId);
@@ -225,7 +228,7 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
   }
 
   async function resetTodayChoreCompletions(): Promise<{ error?: string; deleted?: number }> {
-    let deleted = chores.filter((chore) => chore.isDaily && Boolean(chore.completionId)).length;
+    let deleted = chores.filter((chore) => (chore.isDaily || isWeeklyChore(chore)) && Boolean(chore.completionId)).length;
     if (supabase && householdId) {
       const { data, error } = await supabase.rpc("reset_today_chore_completions", { target_household_id: householdId });
       if (error) return { error: error.message };
@@ -234,12 +237,12 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
 
     const todayEarnedByMember: Record<string, number> = {};
     for (const chore of chores) {
-      if (chore.isDaily && chore.completionId && chore.assigneeMemberId !== null) {
+      if ((chore.isDaily || isWeeklyChore(chore)) && chore.completionId && chore.assigneeMemberId !== null) {
         const childKey = String(chore.assigneeMemberId);
         todayEarnedByMember[childKey] = (todayEarnedByMember[childKey] ?? 0) + (chore.completedRewardCents ?? chore.rewardCents);
       }
     }
-    setChores((items) => items.map((chore) => chore.isDaily ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
+    setChores((items) => items.map((chore) => chore.isDaily || isWeeklyChore(chore) ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
     setChoreEarnedCentsByMember((items) => Object.fromEntries(Object.entries(items).map(([memberId, amount]) => [memberId, Math.max(0, amount - (todayEarnedByMember[memberId] ?? 0))])));
     return { deleted };
   }
@@ -248,12 +251,12 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     if (supabase && householdId) {
       const { data, error } = await supabase.rpc("clear_all_chore_incentive_totals", { target_household_id: householdId });
       if (error) return { error: error.message };
-      setChores((items) => items.map((chore) => chore.isDaily || !String(chore.completionId ?? "").startsWith("legacy-completed-") ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
+      setChores((items) => items.map((chore) => chore.isDaily || isWeeklyChore(chore) || !String(chore.completionId ?? "").startsWith("legacy-completed-") ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
       setChoreEarnedCentsByMember({});
       setChorePaidOutCentsByMember({});
       return { deleted: typeof data === "number" ? data : undefined };
     }
-    setChores((items) => items.map((chore) => chore.isDaily || !String(chore.completionId ?? "").startsWith("legacy-completed-") ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
+    setChores((items) => items.map((chore) => chore.isDaily || isWeeklyChore(chore) || !String(chore.completionId ?? "").startsWith("legacy-completed-") ? { ...chore, completionId: undefined, completedRewardCents: undefined, completedRewardStars: undefined } : chore));
     setChoreEarnedCentsByMember({});
     setChorePaidOutCentsByMember({});
     return {};

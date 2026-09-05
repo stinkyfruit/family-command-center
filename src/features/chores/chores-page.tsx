@@ -4,7 +4,7 @@ import { memo, useEffect, useState } from "react";
 import { AccessibleLottie } from "@/components/home/accessible-lottie";
 import { AppIcon } from "@/components/home/shared-ui";
 import type { ChoreEntry, ChoreRewardMode, Member } from "@/features/home/model";
-import { choreIcon, choreRoutines, isDailyRoutineChore, isVisibleRoutineChore, notoIconPath } from "@/features/home/model";
+import { choreIcon, choreRoutines, isScheduledRoutineChore, isVisibleRoutineChore, notoIconPath } from "@/features/home/model";
 import { ChoreCelebration } from "@/features/chores/chore-celebration";
 
 export const ChoresPage = memo(function ChoresPage({ members, chores, choreRewardMode, choreRewardTargetCents, choreRewardTargetStars, earnedCentsByMember, paidOutCentsByMember, celebratingChoreId, onToggle }: { members: Member[]; chores: ChoreEntry[]; choreRewardMode: ChoreRewardMode; choreRewardTargetCents: number; choreRewardTargetStars: number; earnedCentsByMember: Record<string, number>; paidOutCentsByMember: Record<string, number>; celebratingChoreId: string | number | null; onToggle: (chore: ChoreEntry) => void }) {
@@ -28,7 +28,8 @@ function ChildIncentiveProgress({ child, chores, mode, targetCents, targetStars,
   }));
   const weekendChores = chores.filter((chore) => chore.assigneeMemberId === child.id && chore.routine === "Weekend" && chore.scheduledFor && weekendDates.has(chore.scheduledFor));
   const weekendTarget = mode === "money" ? weekendChores.reduce((sum, chore) => sum + chore.rewardCents, 0) : weekendChores.reduce((sum, chore) => sum + chore.rewardStars, 0);
-  const dailyChores = chores.filter((chore) => chore.assigneeMemberId === child.id && isDailyRoutineChore(chore));
+  const today = new Date().toLocaleDateString("en-CA");
+  const dailyChores = chores.filter((chore) => chore.assigneeMemberId === child.id && isScheduledRoutineChore(chore, today));
   const dailyPotential = mode === "money" ? dailyChores.reduce((sum, chore) => sum + chore.rewardCents, 0) : dailyChores.reduce((sum, chore) => sum + chore.rewardStars, 0);
   const configuredTarget = mode === "money" ? targetCents : targetStars;
   const target = isWeekend ? weekendTarget : dailyPotential || configuredTarget;

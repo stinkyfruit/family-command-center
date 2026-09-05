@@ -7,6 +7,8 @@
 5. Generate a VAPID key pair with `npx web-push generate-vapid-keys`, then add the public key, private key, and a `mailto:` subject to `.env.local` using the three `WEB_PUSH` variables in `.env.example`. Keep the private key server-only.
 6. Restart `npm run dev`. Open Settings → Notifications, enable notifications on each phone, and send a test notification.
 
+For weekday recurring chores, also run `supabase/migrations/20260903_add_weekday_chore_schedules.sql` in the Supabase SQL Editor after the existing chore migrations. Restart the development server if it is already running so the app reloads with the new database column.
+
 ## Daily morning digest
 
 1. Run `supabase/migrations/20260825_add_morning_digest_notifications.sql`, then `supabase/migrations/20260825_move_morning_digest_opt_in_to_devices.sql` in the Supabase SQL Editor.
@@ -26,6 +28,7 @@ This section defines the household chore model. Existing and future features mus
 - Adding a child preloads the household's existing daily chore template for that child. The seeded chores are recurring daily chores split between **Before school** and **After school**.
 - In Settings → Chores → Manage chores, adults can manage chores for each child:
   - **Daily chores** repeat every day. New daily chores must be explicitly created as either **Daily morning** (`Before school`) or **Daily evening** (`After school`). They are stored with `is_daily = true`, `is_fixed = true`, and no `scheduled_for` date.
+  - **Weekly chores** repeat on one or more selected weekdays. They are stored with `is_daily = false`, `is_fixed = false`, no `scheduled_for` date, and the selected Postgres/JavaScript weekday numbers in `weekday_schedule` (Monday through Friday are available in the UI).
   - **Ad hoc chores** are extra tasks and are not part of the daily routine or daily reward template. The Manage chores **Ad hoc** action creates an anytime `To-do` with `is_daily = false`; Weekend chores remain date-specific one-offs managed in the Weekend chores tab.
 - Daily and ad hoc chores can be renamed, added, or deleted from Settings. These changes are household-specific and must persist using the chore's `household_id` and child assignment.
 - Chore icons are household data stored in `emoji`. New chores receive an automatic starting icon, adults can choose a fun emoji or picture from the curated icon menu in Manage chores, and renaming a chore must not overwrite a chosen icon.

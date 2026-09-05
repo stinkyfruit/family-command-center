@@ -32,6 +32,7 @@ import {
   fullMoonsForYear,
   skyEventsForYear,
   isMoodKey,
+  isRecurringChore,
   listIcon,
   localDateInputValue,
   moodOption,
@@ -237,6 +238,11 @@ function choreFromRealtimeRow(row: ChoreRealtimeRow, previous?: ChoreEntry): Cho
     : typeof row.scheduled_for === "string"
       ? row.scheduled_for
       : previous?.scheduledFor ?? null;
+  const weekdaySchedule = row.weekday_schedule === null
+    ? null
+    : Array.isArray(row.weekday_schedule)
+      ? row.weekday_schedule.filter((day): day is number => typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6)
+      : previous?.weekdaySchedule ?? null;
   return {
     id,
     title: typeof row.title === "string" ? row.title : previous?.title ?? "Untitled chore",
@@ -247,6 +253,7 @@ function choreFromRealtimeRow(row: ChoreRealtimeRow, previous?: ChoreEntry): Cho
     isDaily,
     isFixed: typeof row.is_fixed === "boolean" ? row.is_fixed : previous?.isFixed ?? false,
     scheduledFor,
+    weekdaySchedule,
     rewardCents: typeof row.reward_cents === "number" ? row.reward_cents : previous?.rewardCents ?? 50,
     rewardStars: typeof row.reward_stars === "number" ? row.reward_stars : previous?.rewardStars ?? 1,
     completionId: previous?.completionId,
@@ -502,7 +509,7 @@ export default function Home() {
       loadCalendarEventRows(householdId),
       supabase.from("todos").select("id, title, due_at, status, completed_at, assignee_member_id").eq("household_id", householdId).neq("status", "archived").order("due_at"),
       supabase.from("members").select("id, user_id, display_name, role, color").eq("household_id", householdId).order("created_at"),
-      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, active, reward_cents, reward_stars").eq("household_id", householdId).order("sort_order").order("created_at"),
+      supabase.from("chores").select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, weekday_schedule, active, reward_cents, reward_stars").eq("household_id", householdId).order("sort_order").order("created_at"),
       supabase.from("chore_completions").select("id, chore_id, member_id, completed_at, completed_on, reward_cents, reward_stars").order("completed_at", { ascending: false }),
       supabase.from("chore_payouts").select("id, child_member_id, amount_cents, paid_at").eq("household_id", householdId).order("paid_at", { ascending: false }),
       supabase.from("lists").select("id, title, icon").eq("household_id", householdId).order("created_at"),
@@ -549,15 +556,28 @@ export default function Home() {
           const chore = choreById.get(completion.chore_id);
           const childMemberId = chore?.assignee_member_id ?? completion.member_id;
           if (childMemberId) earnedByMember[String(childMemberId)] = (earnedByMember[String(childMemberId)] ?? 0) + (completion.reward_cents ?? 0);
-          const isDaily = chore?.is_daily ?? chore?.routine !== "To-do";
-          if (isDaily && completion.completed_on !== today) continue;
+          const isRepeating = chore ? isRecurringChore({
+            id: chore.id,
+            title: chore.title,
+            emoji: chore.emoji,
+            assigneeMemberId: chore.assignee_member_id,
+            rewardCents: chore.reward_cents ?? 50,
+            rewardStars: chore.reward_stars ?? 1,
+            sortOrder: chore.sort_order ?? 0,
+            routine: chore.routine ?? "To-do",
+            isDaily: chore.is_daily ?? chore.routine !== "To-do",
+            isFixed: chore.is_fixed ?? false,
+            scheduledFor: chore.scheduled_for,
+            weekdaySchedule: chore.weekday_schedule,
+          }) : false;
+          if (isRepeating && completion.completed_on !== today) continue;
           if (!completionByChore.has(completion.chore_id)) completionByChore.set(completion.chore_id, { id: completion.id, rewardCents: completion.reward_cents ?? 0, rewardStars: completion.reward_stars ?? 0 });
         }
         setChoreEarnedCentsByMember(earnedByMember);
         setChores(choreResult.data.map((chore) => {
           const isDaily = chore.is_daily ?? chore.routine !== "To-do";
           const completion = completionByChore.get(chore.id);
-          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, rewardCents: chore.reward_cents ?? 50, rewardStars: chore.reward_stars ?? 1, completionId: completion?.id ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined), completedRewardCents: completion?.rewardCents, completedRewardStars: completion?.rewardStars };
+          return { id: chore.id, title: chore.title, emoji: chore.emoji, assigneeMemberId: chore.assignee_member_id, sortOrder: chore.sort_order ?? 0, routine: chore.routine ?? "To-do", isDaily, isFixed: chore.is_fixed ?? false, scheduledFor: chore.scheduled_for, weekdaySchedule: chore.weekday_schedule, rewardCents: chore.reward_cents ?? 50, rewardStars: chore.reward_stars ?? 1, completionId: completion?.id ?? (!isDaily && !chore.active ? `legacy-completed-${chore.id}` : undefined), completedRewardCents: completion?.rewardCents, completedRewardStars: completion?.rewardStars };
         }));
       }
       if (payoutResult.data) {
@@ -715,7 +735,7 @@ export default function Home() {
       }
       if (typeof completionId !== "string" && typeof completionId !== "number") return;
       const completedOn = row.completed_on;
-      if (chore.isDaily && typeof completedOn === "string" && completedOn !== localDateInputValue(new Date())) return;
+      if (isRecurringChore(chore) && typeof completedOn === "string" && completedOn !== localDateInputValue(new Date())) return;
       if (String(chore.completionId) === String(completionId)) return;
 
       const rewardCents = typeof row.reward_cents === "number" ? row.reward_cents : chore.rewardCents;
@@ -1324,15 +1344,16 @@ export default function Home() {
     const emoji = choreIcon(title);
     const isDaily = options.isDaily ?? false;
     const isFixed = options.isFixed ?? isDaily;
-    const scheduledFor = isDaily || routine === "To-do" ? null : options.scheduledFor ?? scheduledForOverride ?? new Date().toLocaleDateString("en-CA");
+    const weekdaySchedule = options.weekdaySchedule?.length ? [...new Set(options.weekdaySchedule)] : null;
+    const scheduledFor = isDaily || routine === "To-do" || weekdaySchedule ? null : options.scheduledFor ?? scheduledForOverride ?? new Date().toLocaleDateString("en-CA");
     const sortOrder = Math.max(0, ...chores.filter((chore) => String(chore.assigneeMemberId) === String(memberId) && chore.routine === routine).map((chore) => chore.sortOrder)) + 1;
-    const rewardCents = routine === "Weekend" && choreRewardMode === "money" ? rewardOverride ?? 0 : isDaily ? 5 : 50;
-    const rewardStars = routine === "Weekend" && choreRewardMode === "stars" ? rewardOverride ?? 1 : 1;
+    const rewardCents = routine === "Weekend" && choreRewardMode === "money" ? rewardOverride ?? 0 : isDaily ? 5 : choreRewardMode === "money" ? rewardOverride ?? 50 : 50;
+    const rewardStars = routine === "Weekend" && choreRewardMode === "stars" ? rewardOverride ?? 1 : choreRewardMode === "stars" ? rewardOverride ?? 1 : 1;
     if (supabase) {
-      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, is_fixed: isFixed, scheduled_for: scheduledFor, reward_cents: rewardCents, reward_stars: rewardStars }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, reward_cents, reward_stars").single();
+      const { data, error } = await supabase.from("chores").insert({ household_id: householdId, assignee_member_id: memberId, title: title.trim(), emoji, sort_order: sortOrder, routine, is_daily: isDaily, is_fixed: isFixed, scheduled_for: scheduledFor, weekday_schedule: weekdaySchedule, reward_cents: rewardCents, reward_stars: rewardStars }).select("id, title, emoji, assignee_member_id, sort_order, routine, is_daily, is_fixed, scheduled_for, weekday_schedule, reward_cents, reward_stars").single();
       if (error) { notify(error.message); return; }
-      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: data.is_fixed ?? isFixed, scheduledFor: data.scheduled_for, rewardCents: data.reward_cents ?? rewardCents, rewardStars: data.reward_stars ?? rewardStars }]);
-    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed, scheduledFor, rewardCents, rewardStars }]);
+      if (data) setChores((items) => [...items, { id: data.id, title: data.title, emoji: data.emoji, assigneeMemberId: data.assignee_member_id, sortOrder: data.sort_order, routine: data.routine, isDaily: data.is_daily, isFixed: data.is_fixed ?? isFixed, scheduledFor: data.scheduled_for, weekdaySchedule: data.weekday_schedule, rewardCents: data.reward_cents ?? rewardCents, rewardStars: data.reward_stars ?? rewardStars }]);
+    } else setChores((items) => [...items, { id: Date.now().toString(), title: title.trim(), emoji, assigneeMemberId: memberId, sortOrder, routine, isDaily, isFixed, scheduledFor, weekdaySchedule, rewardCents, rewardStars }]);
   }
 
   async function reorderChores(choreIds: Array<string | number>) {

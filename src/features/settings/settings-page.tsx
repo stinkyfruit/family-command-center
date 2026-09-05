@@ -18,7 +18,7 @@ export type SettingsPageProps = SettingsPageContentProps & {
   onDeleteChore: (chore: ChoreEntry) => void;
   onRewardModeChange: (mode: ChoreRewardMode) => void;
   chores: ChoreEntry[];
-  onUpdateChore: (chore: ChoreEntry, title: string, rewardValue: number) => Promise<{ error?: string }>;
+  onUpdateChore: (chore: ChoreEntry, title: string, rewardValue: number, weekdaySchedule: number[] | null) => Promise<{ error?: string }>;
   onReorderChores: (choreIds: Array<string | number>) => void;
   onEmojiChange?: (chore: ChoreEntry, emoji: string) => void;
 };

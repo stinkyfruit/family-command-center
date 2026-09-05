@@ -201,10 +201,33 @@ export function localDateInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 export type ChoreRewardMode = "money" | "stars";
-export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null };
-export type ChoreCreationOptions = { isDaily?: boolean; isFixed?: boolean; scheduledFor?: string | null };
+export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null; weekdaySchedule?: number[] | null };
+export type ChoreCreationOptions = { isDaily?: boolean; isFixed?: boolean; scheduledFor?: string | null; weekdaySchedule?: number[] | null };
+export const weekdayOptions = [
+  { value: 1, label: "Monday", shortLabel: "Mon" },
+  { value: 2, label: "Tuesday", shortLabel: "Tue" },
+  { value: 3, label: "Wednesday", shortLabel: "Wed" },
+  { value: 4, label: "Thursday", shortLabel: "Thu" },
+  { value: 5, label: "Friday", shortLabel: "Fri" },
+] as const;
 export function isDailyRoutineChore(chore: ChoreEntry) {
   return chore.isDaily && chore.isFixed && (chore.routine === "Before school" || chore.routine === "After school");
+}
+export function isWeeklyChore(chore: ChoreEntry) {
+  return Boolean(chore.weekdaySchedule?.length);
+}
+export function isRecurringChore(chore: ChoreEntry) {
+  return chore.isDaily || isWeeklyChore(chore);
+}
+export function isWeeklyChoreOnDate(chore: ChoreEntry, date: string) {
+  if (!isWeeklyChore(chore)) return false;
+  return chore.weekdaySchedule?.includes(new Date(`${date}T12:00:00`).getDay()) ?? false;
+}
+export function weekdayScheduleLabel(chore: ChoreEntry) {
+  return (chore.weekdaySchedule ?? []).map((day) => weekdayOptions.find((option) => option.value === day)?.shortLabel).filter(Boolean).join(", ");
+}
+export function isScheduledRoutineChore(chore: ChoreEntry, today: string) {
+  return (isDailyRoutineChore(chore) || (isWeeklyChore(chore) && (chore.routine === "Before school" || chore.routine === "After school"))) && (isDailyRoutineChore(chore) || isWeeklyChoreOnDate(chore, today));
 }
 export const choreEmojiOptions = ["✨", "🧹", "🧸", "🐾", "🛏️", "🪥", "🍽️", "🧺", "📚", "🫧", "🌟", "🎯", "🐶", "🌈", "🚀", "💪", "🎨", "🧩", "🌱", "🦄", "🦖", "⭐"] as const;
 export const choreRoutines = [
@@ -217,7 +240,7 @@ export const fixedRoutineChoreKeys = new Set([
   "after school|change clothes and put school clothes in laundry basket", "after school|sharpen pencils", "after school|do homework", "after school|move body", "after school|eat dinner", "after school|bring plate to the sink", "after school|help mama and dada clean up dinner", "after school|take a bath/shower", "after school|brush teeth", "after school|read a book",
 ]);
 export function isVisibleRoutineChore(chore: ChoreEntry, today: string) {
-  return chore.routine === "To-do" || chore.isFixed || fixedRoutineChoreKeys.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today);
+  return chore.routine === "To-do" || (chore.isFixed && !isWeeklyChore(chore)) || fixedRoutineChoreKeys.has(`${chore.routine.toLowerCase()}|${chore.title.toLowerCase()}`) || (!chore.isFixed && chore.scheduledFor === today) || isWeeklyChoreOnDate(chore, today);
 }
 export type SharedListItem = { id: string | number; title: string; done: boolean };
 export type SharedList = { id: string | number; title: string; icon: string; items: SharedListItem[] };
