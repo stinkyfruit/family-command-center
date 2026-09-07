@@ -50,8 +50,6 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
     events,
     chores,
     choreRewardMode,
-    choreEarnedCentsByMember,
-    chorePaidOutCentsByMember,
     showChoresTab,
     showWishlistTab,
     showMovieNightTab,
@@ -213,10 +211,7 @@ export function createSettingsActions(dependencies: SettingsActionDependencies) 
 
   async function recordChorePayout(childMemberId: string | number, amountCents: number): Promise<{ error?: string }> {
     const childKey = String(childMemberId);
-    const earnedCents = choreEarnedCentsByMember[childKey] ?? 0;
-    const paidOutCents = chorePaidOutCentsByMember[childKey] ?? 0;
     if (amountCents <= 0 || amountCents % 5 !== 0) return { error: "Payouts must be a positive amount ending in 0 or 5 cents." };
-    if (amountCents > earnedCents - paidOutCents) return { error: "The payout cannot be greater than the child’s available balance." };
     if (!supabase || !householdId) {
       setChorePaidOutCentsByMember((items) => ({ ...items, [childKey]: (items[childKey] ?? 0) + amountCents }));
       return {};

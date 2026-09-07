@@ -873,11 +873,13 @@ export default function Home() {
           return await response.json() as CurrentWeatherObservation;
         }).then((observation) => {
           if (!observation?.available) return;
+          const temperatureF = nullableWeatherNumber(observation.temperatureF);
           const windSpeedMph = nullableWeatherNumber(observation.windSpeedMph);
           const windGustsMph = nullableWeatherNumber(observation.windGustsMph);
           const summary = observationWeatherSummary(observation.textDescription, forecastSummary, windSpeedMph, windGustsMph);
           setWeather((current) => current ? {
             ...current,
+            temperature: temperatureF === null ? current.temperature : Math.round(temperatureF),
             summary,
             code: weatherCodeForDisplay(summary, current.code),
             windSpeedMph: windSpeedMph ?? current.windSpeedMph,

@@ -24,6 +24,42 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
   }, [currentTime, forecast]);
 
   useEffect(() => {
+    const scrollY = window.scrollY;
+    const { body, documentElement } = document;
+    const previous = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      documentOverflow: documentElement.style.overflow,
+      documentOverscrollBehavior: documentElement.style.overscrollBehavior,
+    };
+
+    documentElement.style.overflow = "hidden";
+    documentElement.style.overscrollBehavior = "none";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
+    return () => {
+      body.style.overflow = previous.bodyOverflow;
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.left = previous.bodyLeft;
+      body.style.right = previous.bodyRight;
+      body.style.width = previous.bodyWidth;
+      documentElement.style.overflow = previous.documentOverflow;
+      documentElement.style.overscrollBehavior = previous.documentOverscrollBehavior;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
@@ -31,9 +67,9 @@ export function WeatherForecastOverlay({ weather, forecast, insights, onClose }:
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  return <div className="fixed inset-0 z-[80] flex items-end bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section role="dialog" aria-modal="true" aria-labelledby="weather-forecast-title" className="w-full max-w-2xl overflow-hidden rounded-[2rem] bg-white shadow-2xl dark:bg-[#242435]">
-      <div className="max-h-[min(760px,calc(100dvh-1.5rem))] touch-pan-y overflow-y-auto overscroll-contain p-5 sm:p-7">
+  return <div className="fixed inset-0 z-[80] flex items-end overflow-hidden overscroll-none bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="weather-forecast-title" className="max-h-[calc(100dvh-1.5rem)] min-h-0 w-full max-w-2xl overflow-hidden rounded-[2rem] bg-white shadow-2xl dark:bg-[#242435]">
+      <div className="max-h-[min(760px,calc(100dvh-1.5rem))] touch-pan-y overflow-y-auto overscroll-y-contain p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">LOCAL WEATHER</p>
