@@ -174,7 +174,7 @@ export function auroraActivityLabel(probability: number) {
   return "Low activity";
 }
 export type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
-export type MoodKey = "great" | "good" | "okay" | "tired" | "low" | "excited" | "calm" | "frustrated" | "worried" | "annoyed" | "mad" | "hurting";
+export type MoodKey = "great" | "good" | "okay" | "tired" | "low" | "excited" | "calm" | "frustrated" | "worried" | "annoyed" | "mad" | "hurting" | "hungry" | "embarrassed" | "confused";
 export type MoodCheckin = { id: string | number; memberId: string | number; mood: MoodKey; checkedInAt: string };
 
 export const moodOptions = [
@@ -190,6 +190,9 @@ export const moodOptions = [
   { key: "annoyed", label: "Annoyed", emoji: "😒", animation: null, color: "bg-yellow-100 text-yellow-900 ring-yellow-200" },
   { key: "mad", label: "Mad", emoji: "😡", animation: null, color: "bg-red-100 text-red-900 ring-red-200" },
   { key: "hurting", label: "Hurting", emoji: "🤕", animation: null, color: "bg-pink-100 text-pink-900 ring-pink-200" },
+  { key: "hungry", label: "Hungry", emoji: "😋", animation: null, color: "bg-lime-100 text-lime-900 ring-lime-200" },
+  { key: "embarrassed", label: "Embarrassed", emoji: "😳", animation: null, color: "bg-fuchsia-100 text-fuchsia-900 ring-fuchsia-200" },
+  { key: "confused", label: "Confused", emoji: "🤔", animation: null, color: "bg-cyan-100 text-cyan-900 ring-cyan-200" },
 ] as const satisfies ReadonlyArray<{ key: MoodKey; label: string; emoji: string; animation: object | null; color: string }>;
 
 export function isMoodKey(value: unknown): value is MoodKey {
