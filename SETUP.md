@@ -2,7 +2,7 @@
 
 1. Create a new Supabase project and enable an Auth provider (email is enough for the first release).
 2. Copy `.env.example` to `.env.local` and fill in the project URL and **publishable** key from the Supabase Connect dialog. Never put the service-role key in a `NEXT_PUBLIC_` variable.
-3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql`, `supabase/migrations/20260822_add_mood_checkins.sql`, and `supabase/migrations/20260824_enable_realtime_mood_checkins.sql`.
+3. In Supabase, open **SQL Editor** and run `supabase/migrations/20260815_family_command_center.sql`, followed by `supabase/migrations/20260815_fix_household_policies.sql`, `supabase/migrations/20260822_add_mood_checkins.sql`, `supabase/migrations/20260824_expand_mood_checkin_options.sql`, `supabase/migrations/20260824_enable_realtime_mood_checkins.sql`, and `supabase/migrations/20260911_add_more_mood_checkin_options.sql`.
 4. Run `supabase/migrations/20260825_add_web_push_notification_devices.sql` in the Supabase SQL Editor.
 5. Generate a VAPID key pair with `npx web-push generate-vapid-keys`, then add the public key, private key, and a `mailto:` subject to `.env.local` using the three `WEB_PUSH` variables in `.env.example`. Keep the private key server-only.
 6. Restart `npm run dev`. Open Settings → Notifications, enable notifications on each phone, and send a test notification.
