@@ -28,6 +28,8 @@ const moodLabels: Record<string, string> = {
   hungry: "Hungry",
   embarrassed: "Embarrassed",
   confused: "Confused",
+  "bean-butt": "Bean Butt",
+  fine: "Fine",
 };
 
 function text(value: unknown, maxLength: number) {
