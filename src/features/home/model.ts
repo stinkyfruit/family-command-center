@@ -7,15 +7,16 @@ import rainAnimation from "../../../public/animations/general/weather/rain.json"
 import snowAnimation from "@meteocons/lottie/flat/snow.json";
 import thunderstormsAnimation from "../../../public/animations/general/weather/thunderstorms.json";
 import sunnyAnimation from "../../../public/animations/general/weather/sunny.json";
-import greatMoodAnimation from "../../../public/animations/general/moods/1f600.json";
+import amazingMoodAnimation from "../../../public/animations/general/moods/1f600.json";
 import goodMoodAnimation from "../../../public/animations/general/moods/1f642.json";
 import okayMoodAnimation from "../../../public/animations/general/moods/1f610.json";
 import tiredMoodAnimation from "../../../public/animations/general/moods/1f634.json";
-import lowMoodAnimation from "../../../public/animations/general/moods/1f622.json";
+import sadMoodAnimation from "../../../public/animations/general/moods/1f622.json";
 import excitedMoodAnimation from "../../../public/animations/general/moods/1f929.json";
 import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.json";
 import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
 import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
+import scaredMoodAnimation from "../../../public/animations/general/moods/1f628.json";
 import annoyedMoodAnimation from "../../../public/animations/general/moods/1f612.json";
 import madMoodAnimation from "../../../public/animations/general/moods/1f621.json";
 import hurtingMoodAnimation from "../../../public/animations/general/moods/1f915.json";
@@ -180,19 +181,20 @@ export function auroraActivityLabel(probability: number) {
   return "Low activity";
 }
 export type Member = { id: string | number; name: string; role: "adult" | "child"; color?: string; userId?: string | null };
-export type MoodKey = "great" | "good" | "okay" | "tired" | "low" | "excited" | "calm" | "frustrated" | "worried" | "annoyed" | "mad" | "hurting" | "hungry" | "embarrassed" | "confused";
+export type MoodKey = "amazing" | "good" | "okay" | "tired" | "sad" | "excited" | "calm" | "frustrated" | "worried" | "scared" | "annoyed" | "mad" | "hurting" | "hungry" | "embarrassed" | "confused";
 export type MoodCheckin = { id: string | number; memberId: string | number; mood: MoodKey; checkedInAt: string };
 
 export const moodOptions = [
-  { key: "great", label: "Great", emoji: "😀", animation: greatMoodAnimation, color: "bg-amber-100 text-amber-900 ring-amber-200" },
+  { key: "amazing", label: "Amazing", emoji: "😀", animation: amazingMoodAnimation, color: "bg-amber-100 text-amber-900 ring-amber-200" },
   { key: "good", label: "Good", emoji: "🙂", animation: goodMoodAnimation, color: "bg-emerald-100 text-emerald-900 ring-emerald-200" },
   { key: "okay", label: "Okay", emoji: "😐", animation: okayMoodAnimation, color: "bg-slate-100 text-slate-800 ring-slate-200" },
   { key: "tired", label: "Tired", emoji: "😴", animation: tiredMoodAnimation, color: "bg-indigo-100 text-indigo-900 ring-indigo-200" },
-  { key: "low", label: "Low", emoji: "😢", animation: lowMoodAnimation, color: "bg-sky-100 text-sky-900 ring-sky-200" },
+  { key: "sad", label: "Sad", emoji: "😢", animation: sadMoodAnimation, color: "bg-sky-100 text-sky-900 ring-sky-200" },
   { key: "excited", label: "Excited", emoji: "🤩", animation: excitedMoodAnimation, color: "bg-orange-100 text-orange-900 ring-orange-200" },
   { key: "calm", label: "Calm", emoji: "😌", animation: calmMoodAnimation, color: "bg-teal-100 text-teal-900 ring-teal-200" },
   { key: "frustrated", label: "Frustrated", emoji: "😤", animation: frustratedMoodAnimation, color: "bg-rose-100 text-rose-900 ring-rose-200" },
   { key: "worried", label: "Worried", emoji: "😟", animation: worriedMoodAnimation, color: "bg-purple-100 text-purple-900 ring-purple-200" },
+  { key: "scared", label: "Scared", emoji: "😨", animation: scaredMoodAnimation, color: "bg-violet-100 text-violet-900 ring-violet-200" },
   { key: "annoyed", label: "Annoyed", emoji: "😒", animation: annoyedMoodAnimation, color: "bg-yellow-100 text-yellow-900 ring-yellow-200" },
   { key: "mad", label: "Mad", emoji: "😡", animation: madMoodAnimation, color: "bg-red-100 text-red-900 ring-red-200" },
   { key: "hurting", label: "Hurting", emoji: "🤕", animation: hurtingMoodAnimation, color: "bg-pink-100 text-pink-900 ring-pink-200" },

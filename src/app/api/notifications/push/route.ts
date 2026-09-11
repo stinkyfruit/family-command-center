@@ -12,15 +12,22 @@ type NotificationBody =
   | { event: "mood_changed"; householdId: string; memberId: string; mood: string };
 
 const moodLabels: Record<string, string> = {
-  great: "Great",
+  amazing: "Amazing",
   good: "Good",
   okay: "Okay",
   tired: "Tired",
-  low: "Low",
+  sad: "Sad",
   excited: "Excited",
   calm: "Calm",
   frustrated: "Frustrated",
   worried: "Worried",
+  scared: "Scared",
+  annoyed: "Annoyed",
+  mad: "Mad",
+  hurting: "Hurting",
+  hungry: "Hungry",
+  embarrassed: "Embarrassed",
+  confused: "Confused",
 };
 
 function text(value: unknown, maxLength: number) {
