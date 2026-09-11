@@ -39,7 +39,7 @@ export function pickCelebrationAnimation() {
   return animation;
 }
 
-export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; generatedSkyEvent?: boolean; skyEventKind?: "solar" | "lunar"; source?: "app" | "google" | "apple"; sourceName?: string | null };
+export type Event = { id: string | number; title: string; time: string; person: string; color: string; startsAt: string; endsAt?: string | null; notes?: string | null; location?: string | null; category?: string | null; allDay?: boolean; memberIds?: string[]; externalId?: string | null; seriesExternalId?: string | null; generatedHoliday?: boolean; generatedSkyEvent?: boolean; skyEventKind?: "solar" | "lunar"; source?: "app" | "google" | "apple"; sourceName?: string | null; todoId?: string | number; todoDone?: boolean };
 export type Todo = { id: string | number; title: string; due: string; dueAt?: string | null; done: boolean; assigneeMemberId?: string | number | null };
 export type Weather = { temperature: number; high: number; low: number; summary: string; location: string; code: number; isDay: boolean; windSpeedMph?: number | null; windGustsMph?: number | null; conditionSource?: "forecast" | "observation" };
 export type WeatherForecastHour = { time: number; temperature: number; code: number; precipitationProbability: number; windSpeedMph?: number | null; windGustsMph?: number | null };
@@ -202,6 +202,29 @@ export function moodOption(key: MoodKey) {
 
 export function localDateInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function todoCalendarEvent(todo: Todo): Event | null {
+  const calendarDate = todo.dueAt?.slice(0, 10);
+  if (!calendarDate || !/^\d{4}-\d{2}-\d{2}$/.test(calendarDate)) return null;
+  const startsAt = new Date(`${calendarDate}T00:00:00.000Z`);
+  if (Number.isNaN(startsAt.getTime())) return null;
+  const endsAt = new Date(startsAt);
+  endsAt.setUTCDate(endsAt.getUTCDate() + 1);
+  return {
+    id: `todo-${todo.id}`,
+    todoId: todo.id,
+    todoDone: todo.done,
+    title: todo.title,
+    time: "All day",
+    person: "Family",
+    color: "bg-violet-400",
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    allDay: true,
+    category: "Task",
+    memberIds: todo.assigneeMemberId === null || todo.assigneeMemberId === undefined ? [] : [String(todo.assigneeMemberId)],
+  };
 }
 export type ChoreRewardMode = "money" | "stars";
 export type ChoreEntry = { id: string | number; title: string; emoji: string; assigneeMemberId: string | number | null; completionId?: string | number; completedRewardCents?: number; completedRewardStars?: number; rewardCents: number; rewardStars: number; sortOrder: number; routine: string; isDaily: boolean; isFixed: boolean; scheduledFor?: string | null; weekdaySchedule?: number[] | null };

@@ -65,6 +65,7 @@ export function memberCalendarColor(member: Member, index: number) {
 export function eventBlockBackground(event: Event, members: Member[]) {
   if (event.generatedHoliday) return "linear-gradient(135deg,#fde68a,#fda4af,#c4b5fd)";
   if (event.generatedSkyEvent) return "linear-gradient(135deg,#bfdbfe,#c4b5fd,#fde68a)";
+  if (event.todoId !== undefined) return event.todoDone ? "#cbd5e1" : "#ddd6fe";
   const colors = eventMembers(event, members).map((member) => memberCalendarColor(member, members.indexOf(member)));
   if (!colors.length) return "#e2e8f0";
   if (colors.length === 1) return colors[0];

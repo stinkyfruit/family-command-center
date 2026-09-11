@@ -37,6 +37,7 @@ import {
   localDateInputValue,
   moodOption,
   starterEvents,
+  todoCalendarEvent,
   weatherSummary,
   weatherSummaryForConditions,
 } from "@/features/home/model";
@@ -947,7 +948,7 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [themeMode, sunTimes]);
   const openTodos = useMemo(() => todos.filter((todo) => !todo.done), [todos]);
-  const calendarEvents = useMemo(() => [...events, ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap((year) => [...familyHolidaysForYear(year), ...skyEventsForYear(year), ...fullMoonsForYear(year)])], [events, calendarAnchor]);
+  const calendarEvents = useMemo(() => [...events, ...todos.flatMap((todo) => { const event = todoCalendarEvent(todo); return event ? [event] : []; }), ...[calendarAnchor.getFullYear() - 1, calendarAnchor.getFullYear(), calendarAnchor.getFullYear() + 1].flatMap((year) => [...familyHolidaysForYear(year), ...skyEventsForYear(year), ...fullMoonsForYear(year)])], [events, todos, calendarAnchor]);
   const visibleCalendarEvents = useMemo(() => {
     if (!selectedCalendarMemberIds.length && !showFamilyEvents) return calendarEvents;
     return calendarEvents.filter((event) => {
@@ -1078,6 +1079,17 @@ export default function Home() {
     setTodoDueDate(todo.dueAt ? todo.dueAt.slice(0, 10) : "");
     setTodoAssigneeMemberId(String(todo.assigneeMemberId ?? ""));
     setShowTodoForm(true);
+  }
+
+  function openCalendarItem(event: Event) {
+    if (event.todoId !== undefined) {
+      const todo = todos.find((item) => String(item.id) === String(event.todoId));
+      if (todo) {
+        editTodo(todo);
+        return;
+      }
+    }
+    setSelectedEvent(event);
   }
 
   async function notifyTaskAssignment(targetMemberId: string, title: string, dueDate: string | null) {
@@ -1612,6 +1624,7 @@ export default function Home() {
   const stableOpenCalendar = useStableCallback(() => navigateToTab("calendar"));
   const stableOpenCalendarAndAddEvent = useStableCallback(() => { setShowEventForm(true); navigateToTab("calendar"); });
   const stableOpenCalendarDay = useStableCallback((day: Date) => { setCalendarAnchor(day); setView("Day"); navigateToTab("calendar"); });
+  const stableOpenCalendarItem = useStableCallback(openCalendarItem);
   const stableMoodMemberChange = useStableCallback((memberId: string) => { setMoodMemberId(memberId); setSelectedMood(moodCheckins.find((checkin) => String(checkin.memberId) === memberId)?.mood ?? "good"); setMoodMessage(""); });
   const stableSaveMood = useStableCallback(saveMoodCheckin);
   const stableToggleCalendarMemberFilter = useStableCallback(toggleCalendarMemberFilter);
@@ -1683,8 +1696,8 @@ export default function Home() {
         {householdDataLoading && householdDataLoaded && <p role="status" className="mx-auto mt-4 w-[calc(100%-2.5rem)] max-w-[1800px] text-sm text-slate-500 md:w-[calc(100%-4.5rem)]">Refreshing your family home…</p>}
         {voiceMessage && <p role="status" className="sr-only">{voiceMessage}</p>}
         <div className={`mx-auto w-full min-w-0 max-w-[1800px] space-y-5 pb-24 lg:pb-8 ${activeTab === "settings" ? "" : "px-5 md:px-9"}`}>
-          {visitedTabs.has("home") && <div hidden={activeTab !== "home"}><HomeDashboard weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} onOpenWeatherForecast={stableOpenWeatherForecast} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={stableAddTodo} onToggleTodo={stableToggleTodo} onOpenTasks={stableOpenTasks} onOpenCalendar={stableOpenCalendar} onAddEvent={stableOpenCalendarAndAddEvent} onOpenCalendarDay={stableOpenCalendarDay} onOpenEvent={setSelectedEvent} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={stableMoodMemberChange} onMoodChange={setSelectedMood} onSaveMood={stableSaveMood} calendarAnchor={calendarAnchor} /></div>}
-          {visitedTabs.has("calendar") && <div hidden={activeTab !== "calendar"}><LazyCalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={stableCalendarSync} view={view} onViewChange={setView} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={stableToggleCalendarMemberFilter} onToggleFamily={stableToggleFamilyEvents} onEditEvent={setSelectedEvent} onOpenDay={stableOpenCalendarDayFromCalendar} showEventForm={showEventForm} onShowEventForm={stableShowEventForm} onCloseEventForm={stableCloseEventForm} onSubmitEvent={stableAddEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={stableToggleEventMember} /></div>}
+          {visitedTabs.has("home") && <div hidden={activeTab !== "home"}><HomeDashboard weather={weather} weatherForecast={weatherForecast} weatherInsights={weatherInsights} onOpenWeatherForecast={stableOpenWeatherForecast} dark={dark} sunTimes={sunTimes} auroraActivity={auroraActivity} cometCloseApproach={cometCloseApproach} openTodos={openTodos} members={members} visibleCalendarEvents={visibleCalendarEvents} onAddTodo={stableAddTodo} onToggleTodo={stableToggleTodo} onOpenTasks={stableOpenTasks} onOpenCalendar={stableOpenCalendar} onAddEvent={stableOpenCalendarAndAddEvent} onOpenCalendarDay={stableOpenCalendarDay} onOpenEvent={stableOpenCalendarItem} moodCheckins={moodCheckins} moodMemberId={moodMemberId} selectedMood={selectedMood} savingMood={savingMood} moodMessage={moodMessage} onMoodMemberChange={stableMoodMemberChange} onMoodChange={setSelectedMood} onSaveMood={stableSaveMood} calendarAnchor={calendarAnchor} /></div>}
+          {visitedTabs.has("calendar") && <div hidden={activeTab !== "calendar"}><LazyCalendarPage anchor={calendarAnchor} events={visibleCalendarEvents} members={members} calendarMessage={calendarMessage} hasCalendarConnection={googleConnected || appleFeeds.some((feed) => feed.enabled)} syncingGoogle={syncingGoogle} onSync={stableCalendarSync} view={view} onViewChange={setView} onAnchorChange={setCalendarAnchor} selectedMemberIds={selectedCalendarMemberIds} showFamilyEvents={showFamilyEvents} onToggleMember={stableToggleCalendarMemberFilter} onToggleFamily={stableToggleFamilyEvents} onEditEvent={stableOpenCalendarItem} onOpenDay={stableOpenCalendarDayFromCalendar} showEventForm={showEventForm} onShowEventForm={stableShowEventForm} onCloseEventForm={stableCloseEventForm} onSubmitEvent={stableAddEvent} title={newItem} onTitleChange={setNewItem} eventDate={eventDate} onDateChange={setEventDate} eventTime={eventTime} onTimeChange={setEventTime} eventEndTime={eventEndTime} onEndTimeChange={setEventEndTime} eventAllDay={eventAllDay} onAllDayChange={setEventAllDay} eventCategory={eventCategory} onCategoryChange={setEventCategory} eventLocation={eventLocation} onLocationChange={setEventLocation} eventMemberIds={eventMemberIds} onToggleEventMember={stableToggleEventMember} /></div>}
         {visitedTabs.has("tasks") && <div hidden={activeTab !== "tasks"}><TasksPage todos={todos} members={members} onAdd={stableAddTodo} onToggle={stableToggleTodo} onEdit={stableEditTodo} /></div>}
         {visitedTabs.has("chores") && <div hidden={activeTab !== "chores"}><LazyChoresPage members={members} chores={chores} choreRewardMode={choreRewardMode} choreRewardTargetCents={choreRewardTargetCents} choreRewardTargetStars={choreRewardTargetStars} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} celebratingChoreId={celebratingChoreId} onToggle={stableToggleChore} /></div>}
         {visitedTabs.has("wishlist") && <div hidden={activeTab !== "wishlist"}><LazyWishlistPage householdId={householdId} members={members} voiceDraft={voiceWishlistDraft} /></div>}
