@@ -16,6 +16,12 @@ import excitedMoodAnimation from "../../../public/animations/general/moods/1f929
 import calmMoodAnimation from "../../../public/animations/general/moods/1f60c.json";
 import frustratedMoodAnimation from "../../../public/animations/general/moods/1f624.json";
 import worriedMoodAnimation from "../../../public/animations/general/moods/1f61f.json";
+import annoyedMoodAnimation from "../../../public/animations/general/moods/1f612.json";
+import madMoodAnimation from "../../../public/animations/general/moods/1f621.json";
+import hurtingMoodAnimation from "../../../public/animations/general/moods/1f915.json";
+import hungryMoodAnimation from "../../../public/animations/general/moods/1f60b.json";
+import embarrassedMoodAnimation from "../../../public/animations/general/moods/1f633.json";
+import confusedMoodAnimation from "../../../public/animations/general/moods/1f914.json";
 import { isBirthdayEventTitle } from "@/lib/calendar-event-utils";
 import { generalCompletionAnimations, halloweenCompletionAnimations } from "@/generated/animation-manifest";
 import { fullMoonsForYear as fullMoonsForYearData, skyEventForCalendarDate, skyEventsForYear as skyEventsForYearData } from "@/lib/sky-events";
@@ -187,12 +193,12 @@ export const moodOptions = [
   { key: "calm", label: "Calm", emoji: "😌", animation: calmMoodAnimation, color: "bg-teal-100 text-teal-900 ring-teal-200" },
   { key: "frustrated", label: "Frustrated", emoji: "😤", animation: frustratedMoodAnimation, color: "bg-rose-100 text-rose-900 ring-rose-200" },
   { key: "worried", label: "Worried", emoji: "😟", animation: worriedMoodAnimation, color: "bg-purple-100 text-purple-900 ring-purple-200" },
-  { key: "annoyed", label: "Annoyed", emoji: "😒", animation: null, color: "bg-yellow-100 text-yellow-900 ring-yellow-200" },
-  { key: "mad", label: "Mad", emoji: "😡", animation: null, color: "bg-red-100 text-red-900 ring-red-200" },
-  { key: "hurting", label: "Hurting", emoji: "🤕", animation: null, color: "bg-pink-100 text-pink-900 ring-pink-200" },
-  { key: "hungry", label: "Hungry", emoji: "😋", animation: null, color: "bg-lime-100 text-lime-900 ring-lime-200" },
-  { key: "embarrassed", label: "Embarrassed", emoji: "😳", animation: null, color: "bg-fuchsia-100 text-fuchsia-900 ring-fuchsia-200" },
-  { key: "confused", label: "Confused", emoji: "🤔", animation: null, color: "bg-cyan-100 text-cyan-900 ring-cyan-200" },
+  { key: "annoyed", label: "Annoyed", emoji: "😒", animation: annoyedMoodAnimation, color: "bg-yellow-100 text-yellow-900 ring-yellow-200" },
+  { key: "mad", label: "Mad", emoji: "😡", animation: madMoodAnimation, color: "bg-red-100 text-red-900 ring-red-200" },
+  { key: "hurting", label: "Hurting", emoji: "🤕", animation: hurtingMoodAnimation, color: "bg-pink-100 text-pink-900 ring-pink-200" },
+  { key: "hungry", label: "Hungry", emoji: "😋", animation: hungryMoodAnimation, color: "bg-lime-100 text-lime-900 ring-lime-200" },
+  { key: "embarrassed", label: "Embarrassed", emoji: "😳", animation: embarrassedMoodAnimation, color: "bg-fuchsia-100 text-fuchsia-900 ring-fuchsia-200" },
+  { key: "confused", label: "Confused", emoji: "🤔", animation: confusedMoodAnimation, color: "bg-cyan-100 text-cyan-900 ring-cyan-200" },
 ] as const satisfies ReadonlyArray<{ key: MoodKey; label: string; emoji: string; animation: object | null; color: string }>;
 
 export function isMoodKey(value: unknown): value is MoodKey {
