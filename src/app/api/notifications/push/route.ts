@@ -30,6 +30,10 @@ const moodLabels: Record<string, string> = {
   confused: "Confused",
   "bean-butt": "Bean Butt",
   fine: "Fine",
+  silly: "Silly",
+  antsy: "Antsy",
+  nervous: "Nervous",
+  wanderlust: "Wanderlust",
 };
 
 function text(value: unknown, maxLength: number) {
