@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import type { AppleFeed, GoogleConnection, Member, ThemeMode } from "@/features/home/model";
-import { defaultMemberColor, isHexColor, memberColorOptions } from "@/features/home/model";
+import type { AppleFeed, GoogleConnection, Member, MoodCheckin, ThemeMode } from "@/features/home/model";
+import { defaultMemberColor, isHexColor, memberColorOptions, moodOptions } from "@/features/home/model";
 import { memberCalendarColor } from "@/components/home/calendar";
+import { MoodAnimation } from "@/components/home/mood";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
 import { NotificationSettings } from "@/components/home/notification-settings";
 
@@ -32,11 +33,13 @@ export type SettingsPageContentProps = {
   onToggleApple: (feed: AppleFeed) => void;
   onInviteAdult: (email: string, displayName: string) => Promise<{ link?: string; error?: string }>;
   onSignOut: () => Promise<{ error?: string }>;
+  moodStatsRefreshKey: number;
+  moodCheckins: MoodCheckin[];
 };
 
 type PinMode = "loading" | "setup" | "locked" | "unlocked";
 
-export function SettingsPageContent({ householdId, members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, showChoresTab, showWishlistTab, showMovieNightTab, showFamilyDinnersTab, onTabVisibilityChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult }: SettingsPageContentProps) {
+export function SettingsPageContent({ householdId, members, currentUserId, onMemberColorChange, onAddMember, onRemoveMember, onUpdateCurrentMemberName, themeMode, onThemeModeChange, showChoresTab, showWishlistTab, showMovieNightTab, showFamilyDinnersTab, onTabVisibilityChange, onUnlocked, googleConnections, appleFeeds, onConnect, onToggleConnection, onAddApple, onToggleApple, onInviteAdult, moodStatsRefreshKey, moodCheckins }: SettingsPageContentProps) {
   const { confirm, prompt } = useAppNotifications();
   const [appleName, setAppleName] = useState("Home");
   const [appleUrl, setAppleUrl] = useState("");
@@ -166,6 +169,7 @@ export function SettingsPageContent({ householdId, members, currentUserId, onMem
 
       <SettingsGroup id="settings-family" eyebrow="FAMILY" title="People and household" description="Manage the people who share this home and the sections they see.">
         <article className="rounded-2xl bg-violet-50 p-5 dark:bg-violet-400/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold">People and colors</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Choose a color for each person. It appears on their calendar events and assigned tasks.</p></div><button type="button" onClick={() => { setShowAddPerson((value) => !value); setPersonMessage(""); }} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700"><AppIcon name="plus" className="size-4" />Add person</button></div>{showAddPerson && <form onSubmit={submitNewPerson} className="mt-4 grid gap-3 rounded-2xl bg-white/70 p-3 ring-1 ring-violet-100 dark:bg-white/10 dark:ring-white/10 sm:grid-cols-[1fr_9rem_auto]"><label className="text-sm font-bold">Name<input required autoFocus value={newPersonName} onChange={(event) => { setNewPersonName(event.target.value); setPersonMessage(""); }} placeholder="e.g. Grandma" className="mt-1 w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-sm font-bold">Type<StyledSelect value={newPersonRole} onChange={(event) => setNewPersonRole(event.target.value as Member["role"])}><option value="child">Child</option><option value="adult">Adult</option></StyledSelect></label><div className="flex items-end gap-2"><button type="button" onClick={() => { setShowAddPerson(false); setNewPersonName(""); setPersonMessage(""); }} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700">Add</button></div>{personMessage && <p className="sm:col-span-3 text-sm font-semibold text-rose-600">{personMessage}</p>}</form>}<div className="mt-4 grid gap-3 sm:grid-cols-2">{members.map((member, index) => { const currentColor = isHexColor(member.color ?? "") && member.color !== defaultMemberColor ? member.color! : memberCalendarColor(member, index); return <div key={member.id} className="relative rounded-2xl bg-white/80 p-3 ring-1 ring-violet-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center gap-3 pr-10"><span className="size-8 shrink-0 rounded-full ring-2 ring-white" style={{ backgroundColor: currentColor }} /><div className="min-w-0"><p className="truncate font-bold">{member.name}</p><p className="text-xs text-slate-500 dark:text-slate-300">{member.role === "adult" ? "Adult" : "Child"}</p></div></div>{currentUserId && String(member.userId) === currentUserId ? <span className="absolute right-3 top-3 text-xs font-bold text-slate-400">Current</span> : <button type="button" onClick={() => void handleRemoveMember(member)} disabled={String(removingMemberId) === String(member.id)} aria-label={`Remove ${member.name}`} className="absolute right-3 top-3 grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-100 disabled:cursor-wait disabled:opacity-50"><AppIcon name="trash" className="size-4" /></button>}<div className="mt-3 flex flex-wrap items-center gap-2">{memberColorOptions.map((color) => <button key={color} type="button" aria-label={`Set ${member.name}'s color to ${color}`} onClick={() => void onMemberColorChange(member.id, color)} className={`size-7 rounded-full border-2 ${currentColor.toLowerCase() === color ? "border-slate-900 ring-2 ring-white" : "border-white/80 dark:border-white/20"}`} style={{ backgroundColor: color }} />)}<label className="relative grid size-7 cursor-pointer place-items-center overflow-hidden rounded-full border-2 border-dashed border-violet-300 text-xs font-black text-violet-600 dark:border-violet-200 dark:text-violet-200" title={`Choose ${member.name}'s custom color`}><AppIcon name="plus" className="size-4" /><input type="color" aria-label={`Choose ${member.name}'s custom color`} value={currentColor} onChange={(event) => void onMemberColorChange(member.id, event.target.value)} className="absolute inset-0 size-full cursor-pointer opacity-0" /></label></div></div>; })}</div>{members.length === 0 && <p className="mt-4 text-sm text-slate-500">No people have been added yet.</p>}{memberMessage && <p className="mt-3 text-sm font-semibold text-rose-600">{memberMessage}</p>}</article>
+        <MoodStatistics householdId={householdId} members={members} currentCheckins={moodCheckins} refreshKey={moodStatsRefreshKey} />
         <article className="rounded-2xl bg-emerald-50 p-5 dark:bg-emerald-400/10"><p className="font-bold">Invite an adult</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">They&apos;ll get their own login and see this same family home.</p><form onSubmit={inviteAdult} className="mt-4 grid gap-3 sm:grid-cols-2"><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Adult&apos;s email address" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Name (optional)" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800"/><button className="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Create private invite</button></form>{inviteStatus && <p className="mt-3 text-sm font-semibold text-emerald-700 dark:text-emerald-200">{inviteStatus}</p>}</article>
         <article className="rounded-2xl bg-amber-50 p-5 dark:bg-amber-400/10"><p className="font-bold">Home tabs</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Hide sections your household does not use. Your data stays saved if you hide a tab.</p><div className="mt-4 space-y-2"><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showChoresTab} onChange={(event) => onTabVisibilityChange("chores", event.target.checked)} className="size-4 accent-amber-600"/><span className="flex-1">Chores</span><span className={showChoresTab ? "text-emerald-600" : "text-slate-400"}>{showChoresTab ? "Shown" : "Hidden"}</span></label><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showWishlistTab} onChange={(event) => onTabVisibilityChange("wishlist", event.target.checked)} className="size-4 accent-amber-600"/><span className="flex-1">Wish lists</span><span className={showWishlistTab ? "text-emerald-600" : "text-slate-400"}>{showWishlistTab ? "Shown" : "Hidden"}</span></label><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 shadow-sm dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showMovieNightTab} onChange={(event) => onTabVisibilityChange("movie-night", event.target.checked)} className="size-4 accent-amber-600"/><span className="flex-1">Movie Night</span><span className={showMovieNightTab ? "text-emerald-600" : "text-slate-400"}>{showMovieNightTab ? "Shown" : "Hidden"}</span></label><label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold text-slate-800 dark:bg-white/5 dark:text-slate-100"><input type="checkbox" checked={showFamilyDinnersTab} onChange={(event) => onTabVisibilityChange("family-dinners", event.target.checked)} className="size-4 accent-orange-600"/><span className="flex-1">Family Dinners</span><span className={showFamilyDinnersTab ? "text-emerald-600" : "text-slate-400"}>{showFamilyDinnersTab ? "Shown" : "Hidden"}</span></label></div></article>
       </SettingsGroup>
@@ -180,6 +184,74 @@ export function SettingsPageContent({ householdId, members, currentUserId, onMem
 
 function SettingsGroup({ id, eyebrow, title, description, children }: { id: string; eyebrow: string; title: string; description: string; children: ReactNode }) {
   return <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-32 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-6"><div className="border-b border-slate-100 pb-5 dark:border-white/10"><p className="text-sm font-black uppercase tracking-wide text-indigo-600 dark:text-indigo-300">{eyebrow}</p><h2 id={`${id}-title`} className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{title}</h2><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{description}</p></div><div className="mt-5 space-y-5">{children}</div></section>;
+}
+
+type MoodCountRow = { memberId: string; mood: string; count: number };
+
+function MoodStatistics({ householdId, members, currentCheckins, refreshKey }: { householdId?: string | null; members: Member[]; currentCheckins: MoodCheckin[]; refreshKey: number }) {
+  const [countsByMember, setCountsByMember] = useState<Record<string, Record<string, number>>>({});
+  const [resolvedHouseholdId, setResolvedHouseholdId] = useState<string | null>(householdId ?? null);
+  const [loading, setLoading] = useState(Boolean(householdId) || Boolean(supabase));
+  const [message, setMessage] = useState("");
+  const activeHouseholdId = householdId ?? resolvedHouseholdId;
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    async function loadStats() {
+      let targetHouseholdId = householdId ?? resolvedHouseholdId;
+      if (!targetHouseholdId) {
+        const { data: userData, error: userError } = await supabase!.auth.getUser();
+        if (userError) throw userError;
+        const { data: membership, error: membershipError } = await supabase!.from("members").select("household_id").eq("user_id", userData.user.id).limit(1);
+        if (membershipError) throw membershipError;
+        targetHouseholdId = membership?.[0]?.household_id ?? null;
+        if (!targetHouseholdId) throw new Error("No household membership was found for this account.");
+        if (!cancelled) setResolvedHouseholdId(targetHouseholdId);
+      }
+      const { data } = await supabase!.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Your session expired. Sign in again to view mood stats.");
+      const response = await fetch("/api/mood-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ householdId: targetHouseholdId }),
+      });
+      const result = await response.json() as { counts?: MoodCountRow[]; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not load mood stats.");
+      if (cancelled) return;
+      const nextCounts: Record<string, Record<string, number>> = {};
+      for (const row of result.counts ?? []) {
+        nextCounts[row.memberId] ??= {};
+        nextCounts[row.memberId][row.mood] = row.count;
+      }
+      for (const checkin of currentCheckins) {
+        const memberKey = String(checkin.memberId);
+        nextCounts[memberKey] ??= {};
+        nextCounts[memberKey][checkin.mood] = Math.max(1, nextCounts[memberKey][checkin.mood] ?? 0);
+      }
+      setMessage("");
+      setCountsByMember(nextCounts);
+      setLoading(false);
+    }
+    void loadStats().catch((error: unknown) => {
+      if (cancelled) return;
+      setCountsByMember({});
+      setMessage(error instanceof Error ? error.message : "Could not load mood stats.");
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [currentCheckins, householdId, refreshKey, resolvedHouseholdId]);
+
+  return <article className="rounded-2xl bg-fuchsia-50 p-5 dark:bg-fuchsia-400/10"><div><p className="font-bold">Mood board stats</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Selections by person. Each time an emotion is saved counts once; this does not measure how long it stayed on the board.</p></div>{!supabase ? <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">Mood stats are unavailable because Supabase is not configured in this browser.</p> : !activeHouseholdId ? loading ? <p role="status" className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-300">Finding your household before loading mood stats…</p> : <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message || "No household membership was found for this account."}</p> : loading ? <p role="status" className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-300">Loading mood stats from the server…</p> : message ? <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message}</p> : members.length === 0 ? <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Add family members to start tracking selections.</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2">{members.map((member) => {
+    const counts = countsByMember[String(member.id)] ?? {};
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    const rankedMoods = moodOptions.map((mood) => ({ mood, count: counts[mood.key] ?? 0 })).filter((item) => item.count > 0).sort((left, right) => right.count - left.count);
+    return <div key={member.id} className="rounded-2xl bg-white/80 p-4 ring-1 ring-fuchsia-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center justify-between gap-3"><p className="font-black">{member.name}</p><span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-xs font-black text-fuchsia-800 dark:bg-fuchsia-300/15 dark:text-fuchsia-100">{total} {total === 1 ? "selection" : "selections"}</span></div>{rankedMoods.length === 0 ? <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-300">No mood selections recorded yet.</p> : <ol className="mt-3 space-y-2">{rankedMoods.map(({ mood, count }) => <li key={mood.key} className="flex items-center gap-2 rounded-xl bg-fuchsia-50/80 px-2 py-1.5 dark:bg-white/5"><span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg"><MoodAnimation mood={mood.key} className="size-8" /></span><span className="min-w-0 flex-1 truncate text-sm font-bold">{mood.label}</span><span className="text-sm font-black tabular-nums text-fuchsia-800 dark:text-fuchsia-100">{count}</span></li>)}</ol>}</div>;
+  })}</div>}</article>;
 }
 
 function SettingsPinGate({ mode, settingsPin, pinConfirmation, pinMessage, onPinChange, onConfirmationChange, onSubmit }: { mode: PinMode; settingsPin: string; pinConfirmation: string; pinMessage: string; onPinChange: (value: string) => void; onConfirmationChange: (value: string) => void; onSubmit: (event: FormEvent) => void }) {

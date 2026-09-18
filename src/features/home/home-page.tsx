@@ -314,6 +314,8 @@ export default function Home() {
   const [householdName, setHouseholdName] = useState("Your Family Home");
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
+  const [membershipError, setMembershipError] = useState("");
+  const [membershipRetryKey, setMembershipRetryKey] = useState(0);
   const [householdDataLoading, setHouseholdDataLoading] = useState(false);
   const [householdDataLoaded, setHouseholdDataLoaded] = useState(false);
   const [householdDataError, setHouseholdDataError] = useState("");
@@ -348,6 +350,7 @@ export default function Home() {
   const [selectedMood, setSelectedMood] = useState<MoodKey>("good");
   const [savingMood, setSavingMood] = useState(false);
   const [moodMessage, setMoodMessage] = useState("");
+  const [moodStatsRefreshKey, setMoodStatsRefreshKey] = useState(0);
   const [voiceCommand, setVoiceCommand] = useState("");
   const [voiceMessage, setVoiceMessage] = useState("");
   const [voiceWishlistDraft, setVoiceWishlistDraft] = useState<VoiceWishlistDraft | null>(null);
@@ -464,39 +467,54 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !user || !inviteReady) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDataReady(false);
+    setHouseholdId(null);
+    setMembershipError("");
     async function loadMembership() {
-      if (inviteToken) {
-        const { data: invitedHouseholdId, error } = await supabase!.rpc("accept_household_invite", { p_token: inviteToken });
-        if (error) setInviteMessage(error.message);
-        if (invitedHouseholdId) {
-          setInviteMessage("You’re in! Welcome to the family home.");
-          const params = new URLSearchParams(window.location.search);
-          params.delete("invite");
-          window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`);
-          setInviteToken(null);
+      try {
+        if (inviteToken) {
+          const { data: invitedHouseholdId, error } = await supabase!.rpc("accept_household_invite", { p_token: inviteToken });
+          if (error) setInviteMessage(error.message);
+          if (invitedHouseholdId) {
+            setInviteMessage("You’re in! Welcome to the family home.");
+            const params = new URLSearchParams(window.location.search);
+            params.delete("invite");
+            window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`);
+            setInviteToken(null);
+          }
         }
-      }
-      const { data } = await supabase!.from("members").select("household_id").eq("user_id", user!.id).limit(1);
-      const id = data?.[0]?.household_id ?? null;
-      setHouseholdId(id);
-      if (id) {
-        const { data: household } = await supabase!.from("households").select("name, theme_mode, show_chores_tab, show_wishlist_tab, show_movie_night_tab, show_family_dinners_tab, chore_reward_mode, chore_reward_target_cents, chore_reward_target_stars").eq("id", id).single();
-        if (household) {
-          setHouseholdName(household.name);
-          if (household.theme_mode === "light" || household.theme_mode === "dark" || household.theme_mode === "auto") setThemeMode(household.theme_mode);
-          if (typeof household.show_chores_tab === "boolean") setShowChoresTab(household.show_chores_tab);
-          if (typeof household.show_wishlist_tab === "boolean") setShowWishlistTab(household.show_wishlist_tab);
-          if (typeof household.show_movie_night_tab === "boolean") setShowMovieNightTab(household.show_movie_night_tab);
-          if (typeof household.show_family_dinners_tab === "boolean") setShowFamilyDinnersTab(household.show_family_dinners_tab);
-          if (household.chore_reward_mode === "money" || household.chore_reward_mode === "stars") setChoreRewardMode(household.chore_reward_mode);
-          if (typeof household.chore_reward_target_cents === "number") setChoreRewardTargetCents(household.chore_reward_target_cents);
-          if (typeof household.chore_reward_target_stars === "number") setChoreRewardTargetStars(household.chore_reward_target_stars);
+
+        const { data, error: membershipQueryError } = await supabase!.from("members").select("household_id").eq("user_id", user!.id).limit(1);
+        if (membershipQueryError) throw membershipQueryError;
+        const id = data?.[0]?.household_id ?? null;
+        if (cancelled) return;
+        setHouseholdId(id);
+        if (id) {
+          const { data: household, error: householdQueryError } = await supabase!.from("households").select("name, theme_mode, show_chores_tab, show_wishlist_tab, show_movie_night_tab, show_family_dinners_tab, chore_reward_mode, chore_reward_target_cents, chore_reward_target_stars").eq("id", id).single();
+          if (householdQueryError) throw householdQueryError;
+          if (household) {
+            setHouseholdName(household.name);
+            if (household.theme_mode === "light" || household.theme_mode === "dark" || household.theme_mode === "auto") setThemeMode(household.theme_mode);
+            if (typeof household.show_chores_tab === "boolean") setShowChoresTab(household.show_chores_tab);
+            if (typeof household.show_wishlist_tab === "boolean") setShowWishlistTab(household.show_wishlist_tab);
+            if (typeof household.show_movie_night_tab === "boolean") setShowMovieNightTab(household.show_movie_night_tab);
+            if (typeof household.show_family_dinners_tab === "boolean") setShowFamilyDinnersTab(household.show_family_dinners_tab);
+            if (household.chore_reward_mode === "money" || household.chore_reward_mode === "stars") setChoreRewardMode(household.chore_reward_mode);
+            if (typeof household.chore_reward_target_cents === "number") setChoreRewardTargetCents(household.chore_reward_target_cents);
+            if (typeof household.chore_reward_target_stars === "number") setChoreRewardTargetStars(household.chore_reward_target_stars);
+          }
         }
+      } catch (error: unknown) {
+        if (!cancelled) setMembershipError(error instanceof Error ? error.message : "Could not load your household membership.");
+      } finally {
+        if (!cancelled) setDataReady(true);
       }
-      setDataReady(true);
     }
     void loadMembership();
-  }, [user, inviteReady, inviteToken]);
+    return () => { cancelled = true; };
+  }, [user, inviteReady, inviteToken, membershipRetryKey]);
 
   useEffect(() => {
     if (!supabase || !householdId) return;
@@ -965,6 +983,7 @@ export default function Home() {
     }
     setVisitedTabs((current) => current.has(tab) ? current : new Set(current).add(tab));
     setActiveTab(tab);
+    if (tab === "settings") setMoodStatsRefreshKey((key) => key + 1);
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, []);
 
@@ -1566,6 +1585,18 @@ export default function Home() {
         return false;
       }
       if (data && isMoodKey(data.mood)) setMoodCheckins((items) => [ { id: data.id, memberId: data.member_id, mood: data.mood, checkedInAt: data.checked_in_at }, ...items.filter((item) => String(item.memberId) !== moodMemberId) ]);
+      const { error: historyError } = await supabase.from("mood_checkin_selections").upsert({ household_id: householdId, member_id: member.id, mood: selectedMood, selected_at: checkedInAt, created_by: user.id }, { onConflict: "household_id,member_id,mood,selected_at,created_by", ignoreDuplicates: true });
+      if (historyError) {
+        setMoodMessage(historyError.code === "42P01"
+          ? "The mood saved, but stats are not enabled yet. Run the mood selection history migrations in Supabase."
+          : historyError.code === "42501"
+            ? "The mood saved, but Supabase blocked its stats record. Re-run the mood selection history migrations."
+            : `The check-in saved, but its mood stat was not recorded: ${historyError.message}`);
+        setMoodStatsRefreshKey((key) => key + 1);
+        setSavingMood(false);
+        return false;
+      }
+      setMoodStatsRefreshKey((key) => key + 1);
       if (data && moodChanged) void requestPushNotification({ event: "mood_changed", householdId, memberId: String(member.id), mood: selectedMood });
     }
 
@@ -1676,6 +1707,8 @@ export default function Home() {
 
   if (!authReady) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] text-slate-500">Connecting your family home…</main>;
   if (supabase && !user) return <AuthScreen onAuthenticated={setUser} invitePending={Boolean(inviteToken)} />;
+  if (supabase && user && !dataReady) return <main aria-busy="true" className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section className="w-full max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Your family home</p><h1 className="mt-4 text-2xl font-bold">Finding your household…</h1><p className="mt-2 text-slate-500">Checking your family membership before loading Settings and mood stats.</p></section></main>;
+  if (supabase && user && dataReady && membershipError) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section role="alert" className="w-full max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-rose-600">Couldn&apos;t load your household</p><h1 className="mt-4 text-2xl font-bold">Let&apos;s try that again</h1><p className="mt-2 text-slate-500">{membershipError}</p><button onClick={() => setMembershipRetryKey((key) => key + 1)} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Try again</button></section></main>;
   if (supabase && user && dataReady && !householdId) return <main className="grid min-h-screen place-items-center bg-[#f8f7ff] p-6 text-slate-900"><section className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-xl"><span className="text-5xl">🏠</span>{inviteMessage ? <><h1 className="mt-5 text-2xl font-bold">We couldn&apos;t join this home</h1><p className="mt-2 text-slate-500">{inviteMessage}</p><button onClick={() => void settingsActions.signOut()} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Sign in with the invited email</button></> : <><h1 className="mt-5 text-2xl font-bold">Create your family home</h1><p className="mt-2 text-slate-500">This private space will hold your shared calendar, chores, and adult to-dos.</p><button onClick={settingsActions.createHousehold} className="mt-6 rounded-xl bg-violet-600 px-5 py-3 font-bold text-white">Create household</button></>}</section></main>;
 
   if (screenSaver) return <Screensaver onExit={() => setScreenSaver(false)} />;
@@ -1703,7 +1736,7 @@ export default function Home() {
         {visitedTabs.has("wishlist") && <div hidden={activeTab !== "wishlist"}><LazyWishlistPage householdId={householdId} members={members} voiceDraft={voiceWishlistDraft} /></div>}
         {visitedTabs.has("movie-night") && <div hidden={activeTab !== "movie-night"}><LazyMovieNightPage householdId={householdId} members={members} currentUserId={user?.id ?? null} /></div>}
         {visitedTabs.has("family-dinners") && <div hidden={activeTab !== "family-dinners"}><LazyFamilyDinnersPage householdId={householdId} members={members} currentUserId={user?.id ?? null} sharedLists={sharedLists} onAddListItem={stableAddListItem} onToggleListItem={stableToggleListItem} onDeleteListItem={stableDeleteListItem} onOpenSharedLists={stableOpenSharedLists} /></div>}
-        {visitedTabs.has("settings") && <div hidden={activeTab !== "settings"}><LazySettingsPage choreRewardMode={choreRewardMode} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={stableSettingsRecordPayout} onResetToday={stableSettingsResetToday} onClearAll={stableSettingsClearTotals} onAddChore={stableAddChore} onDeleteChore={stableSettingsDeleteChore} onRewardModeChange={stableSettingsUpdateRewardMode} chores={chores} onUpdateChore={stableSettingsUpdateChore} onReorderChores={stableReorderChores} members={members} currentUserId={user?.id ?? null} onMemberColorChange={stableSettingsUpdateMemberColor} onAddMember={stableSettingsAddMember} onRemoveMember={stableSettingsRemoveMember} onUpdateCurrentMemberName={stableSettingsUpdateCurrentMemberName} themeMode={themeMode} onThemeModeChange={stableUpdateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} showMovieNightTab={showMovieNightTab} showFamilyDinnersTab={showFamilyDinnersTab} onTabVisibilityChange={stableSettingsSetTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={stableConnectGoogleCalendar} onToggleConnection={stableToggleGoogleCalendar} onAddApple={stableAddAppleCalendar} onToggleApple={stableToggleAppleCalendar} onInviteAdult={stableSettingsInviteAdult} onSignOut={stableSettingsSignOut} /></div>}
+        {visitedTabs.has("settings") && <div hidden={activeTab !== "settings"}><LazySettingsPage choreRewardMode={choreRewardMode} earnedCentsByMember={choreEarnedCentsByMember} paidOutCentsByMember={chorePaidOutCentsByMember} onPayOut={stableSettingsRecordPayout} onResetToday={stableSettingsResetToday} onClearAll={stableSettingsClearTotals} onAddChore={stableAddChore} onDeleteChore={stableSettingsDeleteChore} onRewardModeChange={stableSettingsUpdateRewardMode} chores={chores} onUpdateChore={stableSettingsUpdateChore} onReorderChores={stableReorderChores} members={members} currentUserId={user?.id ?? null} onMemberColorChange={stableSettingsUpdateMemberColor} onAddMember={stableSettingsAddMember} onRemoveMember={stableSettingsRemoveMember} onUpdateCurrentMemberName={stableSettingsUpdateCurrentMemberName} themeMode={themeMode} onThemeModeChange={stableUpdateThemeMode} showChoresTab={showChoresTab} showWishlistTab={showWishlistTab} showMovieNightTab={showMovieNightTab} showFamilyDinnersTab={showFamilyDinnersTab} onTabVisibilityChange={stableSettingsSetTabVisibility} googleConnections={googleConnections} appleFeeds={appleFeeds} onConnect={stableConnectGoogleCalendar} onToggleConnection={stableToggleGoogleCalendar} onAddApple={stableAddAppleCalendar} onToggleApple={stableToggleAppleCalendar} onInviteAdult={stableSettingsInviteAdult} onSignOut={stableSettingsSignOut} moodStatsRefreshKey={moodStatsRefreshKey} moodCheckins={moodCheckins} /></div>}
         {visitedTabs.has("lists") && <div hidden={activeTab !== "lists"}><div className="w-full min-w-0 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10 md:p-8"><LazyListsPage lists={sharedLists} expandedListKeys={expandedListKeys} onToggleListExpanded={stableToggleListExpanded} onAddList={stableAddSharedList} onAddItem={stableAddListItem} onToggleItem={stableToggleListItem} onDeleteItem={stableDeleteListItem} onDeleteList={stableDeleteSharedList} /></div></div>}
         </div>
       </div>
