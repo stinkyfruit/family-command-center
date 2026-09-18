@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import type { AppleFeed, GoogleConnection, Member, MoodCheckin, ThemeMode } from "@/features/home/model";
 import { defaultMemberColor, isHexColor, memberColorOptions, moodOptions } from "@/features/home/model";
 import { memberCalendarColor } from "@/components/home/calendar";
-import { MoodAnimation } from "@/components/home/mood";
 import { AppIcon, StyledSelect, useAppNotifications } from "@/components/home/shared-ui";
 import { NotificationSettings } from "@/components/home/notification-settings";
 
@@ -187,6 +186,62 @@ function SettingsGroup({ id, eyebrow, title, description, children }: { id: stri
 }
 
 type MoodCountRow = { memberId: string; mood: string; count: number };
+type MoodChartSlice = { key: string; label: string; count: number; color: string };
+
+const moodChartColors: Record<string, string> = {
+  amazing: "#f59e0b",
+  good: "#10b981",
+  okay: "#64748b",
+  tired: "#6366f1",
+  sad: "#0ea5e9",
+  depressed: "#4f46e5",
+  excited: "#f97316",
+  calm: "#14b8a6",
+  frustrated: "#f43f5e",
+  worried: "#a855f7",
+  scared: "#8b5cf6",
+  annoyed: "#eab308",
+  mad: "#ef4444",
+  hurting: "#ec4899",
+  sore: "#fb923c",
+  hungry: "#84cc16",
+  embarrassed: "#d946ef",
+  confused: "#06b6d4",
+  "bean-butt": "#22c55e",
+  fine: "#78716c",
+  silly: "#fb7185",
+  antsy: "#fbbf24",
+  nervous: "#3b82f6",
+  wanderlust: "#38bdf8",
+};
+
+const fallbackMoodChartColors = ["#8b5cf6", "#14b8a6", "#f97316", "#0ea5e9", "#eab308", "#f43f5e"];
+
+function polarPoint(angle: number, radius: number) {
+  return { x: 50 + radius * Math.cos(angle), y: 50 + radius * Math.sin(angle) };
+}
+
+function pieSlicePath(startAngle: number, endAngle: number) {
+  const start = polarPoint(startAngle, 48);
+  const end = polarPoint(endAngle, 48);
+  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
+  return `M 50 50 L ${start.x} ${start.y} A 48 48 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+}
+
+function MoodPieChart({ memberName, slices, total }: { memberName: string; slices: MoodChartSlice[]; total: number }) {
+  let angle = -Math.PI / 2;
+  const paths = slices.length === 1
+    ? null
+    : slices.map((slice) => {
+      const nextAngle = angle + (slice.count / total) * Math.PI * 2;
+      const path = { ...slice, d: pieSlicePath(angle, nextAngle) };
+      angle = nextAngle;
+      return path;
+    });
+  const description = slices.map((slice) => `${slice.label}: ${slice.count}`).join(", ");
+
+  return <svg viewBox="0 0 100 100" role="img" aria-label={`${memberName}'s mood selections: ${description}`} className="size-36 shrink-0 drop-shadow-sm"><title>{`${memberName}'s mood selections: ${description}`}</title>{paths ? paths.map((slice) => <path key={slice.key} d={slice.d} fill={slice.color} stroke="white" strokeWidth="1.5" />) : <circle cx="50" cy="50" r="48" fill={slices[0]?.color ?? "#cbd5e1"} stroke="white" strokeWidth="1.5" />}<circle cx="50" cy="50" r="25" className="fill-fuchsia-50 dark:fill-[#261d35]" /><text x="50" y="47" textAnchor="middle" className="fill-slate-900 text-[14px] font-black dark:fill-white">{total}</text><text x="50" y="58" textAnchor="middle" className="fill-slate-500 text-[5px] font-bold dark:fill-slate-300">selections</text></svg>;
+}
 
 function MoodStatistics({ householdId, members, currentCheckins, refreshKey }: { householdId?: string | null; members: Member[]; currentCheckins: MoodCheckin[]; refreshKey: number }) {
   const [countsByMember, setCountsByMember] = useState<Record<string, Record<string, number>>>({});
@@ -248,9 +303,9 @@ function MoodStatistics({ householdId, members, currentCheckins, refreshKey }: {
 
   return <article className="rounded-2xl bg-fuchsia-50 p-5 dark:bg-fuchsia-400/10"><div><p className="font-bold">Mood board stats</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Selections by person. Each time an emotion is saved counts once; this does not measure how long it stayed on the board.</p></div>{!supabase ? <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">Mood stats are unavailable because Supabase is not configured in this browser.</p> : !activeHouseholdId ? loading ? <p role="status" className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-300">Finding your household before loading mood stats…</p> : <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message || "No household membership was found for this account."}</p> : loading ? <p role="status" className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-300">Loading mood stats from the server…</p> : message ? <p role="alert" className="mt-4 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 dark:bg-rose-400/10 dark:text-rose-200">{message}</p> : members.length === 0 ? <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Add family members to start tracking selections.</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2">{members.map((member) => {
     const counts = countsByMember[String(member.id)] ?? {};
-    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-    const rankedMoods = moodOptions.map((mood) => ({ mood, count: counts[mood.key] ?? 0 })).filter((item) => item.count > 0).sort((left, right) => right.count - left.count);
-    return <div key={member.id} className="rounded-2xl bg-white/80 p-4 ring-1 ring-fuchsia-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center justify-between gap-3"><p className="font-black">{member.name}</p><span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-xs font-black text-fuchsia-800 dark:bg-fuchsia-300/15 dark:text-fuchsia-100">{total} {total === 1 ? "selection" : "selections"}</span></div>{rankedMoods.length === 0 ? <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-300">No mood selections recorded yet.</p> : <ol className="mt-3 space-y-2">{rankedMoods.map(({ mood, count }) => <li key={mood.key} className="flex items-center gap-2 rounded-xl bg-fuchsia-50/80 px-2 py-1.5 dark:bg-white/5"><span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg"><MoodAnimation mood={mood.key} className="size-8" /></span><span className="min-w-0 flex-1 truncate text-sm font-bold">{mood.label}</span><span className="text-sm font-black tabular-nums text-fuchsia-800 dark:text-fuchsia-100">{count}</span></li>)}</ol>}</div>;
+    const slices = moodOptions.map((mood, index) => ({ key: mood.key, label: mood.label, count: counts[mood.key] ?? 0, color: moodChartColors[mood.key] ?? fallbackMoodChartColors[index % fallbackMoodChartColors.length] })).filter((slice) => slice.count > 0).sort((left, right) => right.count - left.count);
+    const total = slices.reduce((sum, slice) => sum + slice.count, 0);
+    return <div key={member.id} className="rounded-2xl bg-white/80 p-4 ring-1 ring-fuchsia-100 dark:bg-white/10 dark:ring-white/10"><div className="flex items-center justify-between gap-3"><p className="font-black">{member.name}</p><span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-xs font-black text-fuchsia-800 dark:bg-fuchsia-300/15 dark:text-fuchsia-100">{total} {total === 1 ? "selection" : "selections"}</span></div>{slices.length === 0 ? <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-300">No mood selections recorded yet.</p> : <div className="mt-4 grid items-center gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]"><MoodPieChart memberName={member.name} slices={slices} total={total} /><ul aria-label={`${member.name}'s mood breakdown`} className="space-y-2">{slices.map((slice) => <li key={slice.key} className="flex items-center gap-2 text-sm"><span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} /><span className="min-w-0 flex-1 truncate font-bold">{slice.label}</span><span className="font-black tabular-nums text-fuchsia-800 dark:text-fuchsia-100">{slice.count}</span></li>)}</ul></div>}</div>;
   })}</div>}</article>;
 }
 
