@@ -47,6 +47,8 @@ This section defines the household chore model. Existing and future features mus
 4. Add the five server-only Google/Supabase variables shown in `.env.example` to `.env.local`. Never prefix these variables with `NEXT_PUBLIC_` and never commit `.env.local`.
 5. Restart `npm run dev`, then use **Connect Google Calendar** on the dashboard. The first version imports the signed-in adult's primary Google Calendar as read-only events.
 
+For unattended refreshes, open **Google Cloud Console → Google Auth Platform → Audience** and publish an external OAuth app when it is ready for this private family use. Google limits refresh tokens for external apps left in **Testing** to 7 days, which can force another consent/sign-in flow. If Google reports that the token was revoked or expired, remove this app from the husband's Google Account third-party connections, then connect the same account once more from the family dashboard. The app stores the refresh token server-side and uses it to renew short-lived access tokens.
+
 Once connected, the dashboard refreshes Google Calendar when it opens if the most recent sync is over 10 minutes old. **Sync now** always requests an immediate refresh. A frequent server schedule should be enabled only after deployment to an always-on host.
 
 Imported event rows are a local projection of Google/iCloud. The external calendar controls whether an event exists; deleting an imported row in this app only removes it until the next sync. Family assignments are stored separately and remain attached when the external event is synced again.
